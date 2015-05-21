@@ -1,0 +1,592 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Irq Vector - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="中断处理过程： reg value&ndash;>irq(int) &mdash;> struct irq_desc 1
+2
+3
+4
+5
+6
+==&gt; 中断时的有一个寄存器会保存中断源的vector值.
+==&gt; ==&gt; `arch/x86/kernel/entry_64.S` &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2014/07/17/irq-study/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Irq Vector</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-07-17T10:35:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>17</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>10:35 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h3>中断处理过程：</h3>
+
+<p>reg value&ndash;>irq(int) &mdash;> struct irq_desc</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>==&gt; 中断时的有一个寄存器会保存中断源的vector值.
+</span><span class='line'>==&gt; ==&gt; `arch/x86/kernel/entry_64.S`调用函数`do_IRQ`.
+</span><span class='line'>==&gt; ==&gt; ==&gt; `do_IRQ`依据`vector_irq`和vector值, 找到对应的中断号,并调用`handle_irq`.
+</span><span class='line'>==&gt; ==&gt; ==&gt; ==&gt; `handle_irq`通过函数irq_to_descdesc,可将中断号转化为`struct irq_desc`.
+</span><span class='line'>==&gt; ==&gt; ==&gt; ==&gt; generic_handle_irq_desc(irq, desc);
+</span><span class='line'>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; `generic_handle_irq_desc`调用 desc-&gt;handle_irq(irq, desc);</span></code></pre></td></tr></table></div></figure>
+
+
+<p>注:这里的handle_irq不是真正的中断处理函数,而是几大类中断控制器处理函数.
+如82599, msi等.</p>
+
+<h4>`do_IRQ(struct pt_regs *regs)</h4>
+
+<p>File: arch/x86/kernel/irq.c</p>
+
+<p>arch/x86/kernel/entry_64.S
+will call do_IRQ</p>
+
+<!-- more -->
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>187 __visible unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
+</span><span class='line'>188 {
+</span><span class='line'>189         struct pt_regs *old_regs = set_irq_regs(regs);
+</span><span class='line'>190
+</span><span class='line'>191         /* high bit used in ret_from_ code  */
+</span><span class='line'>192         unsigned vector = ~regs-&gt;orig_ax;
+</span><span class='line'>193         unsigned irq;
+</span><span class='line'>194
+</span><span class='line'>195         irq_enter();
+</span><span class='line'>196         exit_idle();
+</span><span class='line'>197
+</span><span class='line'>198         irq = __this_cpu_read(vector_irq[vector]);
+</span><span class='line'>199
+</span><span class='line'>200         if (!handle_irq(irq, regs)) {
+</span><span class='line'>201                 ack_APIC_irq();
+</span><span class='line'>202
+</span><span class='line'>203                 if (irq != VECTOR_RETRIGGERED) {
+</span><span class='line'>204                         pr_emerg_ratelimited("%s: %d.%d No irq handler for vector (irq %d)\n",
+</span><span class='line'>205                                              __func__, smp_processor_id(),
+</span><span class='line'>206                                              vector, irq);
+</span><span class='line'>207                 } else {
+</span><span class='line'>208                         __this_cpu_write(vector_irq[vector], VECTOR_UNDEFINED);
+</span><span class='line'>209                 }
+</span><span class='line'>210         }
+</span><span class='line'>211
+</span><span class='line'>212         irq_exit();
+</span><span class='line'>213
+</span><span class='line'>214         set_irq_regs(old_regs);
+</span><span class='line'>215         return 1;
+</span><span class='line'>216 }</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>bool handle_irq(unsigned irq, struct pt_regs *regs)</code></h4>
+
+<p>arch/x86/kernel/irq_64.c</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'> 77 bool handle_irq(unsigned irq, struct pt_regs *regs)
+</span><span class='line'> 78 {
+</span><span class='line'> 79         struct irq_desc *desc;
+</span><span class='line'> 80
+</span><span class='line'> 81         stack_overflow_check(regs);
+</span><span class='line'> 82
+</span><span class='line'> 83         desc = irq_to_desc(irq);
+</span><span class='line'> 84         if (unlikely(!desc))
+</span><span class='line'> 85                 return false;
+</span><span class='line'> 86
+</span><span class='line'> 87         generic_handle_irq_desc(irq, desc);
+</span><span class='line'> 88         return true;
+</span><span class='line'> 89 }</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>generic_handle_irq_desc</code></h4>
+
+<p>include/linux/irqdesc.h</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>114 static inline void generic_handle_irq_desc(unsigned int irq, struct irq_desc *desc)
+</span><span class='line'>115 {
+</span><span class='line'>116         desc-&gt;handle_irq(irq, desc);
+</span><span class='line'>117 }</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>desc里的<code>handle_irq</code>对应哪些函数?</h3>
+
+<p><code>handle_level_irq</code>和<code>handle_edge_irq</code>等</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>arch/x86/kernel/i8259.c:    irq_set_chip_and_handler_name(irq, &i8259A_chip, handle_level_irq,
+</span><span class='line'>arch/x86/kernel/apic/io_apic.c:   irq_set_chip_and_handler_name(irq, chip, hdl,
+</span><span class='line'>arch/x86/kernel/apic/io_apic.c:   irq_set_chip_and_handler_name(0, &ioapic_chip, handle_edge_irq,
+</span><span class='line'>arch/x86/kernel/apic/io_apic.c:   irq_set_chip_and_handler_name(irq, &lapic_chip, handle_edge_irq,
+</span><span class='line'>arch/x86/kernel/apic/io_apic.c:   irq_set_chip_and_handler_name(irq, chip, handle_edge_irq, "edge");
+</span><span class='line'>arch/x86/kernel/apic/io_apic.c:   irq_set_chip_and_handler_name(irq, &dmar_msi_type, handle_edge_irq,
+</span><span class='line'>arch/x86/kernel/apic/io_apic.c:   irq_set_chip_and_handler_name(irq, chip, handle_edge_irq, "edge");
+</span><span class='line'>arch/x86/kernel/apic/io_apic.c:   irq_set_chip_and_handler_name(irq, &ht_irq_chip,
+</span><span class='line'>arch/x86/kernel/apic/io_apic.c:   irq_set_chip_and_handler_name(0, &ioapic_chip, handle_edge_irq,
+</span><span class='line'>arch/x86/kernel/irqinit.c:    irq_set_chip_and_handler_name(i, chip, handle_level_irq, name);</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>for example:  8259A</h4>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>==&gt; make_8259A_irq
+</span><span class='line'>==&gt; ==&gt; irq_set_chip_and_handler
+</span><span class='line'>==&gt; ==&gt; ==&gt; irq_set_chip_and_handler_name
+</span><span class='line'>==&gt; ==&gt; ==&gt; ==&gt; irq_set_chip
+</span><span class='line'>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; desc = irq_get_desc_buslock
+</span><span class='line'>==&gt; ==&gt; ==&gt; ==&gt; __irq_set_handler
+</span><span class='line'>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; desc = irq_get_desc_buslock
+</span><span class='line'>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; desc-&gt;handle_irq = handle</span></code></pre></td></tr></table></div></figure>
+
+
+<h5><code>make_8259A_irq</code></h5>
+
+<p>arch/x86/kernel/i8259.c</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>107 void make_8259A_irq(unsigned int irq)
+</span><span class='line'>108 {
+</span><span class='line'>109         disable_irq_nosync(irq);
+</span><span class='line'>110         irq_set_chip_and_handler(irq, &i8259A_chip, handle_level_irq);
+</span><span class='line'>111         enable_irq(irq);
+</span><span class='line'>112 }</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>irq_set_chip_and_handler</code></h4>
+
+<p>include/linux/irq.h</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>452 static inline void irq_set_chip_and_handler(unsigned int irq, struct irq_chip *chip,
+</span><span class='line'>453                                             irq_flow_handler_t handle)
+</span><span class='line'>454 {
+</span><span class='line'>455         irq_set_chip_and_handler_name(irq, chip, handle, NULL);
+</span><span class='line'>456 }</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>irq_set_chip_and_handler_name</code></h4>
+
+<p>kernel/irq/chip.c</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>726 void
+</span><span class='line'>727 irq_set_chip_and_handler_name(unsigned int irq, struct irq_chip *chip,
+</span><span class='line'>728                               irq_flow_handler_t handle, const char *name)
+</span><span class='line'>729 {
+</span><span class='line'>730         irq_set_chip(irq, chip);
+</span><span class='line'>731         __irq_set_handler(irq, handle, 0, name);
+</span><span class='line'>732 }
+</span><span class='line'>733 EXPORT_SYMBOL_GPL(irq_set_chip_and_handler_name);</span></code></pre></td></tr></table></div></figure>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'> 23 /**
+</span><span class='line'> 24  *      irq_set_chip - set the irq chip for an irq
+</span><span class='line'> 25  *      @irq:   irq number
+</span><span class='line'> 26  *      @chip:  pointer to irq chip description structure
+</span><span class='line'> 27  */
+</span><span class='line'> 28 int irq_set_chip(unsigned int irq, struct irq_chip *chip)
+</span><span class='line'> 29 {
+</span><span class='line'> 30         unsigned long flags;
+</span><span class='line'> 31         struct irq_desc *desc = irq_get_desc_lock(irq, &flags, 0);
+</span><span class='line'> 32 
+</span><span class='line'> 33         if (!desc)
+</span><span class='line'> 34                 return -EINVAL;
+</span><span class='line'> 35 
+</span><span class='line'> 36         if (!chip)
+</span><span class='line'> 37                 chip = &no_irq_chip;
+</span><span class='line'> 38 
+</span><span class='line'> 39         desc-&gt;irq_data.chip = chip;
+</span><span class='line'> 40         irq_put_desc_unlock(desc, flags);
+</span><span class='line'> 41         /*
+</span><span class='line'> 42          * For !CONFIG_SPARSE_IRQ make the irq show up in
+</span><span class='line'> 43          * allocated_irqs.
+</span><span class='line'> 44          */
+</span><span class='line'> 45         irq_mark_irq(irq);
+</span><span class='line'> 46         return 0;
+</span><span class='line'> 47 }  
+</span><span class='line'> 48 EXPORT_SYMBOL(irq_set_chip);</span></code></pre></td></tr></table></div></figure>
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>688 void
+</span><span class='line'>689 __irq_set_handler(unsigned int irq, irq_flow_handler_t handle, int is_chained,
+</span><span class='line'>690                   const char *name)
+</span><span class='line'>691 {
+</span><span class='line'>692         unsigned long flags;
+</span><span class='line'>693         struct irq_desc *desc = irq_get_desc_buslock(irq, &flags, 0);
+</span><span class='line'>694
+</span><span class='line'>695         if (!desc)
+</span><span class='line'>696                 return;
+</span><span class='line'>697
+</span><span class='line'>698         if (!handle) {
+</span><span class='line'>699                 handle = handle_bad_irq;
+</span><span class='line'>700         } else {
+</span><span class='line'>701                 if (WARN_ON(desc-&gt;irq_data.chip == &no_irq_chip))
+</span><span class='line'>702                         goto out;
+</span><span class='line'>703         }
+</span><span class='line'>704
+</span><span class='line'>705         /* Uninstall? */
+</span><span class='line'>706         if (handle == handle_bad_irq) {
+</span><span class='line'>707                 if (desc-&gt;irq_data.chip != &no_irq_chip)
+</span><span class='line'>708                         mask_ack_irq(desc);
+</span><span class='line'>709                 irq_state_set_disabled(desc);
+</span><span class='line'>710                 desc-&gt;depth = 1;
+</span><span class='line'>711         }
+</span><span class='line'>712         desc-&gt;handle_irq = handle;
+</span><span class='line'>713         desc-&gt;name = name;
+</span><span class='line'>714
+</span><span class='line'>715         if (handle != handle_bad_irq && is_chained) {
+</span><span class='line'>716                 irq_settings_set_noprobe(desc);
+</span><span class='line'>717                 irq_settings_set_norequest(desc);
+</span><span class='line'>718                 irq_settings_set_nothread(desc);
+</span><span class='line'>719                 irq_startup(desc, true);
+</span><span class='line'>720         }
+</span><span class='line'>721 out:
+</span><span class='line'>722         irq_put_desc_busunlock(desc, flags);
+</span><span class='line'>723 }
+</span><span class='line'>724 EXPORT_SYMBOL_GPL(__irq_set_handler);</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2014-07-17T10:35:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>17</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>10:35 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/irqs/'>irqs</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2014/07/17/irq-framework/" title="Previous Post: irq framework">&laquo; irq framework</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2014/07/17/register-irq-handler/" title="Next Post: register irq handler">register irq handler &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

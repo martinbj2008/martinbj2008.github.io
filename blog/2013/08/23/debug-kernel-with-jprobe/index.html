@@ -1,0 +1,366 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Debug Kernel With Jprobe - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="kprobe is a useful tool when debug kernel. It can directly hook the related function of kernel,
+before or after it run. It also can be used to patch &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/08/23/debug-kernel-with-jprobe/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Debug Kernel With Jprobe</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-08-23T11:13:00+08:00'><span class='date'><span class='date-month'>Aug</span> <span class='date-day'>23</span><span class='date-suffix'>rd</span>, <span class='date-year'>2013</span></span> <span class='time'>11:13 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2>kprobe is a useful tool when debug kernel.</h2>
+
+<p>It can directly hook the related function of kernel,
+before or after it run.</p>
+
+<p>It also can be used to patch kernel in some special case.</p>
+
+<!-- more -->
+
+
+<h2>example</h2>
+
+<p>We can update kernel stat before kernel show it.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'>  <span class="mi">1</span> <span class="err">#</span><span class="n">include</span> <span class="o">&lt;</span><span class="n">linux</span><span class="o">/</span><span class="n">version</span><span class="p">.</span><span class="n">h</span><span class="o">&gt;</span>
+</span><span class='line'>  <span class="mi">2</span> <span class="err">#</span><span class="n">include</span> <span class="o">&lt;</span><span class="n">linux</span><span class="o">/</span><span class="n">module</span><span class="p">.</span><span class="n">h</span><span class="o">&gt;</span>
+</span><span class='line'>  <span class="mi">3</span> <span class="err">#</span><span class="n">include</span> <span class="o">&lt;</span><span class="n">linux</span><span class="o">/</span><span class="n">kallsyms</span><span class="p">.</span><span class="n">h</span><span class="o">&gt;</span>
+</span><span class='line'>  <span class="mi">4</span> <span class="err">#</span><span class="n">include</span> <span class="o">&lt;</span><span class="n">linux</span><span class="o">/</span><span class="n">kprobes</span><span class="p">.</span><span class="n">h</span><span class="o">&gt;</span>
+</span><span class='line'>  <span class="mi">5</span>
+</span><span class='line'>  <span class="mi">6</span> <span class="k">static</span> <span class="kt">int</span> <span class="n">martin_snmp_seq_show</span><span class="p">(</span><span class="k">struct</span> <span class="n">seq_file</span> <span class="o">*</span><span class="n">seq</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">v</span><span class="p">)</span>
+</span><span class='line'>  <span class="mi">7</span> <span class="p">{</span>
+</span><span class='line'>  <span class="mi">8</span>         <span class="n">printk</span><span class="p">(</span><span class="n">KERN_INFO</span> <span class="s">&quot;%s: called</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">__func__</span><span class="p">);</span>
+</span><span class='line'>  <span class="mi">9</span>
+</span><span class='line'> <span class="mi">10</span>         <span class="nf">jprobe_return</span><span class="p">();</span>
+</span><span class='line'> <span class="mi">11</span>         <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">12</span> <span class="p">}</span>
+</span><span class='line'> <span class="mi">13</span>
+</span><span class='line'> <span class="mi">14</span> <span class="k">static</span> <span class="kt">int</span> <span class="n">martin_snmp6_seq_show</span><span class="p">(</span><span class="k">struct</span> <span class="n">seq_file</span> <span class="o">*</span><span class="n">seq</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">v</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">15</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">16</span>         <span class="n">printk</span><span class="p">(</span><span class="n">KERN_INFO</span> <span class="s">&quot;%s: called</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">__func__</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">17</span>
+</span><span class='line'> <span class="mi">18</span>         <span class="nf">jprobe_return</span><span class="p">();</span>
+</span><span class='line'> <span class="mi">19</span>         <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">20</span> <span class="p">}</span>
+</span><span class='line'> <span class="mi">21</span>
+</span><span class='line'> <span class="mi">22</span> <span class="k">static</span> <span class="k">struct</span> <span class="n">jprobe</span> <span class="n">martin_snmp_jprobe</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">23</span>         <span class="p">.</span><span class="n">entry</span> <span class="o">=</span> <span class="n">martin_snmp_seq_show</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">24</span>         <span class="p">.</span><span class="n">kp</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">25</span>                 <span class="p">.</span><span class="n">symbol_name</span> <span class="o">=</span> <span class="s">&quot;snmp_seq_show&quot;</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">26</span>         <span class="p">},</span>
+</span><span class='line'> <span class="mi">27</span> <span class="p">};</span>
+</span><span class='line'> <span class="mi">28</span>
+</span><span class='line'> <span class="mi">29</span> <span class="k">static</span> <span class="k">struct</span> <span class="n">jprobe</span> <span class="n">martin_snmp6_jprobe</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">30</span>         <span class="p">.</span><span class="n">entry</span> <span class="o">=</span> <span class="n">martin_snmp6_seq_show</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">31</span>         <span class="p">.</span><span class="n">kp</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">32</span>                 <span class="p">.</span><span class="n">symbol_name</span> <span class="o">=</span> <span class="s">&quot;snmp6_seq_show&quot;</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">33</span>         <span class="p">},</span>
+</span><span class='line'> <span class="mi">34</span> <span class="p">};</span>
+</span><span class='line'> <span class="mi">35</span>
+</span><span class='line'> <span class="mi">36</span> <span class="k">static</span> <span class="k">struct</span> <span class="n">jprobe</span><span class="o">*</span> <span class="n">martin_jprobes</span><span class="p">[]</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">37</span>         <span class="o">&amp;</span><span class="n">martin_snmp_jprobe</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">38</span>         <span class="o">&amp;</span><span class="n">martin_snmp6_jprobe</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">39</span> <span class="p">};</span>
+</span><span class='line'> <span class="mi">40</span>
+</span><span class='line'> <span class="mi">41</span> <span class="kt">int</span> <span class="n">__init</span> <span class="nf">martin_jprobe_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">42</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">43</span>         <span class="k">const</span> <span class="kt">int</span> <span class="n">cnt</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">martin_jprobes</span><span class="p">)</span><span class="o">/</span><span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">jprobe</span> <span class="o">*</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">44</span>
+</span><span class='line'> <span class="mi">45</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">register_jprobes</span><span class="p">(</span><span class="n">martin_jprobes</span><span class="p">,</span> <span class="n">cnt</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">46</span>                 <span class="n">printk</span><span class="p">(</span><span class="n">KERN_INFO</span> <span class="s">&quot;FPS: register_jprobe failed !!!</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">47</span>                 <span class="k">return</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">48</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">49</span>
+</span><span class='line'> <span class="mi">50</span>         <span class="nf">printk</span><span class="p">(</span><span class="n">KERN_INFO</span> <span class="s">&quot;FPS: ready</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">51</span>         <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">52</span> <span class="p">}</span>
+</span><span class='line'> <span class="mi">53</span>
+</span><span class='line'> <span class="mi">54</span> <span class="kt">void</span> <span class="n">__exit</span> <span class="n">martin_jprobe_exit</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">55</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">56</span>         <span class="k">const</span> <span class="kt">int</span> <span class="n">cnt</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">martin_jprobes</span><span class="p">)</span><span class="o">/</span><span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">jprobe</span> <span class="o">*</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">57</span>
+</span><span class='line'> <span class="mi">58</span>         <span class="nf">unregister_jprobes</span><span class="p">(</span><span class="n">martin_jprobes</span><span class="p">,</span> <span class="n">cnt</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">59</span>
+</span><span class='line'> <span class="mi">60</span>         <span class="nf">printk</span><span class="p">(</span><span class="n">KERN_INFO</span> <span class="s">&quot;FPS: coloc martin module exit.</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">61</span> <span class="p">}</span>
+</span><span class='line'> <span class="mi">62</span>
+</span><span class='line'> <span class="mi">63</span> <span class="n">module_init</span><span class="p">(</span><span class="n">martin_jprobe_init</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">64</span> <span class="nf">module_exit</span><span class="p">(</span><span class="n">martin_jprobe_exit</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">65</span>
+</span><span class='line'> <span class="mi">66</span> <span class="nf">MODULE_DESCRIPTION</span><span class="p">(</span><span class="s">&quot;MartinJPROBE&quot;</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">67</span> <span class="nf">MODULE_LICENSE</span><span class="p">(</span><span class="s">&quot;GPL&quot;</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-08-23T11:13:00+08:00'><span class='date'><span class='date-month'>Aug</span> <span class='date-day'>23</span><span class='date-suffix'>rd</span>, <span class='date-year'>2013</span></span> <span class='time'>11:13 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/debug/'>debug</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/08/23/how-to-use-git-bisect/" title="Previous Post: how to use git bisect">&laquo; how to use git bisect</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/08/26/ipv4-route-study-basic-fun/" title="Next Post: IPv4 route study part 1: basic fun">IPv4 route study part 1: basic fun &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Others | My Octopress Blog]]></title>
+  <link href="http://martinbj2008.github.io/blog/categories/others/atom.xml" rel="self"/>
+  <link href="http://martinbj2008.github.io/"/>
+  <updated>2015-05-21T16:26:25+08:00</updated>
+  <id>http://martinbj2008.github.io/</id>
+  <author>
+    <name><![CDATA[Your Name]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[How to Make Selected Tab in Terminal More Prominent]]></title>
+    <link href="http://martinbj2008.github.io/blog/2013/10/07/make-terminal-tab-more-markedness/"/>
+    <updated>2013-10-07T18:57:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2013/10/07/make-terminal-tab-more-markedness</id>
+    <content type="html"><![CDATA[<p>On ubuntu 13.04, create the file ~/.config/gtk-3.0/gtk.css with following lines</p>
+
+<pre><code>martin@ubuntu:~$ cat ~/.config/gtk-3.0/gtk.css 
+TerminalWindow .notebook tab:active {
+    background-color: #0000FF;  
+    }
+martin@ubuntu:~$ 
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Install Html2markdown in Ubuntu(12.10)]]></title>
+    <link href="http://martinbj2008.github.io/blog/2013/02/12/html2markdown-in-ubuntu/"/>
+    <updated>2013-02-12T00:00:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2013/02/12/html2markdown-in-ubuntu</id>
+    <content type="html"><![CDATA[<!-- more -->
+
+
+<h3>Edit source.list</h3>
+
+<p>ensure the universe components is enabled.
+martin@PC:~/git/blog/_posts$ cat /etc/apt/sources.list
+deb <a href="http://ubuntu.cn99.com/ubuntu/">http://ubuntu.cn99.com/ubuntu/</a> quantal main
+deb-src <a href="http://ubuntu.cn99.com/ubuntu/">http://ubuntu.cn99.com/ubuntu/</a> quantal main</p>
+
+<p>deb <a href="http://ubuntu.cn99.com/ubuntu/">http://ubuntu.cn99.com/ubuntu/</a> quantal universe
+deb-src <a href="http://ubuntu.cn99.com/ubuntu/">http://ubuntu.cn99.com/ubuntu/</a> quantal universe</p>
+
+<h3>update apt</h3>
+
+<p>martin@PC:~/git/blog/_posts$ sudo apt-get update</p>
+
+<h3>install</h3>
+
+<p>martin@PC:~/git/blog/_posts$ sudo apt-get install  python-html2text<sup>C</sup></p>
+
+<h3>html2markdown ready</h3>
+
+<p>martin@PC:~/git/blog/_posts$ html2markdown &ndash;version
+html2markdown 3.200.3</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[嵌入Linux下的usb Storage的支持]]></title>
+    <link href="http://martinbj2008.github.io/blog/2007/12/11/usb-storage/"/>
+    <updated>2007-12-11T00:00:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2007/12/11/usb-storage</id>
+    <content type="html"><![CDATA[<p>目标： 在mipsel架构的嵌入式linux系统上支持USB盘的读写。
+思路： 使用可加载模块的形式增加 scsimod.ko, sdmod.ko, usbstorage.ko, fat.ko, vfat.ko.</p>
+
+<h2>具体实现：</h2>
+
+<h3>步骤I 准备必须的驱动（可加载模块）</h3>
+
+<ol>
+<li>scsimod.ko         源代码目录下的 driver/scsi目录下的文件编译</li>
+<li>sdmod.ko,          源代码目录下的 driver/scsi目录下的文件编译</li>
+<li>usbstorage.ko   源代码目录下的 driver/usb/storage 目录下的文件编译</li>
+<li>fat.ko               源代码目录下的 fs/fat目录下的文件编译</li>
+<li>vfat.ko    源代码目录下的 fs/vfat目录下的文件编译
+上述五个可加载模块的编译过程可以具体参考各自目录下的Makefile。</li>
+</ol>
+
+
+<!-- more -->
+
+
+<h4>我在编译过程中所犯的错误和经验：</h4>
+
+<pre><code>a. 没有真正明白     obj-m :=fat.o 和 fat-objs := 的关系， 直接将源文件`*.o`增加到了obj-m 的后面，造成没有编译成功。
+b. 在编译fat.ko的时候，inode。c文件里面的有个变量定义使用的配置文件（config）里面缺省值。
+        `static int fat_default_codepage = CONFIG_FAT_DEFAULT_CODEPAGE;`
+    我误以为是页面大小设置为4k， 导致在mount的时候死活mount文件系统失败。
+    需要正确配置该变量的初始化值。
+      在编译过内核的源代码的目录下有个隐含文件`.config`,  该文件里面有宏`CONFIG_FAT_DEFAULT_CODEPAGE`的定义。
+  `(CONFIG_FAT_DEFAULT_CODEPAGE=437)`
+
+c. 善于使用proc调试信息和dmesg查看最近的错误信息。 几个有帮助的proc文件。
+ cat /proc/bus/usb/devices    所有识别的usb设备信息。如厂商号，设备名称。
+               本机设备的分区情况。可以看到U盘的分区。
+ dmesg                                  最近的系统提示信息。
+ fdisk -l /dev/sda                   显示sda设备的分区情况其分区类型。
+</code></pre>
+
+<h3>步骤II 加载模块，然后插入设备并手工创建设备节点并mount到特定目录。</h3>
+
+<pre><code>    a. 依次加载上述5个模块。
+    b.   插入usb设备
+    c.    cat /proc/partitions得到设备的主次设备号。
+    d.    mknod   /dev/sda    b major 0
+          mknod   /dev/sda1 b major 1
+         有可能根据具体设备配置情况，sd? 可能为sda ，或sdb 等。如果分区有多个要为每个分区都创建一个设备节点。
+    e.    手动mount
+           mount /dev/sda1 /usr/local/mnt
+   至此 U盘可以正常读写了。在拔除U盘之前需要 umount /dev/sda1
+</code></pre>
+
+<h2>TODO</h2>
+
+<ol type="a">
+<li>hotplug的支持，实现自动mount、umount及设备节点的管理</li>
+<li>对NTFS分区的支持</li>
+<li>图形操作界面及相应应用程序的自动挂载。</li>
+</ol>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[嵌入式linux的远程控制-Mini Vnc]]></title>
+    <link href="http://martinbj2008.github.io/blog/2007/11/15/mini-vnc/"/>
+    <updated>2007-11-15T00:00:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2007/11/15/mini-vnc</id>
+    <content type="html"><![CDATA[<h2>项目背景</h2>
+
+<pre><code>公司有台测试设备是基于嵌入式linux的， 支持framebuff。该测试设备自带显卡，并且绝大多数的操作需要据需要本地键盘操作，所有运行结果均显示在本机屏幕。公司现基于同一管理的需要。所有的物理设备均需要放入机房。这给在该设备进行开发和测试的人员以很大的不方便。因此尝试开发一套基于嵌入式linux远程控制软件，并命名mini-vnc。
+</code></pre>
+
+<!-- more -->
+
+
+<h2>软件原理</h2>
+
+<pre><code>在普通linux系统上通常使用VNC作为远程控制工具。而嵌入式设备远程控制的工具很少，也许是我没有找到。最近实现了一个基于嵌入式linux的远程控制工具。嵌入式作为服务器端。 winxp作为客户端。
+服务器端可以分为设备层和网络传输层。设备层在设计中被分为完全独立的模块：图像截取和键盘模拟。图像截取模块负责从嵌入式设备里面读取当前屏幕的像素点信息。利用framebuffer直接对内存数据进行操作。该模块在用户空间进行操作，直接读取各个像素点的RGB值。如果需要调色板的话，需要另外读取掉色板信息。键盘模拟模块负责模拟给定的键盘消息。并发送给内核中input_device的缓冲区队列。该内核可加载模块模拟一个的物理设备实现对键盘消息的传递。
+网络传输层：负责发送屏幕图像信息，接受远程键盘消息，并与设备层交互数据。基于局域网内传输和对系统性能的考虑，传输层采用UDP协议。但没有限定Session个数，因此可以支持多个客户端。但在实际才是过程中，发现对系统性能消耗比较大。目前的系统cpu为mipsel、400MHZ，采用256色640×480的图片质量传输，同时采用zlib库对图像进行压缩。最终每幅图片大小在3-8k左右。对cpu的消耗接近10%。
+客户端是个简单的MFC程序。接受图像数据并根据调色板信息绘图。检测键盘按键消息并转化为linux键盘消息并发送。
+</code></pre>
+
+<h2>存在问题</h2>
+
+<ol>
+<li>cpu消耗过大。</li>
+<li>图像不连续。最多4帧每秒。</li>
+</ol>
+
+
+<h2>展望</h2>
+
+<pre><code>有机会把它做得更完善，客户端界面更友好。受本人能力所限，客户端界面不够漂亮。同时提示信息特少。
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Linux 安装帮助文档]]></title>
+    <link href="http://martinbj2008.github.io/blog/2007/11/01/manage-dev/"/>
+    <updated>2007-11-01T00:00:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2007/11/01/manage-dev</id>
+    <content type="html"><![CDATA[<p><a href="http://hi.baidu.com/oscarbj/item/22432cd8054a8014d90e440a">http://hi.baidu.com/oscarbj/item/22432cd8054a8014d90e440a</a>   <br/>
+安装  Manual pages about using GNU/Linux for development<br/>
+<code>apt-get install manpages-dev</code></p>
+]]></content>
+  </entry>
+  
+</feed>

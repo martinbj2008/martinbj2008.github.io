@@ -1,0 +1,569 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>IPv4 Route Fib Trie Inflate - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="summary inflate duplicate a new node whose child array is double of orignal node,
+and put original node&rsquo;s child into the new node. 1
+2
+3
+4
+tn&# &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/09/29/ipv4-route-fib-tree-inflate/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">IPv4 Route Fib Trie Inflate</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-09-29T17:16:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>29</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>5:16 pm</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2>summary</h2>
+
+<p><code>inflate</code> duplicate a new node whose child array is double of orignal node,
+and put original node&rsquo;s child into the new node.</p>
+
+<!-- more -->
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">tn</span><span class="err">&#39;</span><span class="n">s</span> <span class="n">bits</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">oldnode</span><span class="o">-&gt;</span><span class="n">bits</span>
+</span><span class='line'>
+</span><span class='line'><span class="err">`</span><span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">oldnode</span><span class="err">`</span> <span class="n">is</span> <span class="n">the</span> <span class="n">orignal</span> <span class="n">node</span><span class="p">.</span>
+</span><span class='line'><span class="err">`</span><span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">tn</span><span class="err">`</span> <span class="n">is</span> <span class="n">the</span> <span class="n">new</span> <span class="n">malloc</span> <span class="n">node</span><span class="p">.</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Just like the comment in the source, child nodes are divided into 3 kind nodes:</p>
+
+<h3>case 1. child node is a leaf or an internal node with skipped bits.</h3>
+
+<pre><code>节点不变，直接挂到新的节点下面，作为第2*i或者2*i+1个孩子节点。
+</code></pre>
+
+<p><img src="/images/fib_trie/inflate.case1.jpg" alt="case 1" /></p>
+
+<h3>case 2. an internal node with two children.</h3>
+
+<pre><code>释放节点，并将其左右两个孩子挂到新的节点下面，依次作第2*i和2*i+1个孩子节点。
+</code></pre>
+
+<p><img src="/images/fib_trie/inflate.case2.jpg" alt="case 2" /></p>
+
+<h3>case 3. an internal node with more than two children.</h3>
+
+<pre><code>    释放节点，该节点的孩子节点从中间一分为二， 并分别被复制到两个新的节点（
+left和right）。这两个新节点被依次作为新节点的第2*i和2*i+1孩子节点。
+left和right节点要重新经过`resize`函数处理，然后再挂到新节点上。
+</code></pre>
+
+<p><img src="/images/fib_trie/inflate.case3.jpg" alt="case 3" /></p>
+
+<h3>NOTE:</h3>
+
+<ol>
+<li><p>预分配内存：
+     为了防止中间过程内存不足，在函数一开始，就先为第三类节点分配足够的内存(只有第三类情况需要新建节点)。
+     等真正处理的时候，只是先把left和right节点从新节点上取下来，待把中间节点(internal node)的所有子孩子重新分配后，再重新把left和right节点挂到新节点下。</p></li>
+<li><p>skipped bits:
+ a node&rsquo;s <code>pos</code> is bigger than parent nodes&rsquo;s <code>(pos+bits)</code>.</p></li>
+</ol>
+
+
+<!-- more -->
+
+
+<h3>how to divid child nodes</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">if</span> <span class="p">(</span><span class="n">a</span> <span class="n">leaf</span> <span class="n">node</span><span class="p">)</span> <span class="n">then</span>
+</span><span class='line'>    <span class="n">belong</span> <span class="n">case1</span><span class="p">.</span>
+</span><span class='line'><span class="k">else</span> <span class="c1">//assert: it must be a internal node).</span>
+</span><span class='line'>     <span class="k">if</span> <span class="p">(</span><span class="n">it</span> <span class="n">has</span> <span class="n">skipped</span> <span class="n">bits</span><span class="p">)</span> <span class="n">then</span>
+</span><span class='line'>        <span class="n">belong</span> <span class="n">case1</span>
+</span><span class='line'>     <span class="k">else</span> <span class="c1">//assert: pos= parent&#39;s(pos+bits)</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">two</span> <span class="n">child</span> <span class="n">nodes</span><span class="p">)</span>
+</span><span class='line'>            <span class="n">belong</span> <span class="n">case2</span>
+</span><span class='line'>        <span class="k">else</span> <span class="p">(</span><span class="n">more</span> <span class="n">than</span> <span class="n">two</span> <span class="n">child</span> <span class="n">nodes</span><span class="p">)</span>
+</span><span class='line'>            <span class="n">belong</span> <span class="n">case3</span>
+</span><span class='line'>            <span class="p">(</span><span class="mi">4</span><span class="p">,</span><span class="mi">8</span><span class="p">,</span><span class="mf">16.</span><span class="p">..</span> <span class="n">child</span> <span class="n">nodes</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>inflate</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+<span class='line-number'>101</span>
+<span class='line-number'>102</span>
+<span class='line-number'>103</span>
+<span class='line-number'>104</span>
+<span class='line-number'>105</span>
+<span class='line-number'>106</span>
+<span class='line-number'>107</span>
+<span class='line-number'>108</span>
+<span class='line-number'>109</span>
+<span class='line-number'>110</span>
+<span class='line-number'>111</span>
+<span class='line-number'>112</span>
+<span class='line-number'>113</span>
+<span class='line-number'>114</span>
+<span class='line-number'>115</span>
+<span class='line-number'>116</span>
+<span class='line-number'>117</span>
+<span class='line-number'>118</span>
+<span class='line-number'>119</span>
+<span class='line-number'>120</span>
+<span class='line-number'>121</span>
+<span class='line-number'>122</span>
+<span class='line-number'>123</span>
+<span class='line-number'>124</span>
+<span class='line-number'>125</span>
+<span class='line-number'>126</span>
+<span class='line-number'>127</span>
+<span class='line-number'>128</span>
+<span class='line-number'>129</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'>   <span class="mi">702</span>  <span class="k">static</span> <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">inflate</span><span class="p">(</span><span class="k">struct</span> <span class="n">trie</span> <span class="o">*</span><span class="n">t</span><span class="p">,</span> <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">tn</span><span class="p">)</span>
+</span><span class='line'>   <span class="mi">703</span>    <span class="p">{</span>
+</span><span class='line'>   <span class="mi">704</span>        <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">oldtnode</span> <span class="o">=</span> <span class="n">tn</span><span class="p">;</span>
+</span><span class='line'>   <span class="mi">705</span>        <span class="kt">int</span> <span class="n">olen</span> <span class="o">=</span> <span class="n">tnode_child_length</span><span class="p">(</span><span class="n">tn</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">706</span>        <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+</span><span class='line'>   <span class="mi">707</span>    
+</span><span class='line'>   <span class="mi">708</span>        <span class="nf">pr_debug</span><span class="p">(</span><span class="s">&quot;In inflate</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">709</span>        <span class="cm">/*扩展一个新的节点，其孩子节点的个数加倍*/</span>
+</span><span class='line'>   <span class="mi">710</span>        <span class="n">tn</span> <span class="o">=</span> <span class="n">tnode_new</span><span class="p">(</span><span class="n">oldtnode</span><span class="o">-&gt;</span><span class="n">key</span><span class="p">,</span> <span class="n">oldtnode</span><span class="o">-&gt;</span><span class="n">pos</span><span class="p">,</span> <span class="n">oldtnode</span><span class="o">-&gt;</span><span class="n">bits</span> <span class="o">+</span> <span class="mi">1</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">711</span>    
+</span><span class='line'>   <span class="mi">712</span>        <span class="nf">if</span> <span class="p">(</span><span class="o">!</span><span class="n">tn</span><span class="p">)</span>
+</span><span class='line'>   <span class="mi">713</span>            <span class="k">return</span> <span class="n">ERR_PTR</span><span class="p">(</span><span class="o">-</span><span class="n">ENOMEM</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">714</span>    
+</span><span class='line'>   <span class="mi">715</span>        <span class="cm">/*</span>
+</span><span class='line'><span class="cm">   716        * Preallocate and store tnodes before the actual work so we</span>
+</span><span class='line'><span class="cm">   717        * don&#39;t get into an inconsistent state if memory allocation</span>
+</span><span class='line'><span class="cm">   718        * fails. In case of failure we return the oldnode and  inflate</span>
+</span><span class='line'><span class="cm">   719        * of tnode is ignored.</span>
+</span><span class='line'><span class="cm">   720        */</span>
+</span><span class='line'>   <span class="mi">721</span>    
+</span><span class='line'>   <span class="mi">722</span>        <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">olen</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>   <span class="mi">723</span>            <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">inode</span><span class="p">;</span>
+</span><span class='line'>   <span class="mi">724</span>    
+</span><span class='line'>   <span class="mi">725</span>            <span class="n">inode</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="p">)</span> <span class="n">tnode_get_child</span><span class="p">(</span><span class="n">oldtnode</span><span class="p">,</span> <span class="n">i</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">726</span>            <span class="nf">if</span> <span class="p">(</span><span class="n">inode</span> <span class="o">&amp;&amp;</span>
+</span><span class='line'>   <span class="mi">727</span>                <span class="n">IS_TNODE</span><span class="p">(</span><span class="n">inode</span><span class="p">)</span> <span class="o">&amp;&amp;</span>
+</span><span class='line'>   <span class="mi">728</span>                <span class="n">inode</span><span class="o">-&gt;</span><span class="n">pos</span> <span class="o">==</span> <span class="n">oldtnode</span><span class="o">-&gt;</span><span class="n">pos</span> <span class="o">+</span> <span class="n">oldtnode</span><span class="o">-&gt;</span><span class="n">bits</span> <span class="o">&amp;&amp;</span>
+</span><span class='line'>   <span class="mi">729</span>                <span class="n">inode</span><span class="o">-&gt;</span><span class="n">bits</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>   <span class="mi">730</span>                <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">left</span><span class="p">,</span> <span class="o">*</span><span class="n">right</span><span class="p">;</span>
+</span><span class='line'>   <span class="mi">731</span>                <span class="n">t_key</span> <span class="n">m</span> <span class="o">=</span> <span class="o">~</span><span class="mi">0U</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="n">KEYLENGTH</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">&gt;&gt;</span> <span class="n">inode</span><span class="o">-&gt;</span><span class="n">pos</span><span class="p">;</span>
+</span><span class='line'>   <span class="mi">732</span>    
+</span><span class='line'>   <span class="mi">733</span>                <span class="n">left</span> <span class="o">=</span> <span class="n">tnode_new</span><span class="p">(</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">key</span><span class="o">&amp;</span><span class="p">(</span><span class="o">~</span><span class="n">m</span><span class="p">),</span> <span class="n">inode</span><span class="o">-&gt;</span><span class="n">pos</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+</span><span class='line'>   <span class="mi">734</span>                         <span class="n">inode</span><span class="o">-&gt;</span><span class="n">bits</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">735</span>                <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">left</span><span class="p">)</span>
+</span><span class='line'>   <span class="mi">736</span>                    <span class="k">goto</span> <span class="n">nomem</span><span class="p">;</span>
+</span><span class='line'>   <span class="mi">737</span>    
+</span><span class='line'>   <span class="mi">738</span>                <span class="n">right</span> <span class="o">=</span> <span class="n">tnode_new</span><span class="p">(</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">key</span><span class="o">|</span><span class="n">m</span><span class="p">,</span> <span class="n">inode</span><span class="o">-&gt;</span><span class="n">pos</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span>
+</span><span class='line'>   <span class="mi">739</span>                          <span class="n">inode</span><span class="o">-&gt;</span><span class="n">bits</span> <span class="o">-</span> <span class="mi">1</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">740</span>    
+</span><span class='line'>   <span class="mi">741</span>                <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">right</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>   <span class="mi">742</span>                    <span class="n">tnode_free</span><span class="p">(</span><span class="n">left</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">743</span>                    <span class="k">goto</span> <span class="n">nomem</span><span class="p">;</span>
+</span><span class='line'>   <span class="mi">744</span>                <span class="p">}</span>
+</span><span class='line'>   <span class="mi">745</span>    
+</span><span class='line'>   <span class="mi">746</span>                <span class="n">put_child</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span> <span class="n">left</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">747</span>                <span class="n">put_child</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="p">(</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span> <span class="n">right</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">748</span>            <span class="p">}</span>
+</span><span class='line'>   <span class="mi">749</span>        <span class="p">}</span>
+</span><span class='line'>   <span class="mi">750</span>    
+</span><span class='line'>   <span class="mi">751</span>        <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">olen</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>   <span class="mi">752</span>            <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">inode</span><span class="p">;</span>
+</span><span class='line'>   <span class="mi">753</span>            <span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="n">node</span> <span class="o">=</span> <span class="n">tnode_get_child</span><span class="p">(</span><span class="n">oldtnode</span><span class="p">,</span> <span class="n">i</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">754</span>            <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">left</span><span class="p">,</span> <span class="o">*</span><span class="n">right</span><span class="p">;</span>
+</span><span class='line'>   <span class="mi">755</span>            <span class="kt">int</span> <span class="n">size</span><span class="p">,</span> <span class="n">j</span><span class="p">;</span>
+</span><span class='line'>   <span class="mi">756</span>    
+</span><span class='line'>   <span class="mi">757</span>            <span class="cm">/* An empty child */</span>
+</span><span class='line'>   <span class="mi">758</span>            <span class="k">if</span> <span class="p">(</span><span class="n">node</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+</span><span class='line'>   <span class="mi">759</span>                <span class="k">continue</span><span class="p">;</span>
+</span><span class='line'>   <span class="mi">760</span>    
+</span><span class='line'>   <span class="mi">761</span>            <span class="cm">/* A leaf or an internal node with skipped bits */</span>
+</span><span class='line'>   <span class="mi">762</span>    
+</span><span class='line'>   <span class="mi">763</span>            <span class="k">if</span> <span class="p">(</span><span class="n">IS_LEAF</span><span class="p">(</span><span class="n">node</span><span class="p">)</span> <span class="o">||</span> <span class="p">((</span><span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="p">)</span> <span class="n">node</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">pos</span> <span class="o">&gt;</span>
+</span><span class='line'>   <span class="mi">764</span>               <span class="n">tn</span><span class="o">-&gt;</span><span class="n">pos</span> <span class="o">+</span> <span class="n">tn</span><span class="o">-&gt;</span><span class="n">bits</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>   <span class="mi">765</span>                <span class="n">put_child</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span>
+</span><span class='line'>   <span class="mi">766</span>                    <span class="n">tkey_extract_bits</span><span class="p">(</span><span class="n">node</span><span class="o">-&gt;</span><span class="n">key</span><span class="p">,</span> <span class="n">oldtnode</span><span class="o">-&gt;</span><span class="n">pos</span><span class="p">,</span> <span class="n">oldtnode</span><span class="o">-&gt;</span><span class="n">bits</span> <span class="o">+</span> <span class="mi">1</span><span class="p">),</span>
+</span><span class='line'>   <span class="mi">767</span>                    <span class="n">node</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">768</span>                <span class="k">continue</span><span class="p">;</span>
+</span><span class='line'>   <span class="mi">769</span>            <span class="p">}</span>
+</span><span class='line'>   <span class="mi">770</span>    
+</span><span class='line'>   <span class="mi">771</span>            <span class="cm">/* An internal node with two children */</span>
+</span><span class='line'>   <span class="mi">772</span>            <span class="n">inode</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="p">)</span> <span class="n">node</span><span class="p">;</span>
+</span><span class='line'>   <span class="mi">773</span>    
+</span><span class='line'>   <span class="mi">774</span>            <span class="nf">if</span> <span class="p">(</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">bits</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>   <span class="mi">775</span>                <span class="n">put_child</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="n">i</span><span class="p">,</span> <span class="n">rtnl_dereference</span><span class="p">(</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">child</span><span class="p">[</span><span class="mi">0</span><span class="p">]));</span>
+</span><span class='line'>   <span class="mi">776</span>                <span class="n">put_child</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">rtnl_dereference</span><span class="p">(</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">child</span><span class="p">[</span><span class="mi">1</span><span class="p">]));</span>
+</span><span class='line'>   <span class="mi">777</span>    
+</span><span class='line'>   <span class="mi">778</span>                <span class="n">tnode_free_safe</span><span class="p">(</span><span class="n">inode</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">779</span>                <span class="k">continue</span><span class="p">;</span>
+</span><span class='line'>   <span class="mi">780</span>            <span class="p">}</span>
+</span><span class='line'>   <span class="mi">781</span>    
+</span><span class='line'>   <span class="mi">782</span>            <span class="cm">/* An internal node with more than two children */</span>
+</span><span class='line'>   <span class="mi">783</span>    
+</span><span class='line'>   <span class="mi">784</span>            <span class="cm">/* We will replace this node &#39;inode&#39; with two new</span>
+</span><span class='line'><span class="cm">   785            * ones, &#39;left&#39; and &#39;right&#39;, each with half of the</span>
+</span><span class='line'><span class="cm">   786            * original children. The two new nodes will have</span>
+</span><span class='line'><span class="cm">   787            * a position one bit further down the key and this</span>
+</span><span class='line'><span class="cm">   788            * means that the &quot;significant&quot; part of their keys</span>
+</span><span class='line'><span class="cm">   789            * (see the discussion near the top of this file)</span>
+</span><span class='line'><span class="cm">   790            * will differ by one bit, which will be &quot;0&quot; in</span>
+</span><span class='line'><span class="cm">   791            * left&#39;s key and &quot;1&quot; in right&#39;s key. Since we are</span>
+</span><span class='line'><span class="cm">   792            * moving the key position by one step, the bit that</span>
+</span><span class='line'><span class="cm">   793            * we are moving away from - the bit at position</span>
+</span><span class='line'><span class="cm">   794            * (inode-&gt;pos) - is the one that will differ between</span>
+</span><span class='line'><span class="cm">   795            * left and right. So... we synthesize that bit in the</span>
+</span><span class='line'><span class="cm">   796            * two  new keys.</span>
+</span><span class='line'><span class="cm">   797            * The mask &#39;m&#39; below will be a single &quot;one&quot; bit at</span>
+</span><span class='line'><span class="cm">   798            * the position (inode-&gt;pos)</span>
+</span><span class='line'><span class="cm">   799            */</span>
+</span><span class='line'>   <span class="mi">800</span>    
+</span><span class='line'>   <span class="mi">801</span>            <span class="cm">/* Use the old key, but set the new significant</span>
+</span><span class='line'><span class="cm">   802            *   bit to zero.</span>
+</span><span class='line'><span class="cm">   803            */</span>
+</span><span class='line'>   <span class="mi">804</span>    
+</span><span class='line'>   <span class="mi">805</span>            <span class="n">left</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="p">)</span> <span class="n">tnode_get_child</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="n">i</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">806</span>            <span class="nf">put_child</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="n">i</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">807</span>    
+</span><span class='line'>   <span class="mi">808</span>            <span class="nf">BUG_ON</span><span class="p">(</span><span class="o">!</span><span class="n">left</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">809</span>    
+</span><span class='line'>   <span class="mi">810</span>            <span class="n">right</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="p">)</span> <span class="n">tnode_get_child</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">811</span>            <span class="nf">put_child</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">812</span>    
+</span><span class='line'>   <span class="mi">813</span>            <span class="nf">BUG_ON</span><span class="p">(</span><span class="o">!</span><span class="n">right</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">814</span>    
+</span><span class='line'>   <span class="mi">815</span>            <span class="n">size</span> <span class="o">=</span> <span class="n">tnode_child_length</span><span class="p">(</span><span class="n">left</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">816</span>            <span class="k">for</span> <span class="p">(</span><span class="n">j</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">j</span> <span class="o">&lt;</span> <span class="n">size</span><span class="p">;</span> <span class="n">j</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>   <span class="mi">817</span>                <span class="n">put_child</span><span class="p">(</span><span class="n">left</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">rtnl_dereference</span><span class="p">(</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">child</span><span class="p">[</span><span class="n">j</span><span class="p">]));</span>
+</span><span class='line'>   <span class="mi">818</span>                <span class="nf">put_child</span><span class="p">(</span><span class="n">right</span><span class="p">,</span> <span class="n">j</span><span class="p">,</span> <span class="n">rtnl_dereference</span><span class="p">(</span><span class="n">inode</span><span class="o">-&gt;</span><span class="n">child</span><span class="p">[</span><span class="n">j</span> <span class="o">+</span> <span class="n">size</span><span class="p">]));</span>
+</span><span class='line'>   <span class="mi">819</span>            <span class="p">}</span>
+</span><span class='line'>   <span class="mi">820</span>            <span class="n">put_child</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="n">i</span><span class="p">,</span> <span class="n">resize</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">left</span><span class="p">));</span>
+</span><span class='line'>   <span class="mi">821</span>            <span class="nf">put_child</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">resize</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">right</span><span class="p">));</span>
+</span><span class='line'>   <span class="mi">822</span>    
+</span><span class='line'>   <span class="mi">823</span>            <span class="nf">tnode_free_safe</span><span class="p">(</span><span class="n">inode</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">824</span>        <span class="p">}</span>
+</span><span class='line'>   <span class="mi">825</span>        <span class="n">tnode_free_safe</span><span class="p">(</span><span class="n">oldtnode</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">826</span>        <span class="k">return</span> <span class="n">tn</span><span class="p">;</span>
+</span><span class='line'>   <span class="mi">827</span>    <span class="nl">nomem</span><span class="p">:</span>
+</span><span class='line'>   <span class="mi">828</span>        <span class="n">tnode_clean_free</span><span class="p">(</span><span class="n">tn</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">829</span>        <span class="k">return</span> <span class="nf">ERR_PTR</span><span class="p">(</span><span class="o">-</span><span class="n">ENOMEM</span><span class="p">);</span>
+</span><span class='line'>   <span class="mi">830</span>    <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-09-29T17:16:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>29</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>5:16 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/route/'>route</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/09/27/ipv4-route-fib-tree-rebalance/" title="Previous Post: IPv4 route fib tree rebalance">&laquo; IPv4 route fib tree rebalance</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/10/07/make-terminal-tab-more-markedness/" title="Next Post: How to make selected tab in terminal more prominent">How to make selected tab in terminal more prominent &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

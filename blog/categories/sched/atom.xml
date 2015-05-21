@@ -1,0 +1,1089 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Sched | My Octopress Blog]]></title>
+  <link href="http://martinbj2008.github.io/blog/categories/sched/atom.xml" rel="self"/>
+  <link href="http://martinbj2008.github.io/"/>
+  <updated>2015-05-21T16:26:25+08:00</updated>
+  <id>http://martinbj2008.github.io/</id>
+  <author>
+    <name><![CDATA[Your Name]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Draft: How to Select a Realtime Task When Schedule]]></title>
+    <link href="http://martinbj2008.github.io/blog/2013/07/26/draft-how-to-select-a-realtime-task-when-schedule/"/>
+    <updated>2013-07-26T09:00:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2013/07/26/draft-how-to-select-a-realtime-task-when-schedule</id>
+    <content type="html"><![CDATA[<h2>summary</h2>
+
+<p>There is a <code>struct rt_rq</code> in <code>struct rq</code>. <code>struct rt_rq</code> is used to store all
+the realtime task in current <code>struct rq</code>. which has a <code>struct rt_prio_array active</code>.</p>
+
+<!-- more -->
+
+
+<pre><code class="c">struct rq {
+    ...
+    struct rt_rq {
+        ...
+        struct rt_prio_array active {
+            DECLARE_BITMAP(bitmap, MAX_RT_PRIO+1); /* include 1 bit for delimiter */
+            struct list_head queue[MAX_RT_PRIO];
+        }
+        ...
+    }
+    ...
+}
+</code></pre>
+
+<p><em>for a</em> <code>rq</code>:
+All the realtime tasks are stored by a bit map and a list array.</p>
+
+<ol>
+<li><p><code>DECLARE_BITMAP(bitmap, MAX_RT_PRIO+1)</code>
+This is a bit map to show if a priority level has task to be selected.
+One bit set to 1 means one or more task(s).</p></li>
+<li><p><code>struct list_head queue[MAX_RT_PRIO]</code>
+This is list array, each element is a list head.
+All tasks are linked into different lists according their priority by
+<code>struct sched_rt_entity</code>&rsquo;s <code>struct list_head run_list</code>.</p></li>
+</ol>
+
+
+<pre><code class="c">1001 struct sched_rt_entity {
+1002         struct list_head run_list
+</code></pre>
+
+<p>   Each list has a corresponding bit in previous bitmap.</p>
+
+<p>When we need pick a task, we find find the first bit in the map,
+and then select one task from the corresponding list.</p>
+
+<p>Q1: what is group_rt_rq? what is it used for?
+  CONFIG_RT_GROUP_SCHED??</p>
+
+<h3>Call Trac</h3>
+
+<pre><code class="c">&gt; pick_next_task
+&gt; &gt; for_each_class(class) {
+        p = class-&gt;pick_next_task(rq);
+&gt; &gt; &gt; pick_next_task_rt
+&gt; &gt; &gt; &gt; _pick_next_task_rt
+&gt; &gt; &gt; &gt; &gt; pick_next_rt_entity
+&gt; &gt; &gt; &gt; &gt; &gt; sched_find_first_bit(array-&gt;bitmap);
+&gt; &gt; &gt; &gt; &gt; &gt; &gt; list_entry(queue-&gt;next, struct sched_rt_entity, run_list);
+</code></pre>
+
+<h2>Data Structure</h2>
+
+<h3>realtime runqueue <code>struct rt_rq</code></h3>
+
+<pre><code class="c"> 332 /* Real-Time classes' related field in a runqueue: */
+ 333 struct rt_rq {
+ 334         struct rt_prio_array active;
+ 335         unsigned int rt_nr_running;
+ 336 #if defined CONFIG_SMP || defined CONFIG_RT_GROUP_SCHED
+ 337         struct {
+ 338                 int curr; /* highest queued rt task prio */
+ 339 #ifdef CONFIG_SMP
+ 340                 int next; /* next highest */
+ 341 #endif
+ 342         } highest_prio;
+ 343 #endif
+ 344 #ifdef CONFIG_SMP
+ 345         unsigned long rt_nr_migratory;
+ 346         unsigned long rt_nr_total;
+ 347         int overloaded;
+ 348         struct plist_head pushable_tasks;
+ 349 #endif
+ 350         int rt_throttled;
+ 351         u64 rt_time;
+ 352         u64 rt_runtime;
+ 353         /* Nests inside the rq lock: */
+ 354         raw_spinlock_t rt_runtime_lock;
+ 355 
+ 356 #ifdef CONFIG_RT_GROUP_SCHED
+ 357         unsigned long rt_nr_boosted;
+ 358 
+ 359         struct rq *rq;
+ 360         struct task_group *tg;
+ 361 #endif
+ 362 };
+ 363 
+</code></pre>
+
+<h3><code>struct rt_prio_array</code></h3>
+
+<pre><code class="c">  95 /*
+  96  * This is the priority-queue data structure of the RT scheduling class:
+  97  */
+  98 struct rt_prio_array {
+  99         DECLARE_BITMAP(bitmap, MAX_RT_PRIO+1); /* include 1 bit for delimiter */
+ 100         struct list_head queue[MAX_RT_PRIO];
+ 101 };
+</code></pre>
+
+<pre><code class="c">1001 struct sched_rt_entity {
+1002         struct list_head run_list;
+1003         unsigned long timeout;  
+1004         unsigned long watchdog_stamp;
+1005         unsigned int time_slice;
+1006 
+1007         struct sched_rt_entity *back;
+1008 #ifdef CONFIG_RT_GROUP_SCHED
+1009         struct sched_rt_entity  *parent;
+1010         /* rq on which this entity is (to be) queued: */
+1011         struct rt_rq            *rt_rq;
+1012         /* rq "owned" by this entity/group: */
+1013         struct rt_rq            *my_q;
+1014 #endif
+1015 };
+</code></pre>
+
+<h3><code>pick_next_task_rt</code></h3>
+
+<pre><code class="c">1323 static struct task_struct *pick_next_task_rt(struct rq *rq)
+1324 {
+1325         struct task_struct *p = _pick_next_task_rt(rq);
+1326 
+1327         /* The running task is never eligible for pushing */
+1328         if (p)
+1329                 dequeue_pushable_task(rq, p);
+1330 
+1331 #ifdef CONFIG_SMP
+1332         /*
+1333          * We detect this state here so that we can avoid taking the RQ
+1334          * lock again later if there is no need to push
+1335          */
+1336         rq-&gt;post_schedule = has_pushable_tasks(rq);
+1337 #endif
+1338 
+1339         return p;
+1340 }
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Draft: How to Pick Next Task]]></title>
+    <link href="http://martinbj2008.github.io/blog/2013/07/26/how-to-pick-next-task/"/>
+    <updated>2013-07-26T08:23:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2013/07/26/how-to-pick-next-task</id>
+    <content type="html"><![CDATA[<h2>summary</h2>
+
+<p>There are four <code>sched_class</code>,
+<code>stop_sched_class --&gt; rt_sched_class --&gt; fair_sched_class --&gt; idle_sched_class</code></p>
+
+<p>They are linked one by one staticly by <code>struct sched_class-&gt;next</code> by their defination.</p>
+
+<p>Each <code>sched_class</code> has method <code>pick_next_task</code>, which is used to select
+a perfect process to run from each <code>sched_class</code>&rsquo;s runqueue.</p>
+
+<p>When we need schedule, the four <code>pick_next_task</code> will be called one by one.</p>
+
+<p>As a optimization, most time there is no rt task in running state,
+in this case we can directly call <code>fair_sched_class</code>.</p>
+
+<!-- more -->
+
+
+<pre><code class="c">2322         /*
+2323          * Optimization: we know that if all tasks are in
+2324          * the fair class we can call that function directly:
+2325          */
+2326         if (likely(rq-&gt;nr_running == rq-&gt;cfs.h_nr_running)) {
+2327                 p = fair_sched_class.pick_next_task(rq);
+</code></pre>
+
+<p>question:
+1. how <code>stop_class</code> and <code>idle_class</code>, they has no task? idle_task?</p>
+
+<h2>data structure</h2>
+
+<h3><code>sched_class</code></h3>
+
+<pre><code class="c">1009 #define sched_class_highest (&amp;stop_sched_class)
+1010 #define for_each_class(class) \
+1011    for (class = sched_class_highest; class; class = class-&gt;next)
+1012 
+1013 extern const struct sched_class stop_sched_class;
+1014 extern const struct sched_class rt_sched_class;
+1015 extern const struct sched_class fair_sched_class;
+1016 extern const struct sched_class idle_sched_class;
+</code></pre>
+
+<pre><code class="c"> 963 struct sched_class { 
+ 964         const struct sched_class *next;
+ 965         
+ 966         void (*enqueue_task) (struct rq *rq, struct task_struct *p, int flags);
+ 967         void (*dequeue_task) (struct rq *rq, struct task_struct *p, int flags);
+ 968         void (*yield_task) (struct rq *rq);
+ 969         bool (*yield_to_task) (struct rq *rq, struct task_struct *p, bool preempt);
+ 970 
+ 971         void (*check_preempt_curr) (struct rq *rq, struct task_struct *p, int flags);
+ 972         
+ 973         struct task_struct * (*pick_next_task) (struct rq *rq);
+ 974         void (*put_prev_task) (struct rq *rq, struct task_struct *p);
+ 975         
+ 976 #ifdef CONFIG_SMP
+ 977         int  (*select_task_rq)(struct task_struct *p, int sd_flag, int flags);
+ 978         void (*migrate_task_rq)(struct task_struct *p, int next_cpu);
+ 979 
+ 980         void (*pre_schedule) (struct rq *this_rq, struct task_struct *task);
+ 981         void (*post_schedule) (struct rq *this_rq);
+ 982         void (*task_waking) (struct task_struct *task);
+ 983         void (*task_woken) (struct rq *this_rq, struct task_struct *task);
+ 984 
+ 985         void (*set_cpus_allowed)(struct task_struct *p,
+ 986                                  const struct cpumask *newmask);
+ 987 
+ 988         void (*rq_online)(struct rq *rq);
+ 989         void (*rq_offline)(struct rq *rq);
+ 990 #endif
+ 991 
+ 992         void (*set_curr_task) (struct rq *rq);
+ 993         void (*task_tick) (struct rq *rq, struct task_struct *p, int queued);
+ 994         void (*task_fork) (struct task_struct *p);
+ 995 
+ 996         void (*switched_from) (struct rq *this_rq, struct task_struct *task);
+ 997         void (*switched_to) (struct rq *this_rq, struct task_struct *task);
+ 998         void (*prio_changed) (struct rq *this_rq, struct task_struct *task,
+ 999                              int oldprio);
+1000 
+1001         unsigned int (*get_rr_interval) (struct rq *rq,
+1002                                          struct task_struct *task);
+1003 
+1004 #ifdef CONFIG_FAIR_GROUP_SCHED
+1005         void (*task_move_group) (struct task_struct *p, int on_rq);
+1006 #endif
+1007 };
+</code></pre>
+
+<h3><code>stop_sched_class</code></h3>
+
+<pre><code class="c">102 /*
+103  * Simple, special scheduling class for the per-CPU stop tasks:
+104  */
+105 const struct sched_class stop_sched_class = {
+106         .next                   = &amp;rt_sched_class,
+107 
+108         .enqueue_task           = enqueue_task_stop,
+109         .dequeue_task           = dequeue_task_stop,
+110         .yield_task             = yield_task_stop,
+111 
+112         .check_preempt_curr     = check_preempt_curr_stop,
+113 
+114         .pick_next_task         = pick_next_task_stop,
+115         .put_prev_task          = put_prev_task_stop,
+116 
+117 #ifdef CONFIG_SMP
+118         .select_task_rq         = select_task_rq_stop,
+119 #endif
+120 
+121         .set_curr_task          = set_curr_task_stop,
+122         .task_tick              = task_tick_stop,
+123 
+124         .get_rr_interval        = get_rr_interval_stop,
+125 
+126         .prio_changed           = prio_changed_stop,
+127         .switched_to            = switched_to_stop,
+128 };
+</code></pre>
+
+<h3><code>rt_sched_class</code></h3>
+
+<pre><code class="c">1967 const struct sched_class rt_sched_class = {
+1968         .next                   = &amp;fair_sched_class,
+1969         .enqueue_task           = enqueue_task_rt,
+1970         .dequeue_task           = dequeue_task_rt,
+1971         .yield_task             = yield_task_rt,
+1972 
+1973         .check_preempt_curr     = check_preempt_curr_rt,
+1974 
+1975         .pick_next_task         = pick_next_task_rt,
+1976         .put_prev_task          = put_prev_task_rt,
+1977 
+1978 #ifdef CONFIG_SMP
+1979         .select_task_rq         = select_task_rq_rt,
+1980        
+1981         .set_cpus_allowed       = set_cpus_allowed_rt,
+1982         .rq_online              = rq_online_rt,
+1983         .rq_offline             = rq_offline_rt,
+1984         .pre_schedule           = pre_schedule_rt,
+1985         .post_schedule          = post_schedule_rt,
+1986         .task_woken             = task_woken_rt,
+1987         .switched_from          = switched_from_rt,
+1988 #endif 
+1989        
+1990         .set_curr_task          = set_curr_task_rt,
+1991         .task_tick              = task_tick_rt,
+1992        
+1993         .get_rr_interval        = get_rr_interval_rt,
+1994 
+1995         .prio_changed           = prio_changed_rt,
+1996         .switched_to            = switched_to_rt,
+1997 };
+</code></pre>
+
+<h3><code>fair_sched_class</code></h3>
+
+<pre><code class="c">6170 /*      
+6171  * All the scheduling class methods:
+6172  */     
+6173 const struct sched_class fair_sched_class = {
+6174         .next                   = &amp;idle_sched_class,
+6175         .enqueue_task           = enqueue_task_fair,
+6176         .dequeue_task           = dequeue_task_fair,
+6177         .yield_task             = yield_task_fair,
+6178         .yield_to_task          = yield_to_task_fair,
+6179        
+6180         .check_preempt_curr     = check_preempt_wakeup,
+6181         
+6182         .pick_next_task         = pick_next_task_fair,
+6183         .put_prev_task          = put_prev_task_fair,
+6184 
+6185 #ifdef CONFIG_SMP
+6186         .select_task_rq         = select_task_rq_fair,
+6187         .migrate_task_rq        = migrate_task_rq_fair,
+6188        
+6189         .rq_online              = rq_online_fair,
+6190         .rq_offline             = rq_offline_fair,
+6191        
+6192         .task_waking            = task_waking_fair,
+6193 #endif
+6194         
+6195         .set_curr_task          = set_curr_task_fair,
+6196         .task_tick              = task_tick_fair,
+6197         .task_fork              = task_fork_fair,
+6198 
+6199         .prio_changed           = prio_changed_fair, 
+6200         .switched_from          = switched_from_fair,
+6201         .switched_to            = switched_to_fair,
+6202 
+6203         .get_rr_interval        = get_rr_interval_fair,
+6204 
+6205 #ifdef CONFIG_FAIR_GROUP_SCHED
+6206         .task_move_group        = task_move_group_fair,
+6207 #endif
+6208 };
+6209 
+</code></pre>
+
+<h3><code>idle_sched_class</code></h3>
+
+<pre><code class="c"> 87 /*       
+ 88  * Simple, special scheduling class for the per-CPU idle tasks:
+ 89  */
+ 90 const struct sched_class idle_sched_class = {
+ 91         /* .next is NULL */
+ 92         /* no enqueue/yield_task for idle tasks */
+ 93 
+ 94         /* dequeue is not valid, we print a debug message there: */
+ 95         .dequeue_task           = dequeue_task_idle,
+ 96 
+ 97         .check_preempt_curr     = check_preempt_curr_idle,
+ 98 
+ 99         .pick_next_task         = pick_next_task_idle,
+100         .put_prev_task          = put_prev_task_idle,
+101 
+102 #ifdef CONFIG_SMP
+103         .select_task_rq         = select_task_rq_idle,
+104         .pre_schedule           = pre_schedule_idle,
+105         .post_schedule          = post_schedule_idle,
+106 #endif   
+107 
+108         .set_curr_task          = set_curr_task_idle,
+109         .task_tick              = task_tick_idle,
+110 
+111         .get_rr_interval        = get_rr_interval_idle,
+112 
+113         .prio_changed           = prio_changed_idle,
+114         .switched_to            = switched_to_idle,
+115 };
+</code></pre>
+
+<h3><code>pick_next_task</code></h3>
+
+<pre><code class="c">2313 /*
+2314  * Pick up the highest-prio task:
+2315  */
+2316 static inline struct task_struct *
+2317 pick_next_task(struct rq *rq)
+2318 { 
+2319         const struct sched_class *class;
+2320         struct task_struct *p;
+2321   
+2322         /*
+2323          * Optimization: we know that if all tasks are in
+2324          * the fair class we can call that function directly:
+2325          */
+2326         if (likely(rq-&gt;nr_running == rq-&gt;cfs.h_nr_running)) {
+2327                 p = fair_sched_class.pick_next_task(rq); 
+2328                 if (likely(p))     
+2329                         return p;  
+2330         }
+2331   
+2332         for_each_class(class) {    
+2333                 p = class-&gt;pick_next_task(rq);
+2334                 if (p)             
+2335                         return p;  
+2336         }
+2337   
+2338         BUG(); /* the idle class will always have a runnable task */
+2339 } 
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Draft: Struct Rq]]></title>
+    <link href="http://martinbj2008.github.io/blog/2013/07/26/schedule-study/"/>
+    <updated>2013-07-26T08:10:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2013/07/26/schedule-study</id>
+    <content type="html"><![CDATA[<h2>summary:</h2>
+
+<ol>
+<li>struct rq is basic data structure.</li>
+<li>there is a realtime process(es) and normal process(es) are stored in
+different  sub-runqueue <code>*_rq</code> of rq?
+<code>c
+426         struct cfs_rq cfs;
+427         struct rt_rq rt;
+</code></li>
+</ol>
+
+
+<!-- more -->
+
+
+<pre><code class="c"> 393 /*
+ 394  * This is the main, per-CPU runqueue data structure.
+ 395  *
+ 396  * Locking rule: those places that want to lock multiple runqueues
+ 397  * (such as the load balancing or the thread migration code), lock
+ 398  * acquire operations must be ordered by ascending &amp;runqueue.
+ 399  */
+ 400 struct rq {
+ 401         /* runqueue lock: */
+ 402         raw_spinlock_t lock;
+ 403 
+ 404         /*
+ 405          * nr_running and cpu_load should be in the same cacheline because
+ 406          * remote CPUs use both these fields when doing load calculation.
+ 407          */
+ 408         unsigned int nr_running;
+ 409         #define CPU_LOAD_IDX_MAX 5
+ 410         unsigned long cpu_load[CPU_LOAD_IDX_MAX];
+ 411         unsigned long last_load_update_tick;
+ 412 #ifdef CONFIG_NO_HZ_COMMON
+ 413         u64 nohz_stamp;
+ 414         unsigned long nohz_flags;
+ 415 #endif
+ 416 #ifdef CONFIG_NO_HZ_FULL
+ 417         unsigned long last_sched_tick;
+ 418 #endif
+ 419         int skip_clock_update;
+ 420 
+ 421         /* capture load from *all* tasks on this cpu: */
+ 422         struct load_weight load;
+ 423         unsigned long nr_load_updates;
+ 424         u64 nr_switches;
+ 425 
+ 426         struct cfs_rq cfs;
+ 427         struct rt_rq rt;
+ 428 
+ 429 #ifdef CONFIG_FAIR_GROUP_SCHED
+ 430         /* list of leaf cfs_rq on this cpu: */
+ 431         struct list_head leaf_cfs_rq_list;
+ 432 #ifdef CONFIG_SMP
+ 433         unsigned long h_load_throttle;
+ 434 #endif /* CONFIG_SMP */
+ 435 #endif /* CONFIG_FAIR_GROUP_SCHED */
+ 436 
+ 437 #ifdef CONFIG_RT_GROUP_SCHED
+ 438         struct list_head leaf_rt_rq_list;
+ 439 #endif
+ 440 
+ 441         /*
+ 442          * This is part of a global counter where only the total sum
+ 443          * over all CPUs matters. A task can increase this counter on
+ 444          * one CPU and if it got migrated afterwards it may decrease
+ 445          * it on another CPU. Always updated under the runqueue lock:
+ 446          */
+ 447         unsigned long nr_uninterruptible;
+ 448 
+ 449         struct task_struct *curr, *idle, *stop;
+ 450         unsigned long next_balance;
+ 451         struct mm_struct *prev_mm;
+ 452 
+ 453         u64 clock;
+ 454         u64 clock_task;
+ 455 
+ 456         atomic_t nr_iowait;
+ 457 
+ 458 #ifdef CONFIG_SMP
+ 459         struct root_domain *rd;
+ 460         struct sched_domain *sd;
+ 461 
+ 462         unsigned long cpu_power;
+ 463 
+ 464         unsigned char idle_balance;
+ 465         /* For active balancing */
+ 466         int post_schedule;
+ 467         int active_balance;
+ 468         int push_cpu;
+ 469         struct cpu_stop_work active_balance_work;
+ 470         /* cpu of this runqueue: */
+ 471         int cpu;
+ 472         int online;
+ 473 
+ 474         struct list_head cfs_tasks;
+ 475 
+ 476         u64 rt_avg;
+ 477         u64 age_stamp;
+ 478         u64 idle_stamp;
+ 479         u64 avg_idle;
+ 480 #endif
+ 481 
+ 482 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
+ 483         u64 prev_irq_time;
+ 484 #endif
+ 485 #ifdef CONFIG_PARAVIRT
+ 486         u64 prev_steal_time;
+ 487 #endif
+ 488 #ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
+ 489         u64 prev_steal_time_rq;
+ 490 #endif
+ 491 
+ 492         /* calc_load related fields */
+ 493         unsigned long calc_load_update;
+ 494         long calc_load_active;
+ 495 
+ 496 #ifdef CONFIG_SCHED_HRTICK
+ 497 #ifdef CONFIG_SMP
+ 498         int hrtick_csd_pending;
+ 499         struct call_single_data hrtick_csd;
+ 500 #endif
+ 501         struct hrtimer hrtick_timer;
+ 502 #endif
+ 503 
+ 504 #ifdef CONFIG_SCHEDSTATS
+ 505         /* latency stats */
+ 506         struct sched_info rq_sched_info;
+ 507         unsigned long long rq_cpu_time;
+ 508         /* could above be rq-&gt;cfs_rq.exec_clock + rq-&gt;rt_rq.rt_runtime ? */
+ 509 
+ 510         /* sys_sched_yield() stats */
+ 511         unsigned int yld_count;
+ 512 
+ 513         /* schedule() stats */
+ 514         unsigned int sched_count;
+ 515         unsigned int sched_goidle;
+ 516 
+ 517         /* try_to_wake_up() stats */
+ 518         unsigned int ttwu_count;
+ 519         unsigned int ttwu_local;
+ 520 #endif
+ 521 
+ 522 #ifdef CONFIG_SMP
+ 523         struct llist_head wake_list;
+ 524 #endif
+ 525 
+ 526         struct sched_avg avg;
+ 527 };
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Draft: Isolcpus]]></title>
+    <link href="http://martinbj2008.github.io/blog/2013/07/10/isolcpus/"/>
+    <updated>2013-07-10T00:00:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2013/07/10/isolcpus</id>
+    <content type="html"><![CDATA[<p>Isolcpus</p>
+
+<h2>kthread has wrong affinity when use isolcpus in bootline</h2>
+
+<p>when boot kernel with isolcpus in grub command lines, only init thread has expected affinity, which exclude the isolated cpus.</p>
+
+<p>while the kthreads affinity still includes isolated cpus.</p>
+
+<!-- more -->
+
+
+<h3>Test snapshot</h3>
+
+<p>Test with x86_64 and boot parameter: <code>isolcpus=2,3</code></p>
+
+<h4>init thread affinity is right</h4>
+
+<pre><code>junwei@junwei:~&gt; taskset -p 1 pid 1’s current affinity mask: 3 &lt;== init thread(pid 1) has expected affinity.
+junwei@junwei:~&gt;
+</code></pre>
+
+<h4>kthread affinity is wrong !</h4>
+
+<pre><code>junwei@junwei:~&gt; taskset  -p 2
+pid 2's current affinity mask: f  &lt;== !!! kthreadd thread(pid 1) has expected affinity.
+</code></pre>
+
+<h4>kthread <code>vnb</code> affinity is also wrong !</h4>
+
+<pre><code>junwei@junwei:~&gt; ps axuw|grep ksocket
+root      1521  0.0  0.0      0     0 ?        S    15:47   0:00 [ksocket-xmit]
+root      1522  0.0  0.0      0     0 ?        S    15:47   0:00 [ksocket-recv]
+root      1884  0.0  0.0   9152   684 ttyS0    S+   15:47   0:00 grep ksocket
+junwei@junwei:~&gt;
+junwei@junwei:~&gt; taskset  -p 1521
+pid 1521's current affinity mask: f
+junwei@junwei:~&gt; taskset  -p 1522
+pid 1522's current affinity mask: f
+</code></pre>
+
+<p>NOTE: even we forcely set kthread with right affinity in /etc/rc, the vnb thread still has wrong affinity.</p>
+
+<p>I think it is a kernel bug.
+See discription about isolcpus in kernel Documentation/kernel-parameters.txt.
+<code>
+1257         isolcpus=       [KNL,SMP] Isolate CPUs from the general scheduler.
+1258                         Format:
+1259                         &lt;cpu number&gt;,...,&lt;cpu number&gt;
+1260                         or
+1261                         &lt;cpu number&gt;-&lt;cpu number&gt;
+1262                         (must be a positive range in ascending order)
+1263                         or a mixture
+1264                         &lt;cpu number&gt;,...,&lt;cpu number&gt;-&lt;cpu number&gt;
+1265
+1266                         This option can be used to specify one or more CPUs
+1267                         to isolate from the general SMP balancing and scheduling
+1268                         algorithms. You can move a process onto or off an
+1269                         "isolated" CPU via the CPU affinity syscalls or cpuset.
+1270                         &lt;cpu number&gt; begins at 0 and the maximum value is
+1271                         "number of CPUs in system - 1".
+1272
+1273                         This option is the preferred way to isolate CPUs. The
+1274                         alternative -- manually setting the CPU mask of all
+1275                         tasks in the system -- can cause problems and
+1276                         suboptimal load balancer performance.
+</code></p>
+
+<h2>Analysis:</h2>
+
+<p>this is a common problem, kernel 3.10 is used to analysis it.</p>
+
+<p>why kthread(pid) has wrong affinity.
+when kernel boot, pid0 create process init(pid1) and kthread process(pid2). pid1 and pid2 is created by <code>rest_init</code> in init/main.c</p>
+
+<p>All the kernel threads created by <code>kthread_create</code>/<code>kthread_run</code>, will be the children of the kthread process(pid2).</p>
+
+<p>In kernel source, kthread(pid2) is identitied by ‘kthread_task’, which is run with funciton ‘kthreadd’.</p>
+
+<p>mainly of function ‘kthread’ is a infinite loop, check if there is a new kernel thread need to be created, if yes, create them.</p>
+
+<p>before start the infinite loop, kernel chagne the cpumask/affinity of pid2, see line 453 file kernel/kthread.c.
+<code>c
+364 static noinline void __init_refok rest_init(void)
+365 {
+366         int pid;
+367
+368         rcu_scheduler_starting();
+369         /*
+370          * We need to spawn init first so that it obtains pid 1, however
+371          * the init task will end up wanting to create kthreads, which, if
+372          * we schedule it before we create kthreadd, will OOPS.
+373          */
+374         kernel_thread(kernel_init, NULL, CLONE_FS | CLONE_SIGHAND); &lt;==  pid 1
+375         numa_default_policy();
+376         pid = kernel_thread(kthreadd, NULL, CLONE_FS | CLONE_FILES); &lt;== pid 2
+377         rcu_read_lock();
+378         kthreadd_task = find_task_by_pid_ns(pid, &amp;init_pid_ns);
+379         rcu_read_unlock();
+380         complete(&amp;kthreadd_done);
+</code></p>
+
+<p>In function ‘kthreadd’, file kernel/kthread.c</p>
+
+<pre><code class="c">446 int kthreadd(void *unused)
+447 {
+448         struct task_struct *tsk = current;
+449
+450         /* Setup a clean context for our children to inherit. */
+451         set_task_comm(tsk, "kthreadd");
+452         ignore_signals(tsk);
+453         set_cpus_allowed_ptr(tsk, cpu_all_mask); &lt;========
+454         set_mems_allowed(node_states[N_MEMORY]);
+455
+456         current-&gt;flags |= PF_NOFREEZE;
+457
+458         for (;;) {
+</code></pre>
+
+<p>why kernel thread created by ‘kthread_create’ still has wrong affinity, even kthread(pid2) has been set with right affinity.
+kthead_create is just a marco to wrapper kthread_create_on_node. In kthread_create_on_node, new kernel thread affinity/cpumask will be set as cpu_all_mask(all cpus), just after it is created. See line 285</p>
+
+<pre><code class="c"> 13 #define kthread_create(threadfn, data, namefmt, arg...) \
+ 14         kthread_create_on_node(threadfn, data, -1, namefmt, ##arg)
+</code></pre>
+
+<pre><code class="c">253 struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
+254                                            void *data, int node,
+255                                            const char namefmt[],
+256                                            ...)
+257 {
+258         struct kthread_create_info create;
+259
+260         create.threadfn = threadfn;
+261         create.data = data;
+262         create.node = node;
+263         init_completion(&amp;create.done);
+264
+265         spin_lock(&amp;kthread_create_lock);
+266         list_add_tail(&amp;create.list, &amp;kthread_create_list);
+267         spin_unlock(&amp;kthread_create_lock);
+268
+269         wake_up_process(kthreadd_task);
+270         wait_for_completion(&amp;create.done);
+271
+272         if (!IS_ERR(create.result)) {
+273                 static const struct sched_param param = { .sched_priority = 0 };
+274                 va_list args;
+275
+276                 va_start(args, namefmt);
+277                 vsnprintf(create.result-&gt;comm, sizeof(create.result-&gt;comm),
+278                           namefmt, args);
+279                 va_end(args);
+280                 /*
+281                  * root may have changed our (kthreadd's) priority or CPU mask.
+282                  * The kernel thread should not inherit these properties.
+283                  */
+284                 sched_setscheduler_nocheck(create.result, SCHED_NORMAL, &amp;param);
+285                 set_cpus_allowed_ptr(create.result, cpu_all_mask); &lt;==== chang new kernel thread affinity
+286         }
+287         return create.result;
+</code></pre>
+
+<p>solution(doing):</p>
+
+<p>set right affinity for pid2 and other kernel threads when they are created.</p>
+
+<p>a bit trouble, cpusmask of isolcpus is stored as in kernel/sche/core.c and is a static variable name ‘cpu_isolated_map’.</p>
+
+<p>I rename it as ‘cpu_isolated_mask’ and export it. Just like other cpu masks(such as cpu_possible_mask, cpu_online_mask()</p>
+
+<p>Posted by Martin Zhang Jul 10th, 2013   gist, isocpus</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[How Kernel Thread Is Created]]></title>
+    <link href="http://martinbj2008.github.io/blog/2013/06/27/how-kernel-threada-is-created/"/>
+    <updated>2013-06-27T00:00:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2013/06/27/how-kernel-threada-is-created</id>
+    <content type="html"><![CDATA[<p>JUN 27TH, 2013 | COMMENTS
+How to create a kernel thread</p>
+
+<h2>create a kthread by <code>kthread_create</code></h2>
+
+<p><code>kthread_create(threadfn, data, namefmt, arg...)</code></p>
+
+<p>example: file drivers/char/apm-emulation.c
+<code>
+651 kapmd_tsk = kthread_create(kapmd, NULL, "kapmd");
+</code></p>
+
+<!-- more -->
+
+
+<h2>Principle</h2>
+
+<p>When kernel bootup, two important threads are created. INIT thread(PID1) and kthreadd(PID2).</p>
+
+<p>PID2 is what we analysis here.</p>
+
+<p>kthread_create_list: all the threads to be created are stored in this list.
+To creae a new thread, we just fill the related information in a struct kthread_create_info, and list it to the list, then wait until the thread is ready by mutex.</p>
+
+<h3>kthreadd: PID2 main function</h3>
+
+<p>it is a infinite loop, which removes the nodes from kthread_create_list, and creates a thread per node struct kthread_create_info, then notify the kthread is ready.</p>
+
+<p>After the new thread is created by <code>do_fork</code>, a common funtion <code>thread</code> is call as the new thread entry, not the <code>threadfn</code> we give by API <code>kthread_create</code></p>
+
+<p><code>thread</code> will do some common initialization, and notify new thread is ready, and then the real new thread function <code>threadfn</code> is called.</p>
+
+<p>All the kernel threads are the children of PID2(kthreadd).</p>
+
+<h2>Data structure</h2>
+
+<h3><code>kthread_create_lock</code></h3>
+
+<p>spin lock kthread_create_lock is used to protect the kthread_create_list.</p>
+
+<pre><code class="c"> 23 static DEFINE_SPINLOCK(kthread_create_lock);
+ 24 static LIST_HEAD(kthread_create_list);
+ 25 struct task_struct *kthreadd_task; &lt;== store PID2.
+</code></pre>
+
+<p>In order to create a kernel thread, this structure MUST be created and filled.</p>
+
+<h3><code>kthread_create_info</code></h3>
+
+<pre><code class="c"> 27 struct kthread_create_info
+ 28 {
+ 29         /* Information passed to kthread() from kthreadd. */
+ 30         int (*threadfn)(void *data);
+ 31         void *data;
+ 32         int node; &lt;== memory node;
+ 33
+ 34         /* Result passed back to kthread_create() from kthreadd. */
+ 35         struct task_struct *result;
+ 36         struct completion done;
+ 37
+ 38         struct list_head list;
+ 39 };
+</code></pre>
+
+<h3><code>struct kthread</code></h3>
+
+<pre><code class="c"> 41 struct kthread {
+ 42         unsigned long flags;
+ 43         unsigned int cpu;
+ 44         void *data;
+ 45         struct completion parked;
+ 46         struct completion exited;
+ 47 };
+</code></pre>
+
+<p>坑爹: There are a struct kthread and a static int kthread(void *_create). NND，看第一遍的时候没注意到。</p>
+
+<h2>method: kthread_create</h2>
+
+<pre><code class="c"> 13 #define kthread_create(threadfn, data, namefmt, arg...) \
+ 14         kthread_create_on_node(threadfn, data, -1, namefmt, ##arg)
+</code></pre>
+
+<h3>Call Trace</h3>
+
+<pre><code class="c">&gt; kthread_create
+&gt; &gt; kthread_create_on_node
+&gt; &gt; &gt; spin_lock(&amp;kthread_create_lock);
+&gt; &gt; &gt; list_add_tail(&amp;create.list, &amp;kthread_create_list);
+&gt; &gt; &gt; spin_unlock(&amp;kthread_create_lock);
+&gt; &gt; &gt; wake_up_process(kthreadd_task); &lt;== hi PID2, 来活了 !!!
+&gt; &gt; &gt; wait_for_completion(&amp;create.done); &lt;== waiting for ready.
+</code></pre>
+
+<h3><code>kthread_create_on_node</code></h3>
+
+<pre><code>231 /**
+232  * kthread_create_on_node - create a kthread.
+233  * @threadfn: the function to run until signal_pending(current).
+234  * @data: data ptr for @threadfn.
+235  * @node: memory node number.
+236  * @namefmt: printf-style name for the thread.
+237  *
+238  * Description: This helper function creates and names a kernel
+239  * thread.  The thread will be stopped: use wake_up_process() to start
+240  * it.  See also kthread_run().
+241  *
+242  * If thread is going to be bound on a particular cpu, give its node
+243  * in @node, to get NUMA affinity for kthread stack, or else give -1.
+244  * When woken, the thread will run @threadfn() with @data as its
+245  * argument. @threadfn() can either call do_exit() directly if it is a
+246  * standalone thread for which no one will call kthread_stop(), or
+247  * return when 'kthread_should_stop()' is true (which means
+248  * kthread_stop() has been called).  The return value should be zero
+249  * or a negative error number; it will be passed to kthread_stop().
+250  *
+251  * Returns a task_struct or ERR_PTR(-ENOMEM).
+252  */
+253 struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
+254                                            void *data, int node,
+255                                            const char namefmt[],
+256                                            ...)
+257 {
+258         struct kthread_create_info create;
+259
+260         create.threadfn = threadfn;
+261         create.data = data;
+262         create.node = node;
+263         init_completion(&amp;create.done);
+264
+265         spin_lock(&amp;kthread_create_lock);
+266         list_add_tail(&amp;create.list, &amp;kthread_create_list);
+267         spin_unlock(&amp;kthread_create_lock);
+268
+269         wake_up_process(kthreadd_task);
+270         wait_for_completion(&amp;create.done);
+271
+272         if (!IS_ERR(create.result)) {
+273                 static const struct sched_param param = { .sched_priority = 0 };
+274                 va_list args;
+275
+276                 va_start(args, namefmt);
+277                 vsnprintf(create.result-&gt;comm, sizeof(create.result-&gt;comm),
+278                           namefmt, args);
+279                 va_end(args);
+280                 /*
+281                  * root may have changed our (kthreadd's) priority or CPU mask.
+282                  * The kernel thread should not inherit these properties.
+283                  */
+284                 sched_setscheduler_nocheck(create.result, SCHED_NORMAL, &amp;param);
+285                 set_cpus_allowed_ptr(create.result, cpu_all_mask);
+286         }
+287         return create.result;
+288 }
+289 EXPORT_SYMBOL(kthread_create_on_node);
+</code></pre>
+
+<h3>How a kthread is really created.</h3>
+
+<h4>Call Trace</h4>
+
+<pre><code class="c">&gt; kthreadd
+&gt; &gt; spin_lock(&amp;kthread_create_lock);
+&gt; &gt; create = list_entry(kthread_create_list.next, struct kthread_create_info, list);
+&gt; &gt; list_del_init(&amp;create-&gt;list);
+&gt; &gt; spin_unlock(&amp;kthread_create_lock);
+&gt; &gt; create_kthread(create);
+&gt; &gt; &gt;  kernel_thread(kthread, create, CLONE_FS | CLONE_FILES | SIGCHLD);
+&gt; &gt; &gt; &gt; do_fork
+&gt; &gt; &gt; &gt; &gt; kthread
+&gt; &gt; &gt; &gt; &gt; &gt; __set_current_state(TASK_UNINTERRUPTIBLE);
+&gt; &gt; &gt; &gt; &gt; &gt; create-&gt;result = current;
+&gt; &gt; &gt; &gt; &gt; &gt; complete(&amp;create-&gt;done); &lt;=== NOTIFY thread is ready !!!
+NOTE: line 224 the pameter kthread in funtion create_thread, is a funtion
+</code></pre>
+
+<h4>method <code>kthreadd</code></h4>
+
+<pre><code class="c">446 int kthreadd(void *unused)
+447 {
+448         struct task_struct *tsk = current;
+449
+450         /* Setup a clean context for our children to inherit. */
+451         set_task_comm(tsk, "kthreadd");
+452         ignore_signals(tsk);
+453         set_cpus_allowed_ptr(tsk, cpu_all_mask);
+454         set_mems_allowed(node_states[N_MEMORY]);
+455
+456         current-&gt;flags |= PF_NOFREEZE;
+457
+458         for (;;) {
+459                 set_current_state(TASK_INTERRUPTIBLE);
+460                 if (list_empty(&amp;kthread_create_list))
+461                         schedule();
+462                 __set_current_state(TASK_RUNNING);
+463
+464                 spin_lock(&amp;kthread_create_lock);
+465                 while (!list_empty(&amp;kthread_create_list)) {
+466                         struct kthread_create_info *create;
+467
+468                         create = list_entry(kthread_create_list.next,
+469                                             struct kthread_create_info, list);
+470                         list_del_init(&amp;create-&gt;list);
+471                         spin_unlock(&amp;kthread_create_lock);
+472
+473                         create_kthread(create);
+474
+475                         spin_lock(&amp;kthread_create_lock);
+476                 }
+477                 spin_unlock(&amp;kthread_create_lock);
+478         }
+479
+480         return 0;
+481 }
+</code></pre>
+
+<h4><code>create_kthread</code></h4>
+
+<pre><code class="c">216 static void create_kthread(struct kthread_create_info *create)
+217 {
+218         int pid;
+219
+220 #ifdef CONFIG_NUMA
+221         current-&gt;pref_node_fork = create-&gt;node;
+222 #endif
+223         /* We want our own signal handler (we take no signals by default). */
+224         pid = kernel_thread(kthread, create, CLONE_FS | CLONE_FILES | SIGCHLD);
+225         if (pid &lt; 0) {
+226                 create-&gt;result = ERR_PTR(pid);
+227                 complete(&amp;create-&gt;done);
+228         }
+229 }
+</code></pre>
+
+<h4><code>kthread</code>: do some preparation before really run the threadfn.</h4>
+
+<pre><code class="c">175 static int kthread(void *_create)
+176 {
+177         /* Copy data: it's on kthread's stack */
+178         struct kthread_create_info *create = _create;
+179         int (*threadfn)(void *data) = create-&gt;threadfn;
+180         void *data = create-&gt;data;
+181         struct kthread self;
+182         int ret;
+183
+184         self.flags = 0;
+185         self.data = data;
+186         init_completion(&amp;self.exited);
+187         init_completion(&amp;self.parked);
+188         current-&gt;vfork_done = &amp;self.exited;
+189
+190         /* OK, tell user we're spawned, wait for stop or wakeup */
+191         __set_current_state(TASK_UNINTERRUPTIBLE);
+192         create-&gt;result = current;
+193         complete(&amp;create-&gt;done);   &lt;=== NOTIFY new thread is ready.
+194         schedule();
+195
+196         ret = -EINTR;
+197
+198         if (!test_bit(KTHREAD_SHOULD_STOP, &amp;self.flags)) {
+199                 __kthread_parkme(&amp;self);
+200                 ret = threadfn(data);
+201         }
+202         /* we can't just return, we must preserve "self" on stack */
+203         do_exit(ret);
+204 }
+</code></pre>
+
+<h3>Where is kthreadd_task created at?</h3>
+
+<p>PID2 and <code>kthreadd_task</code> is created just after boot up</p>
+
+<pre><code class="c">364 static noinline void __init_refok rest_init(void)
+365 {
+366         int pid;
+367
+368         rcu_scheduler_starting();
+369         /*
+370          * We need to spawn init first so that it obtains pid 1, however
+371          * the init task will end up wanting to create kthreads, which, if
+372          * we schedule it before we create kthreadd, will OOPS.
+373          */
+374         kernel_thread(kernel_init, NULL, CLONE_FS | CLONE_SIGHAND);
+375         numa_default_policy();
+376         pid = kernel_thread(kthreadd, NULL, CLONE_FS | CLONE_FILES); &lt;==PID1
+377         rcu_read_lock();
+378         kthreadd_task = find_task_by_pid_ns(pid, &amp;init_pid_ns); &lt;== PID2
+379         rcu_read_unlock();
+380         complete(&amp;kthreadd_done);
+381
+382         /*
+383          * The boot idle thread must execute schedule()
+384          * at least once to get things moving:
+385          */
+386         init_idle_bootup_task(current);
+387         schedule_preempt_disabled();
+388         /* Call into cpu_idle with preempt disabled */
+389         cpu_startup_entry(CPUHP_ONLINE);
+390 }
+</code></pre>
+]]></content>
+  </entry>
+  
+</feed>

@@ -1,0 +1,273 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Linux Kernel IPv6 Route - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="IPv6 route tree 原理.
+IPv6路由采用二叉树的形式进行存储， 查找任意路由最多需要128次比较（128次，说法不太严格）。
+因此其算法复杂度为常数，因此IPv6里没有像IPv4那样的cache。 树的节点： fib6_node
+fib6_node 代表一条路由。 &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2011/04/17/ipv6-route/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Linux Kernel IPv6 Route</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2011-04-17T00:00:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>17</span><span class='date-suffix'>th</span>, <span class='date-year'>2011</span></span> <span class='time'>12:00 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>IPv6 route tree 原理.
+IPv6路由采用二叉树的形式进行存储， 查找任意路由最多需要128次比较（128次，说法不太严格）。
+因此其算法复杂度为常数，因此IPv6里没有像IPv4那样的cache。</p>
+
+<!-- more -->
+
+
+<p>树的节点： fib6_node
+fib6_node 代表一条路由。</p>
+
+<p>每个节点有一个leaf指针，leaf指向该路由的下一跳。大多数路由只有一个下一跳， 有的可能有多个下一跳。
+如果有多个下一跳就按照metric值递增的顺序组成一个单向链表。
+每个节点有左右两个孩子指针(left,right)。（废话二叉树还有别的孩子吗！！！）
+每个节点有个指针parent指向父节点。
+每个节点保存有掩码长度fn_bit信息， 而网络地址则保存在leaf指针指向的rt6_info节点中。
+其中掩码长度是个关键信息。</p>
+
+<p>随着树的深度增加，其掩码长度也在增加。
+树的深度每增加1， 掩码长度fn_bit至少增加n(n>=1), 在最坏情况下， n=1.</p>
+
+<p>路由查找：
+查找目的地址IPa，</p>
+
+<p>从根节点开始遍历：
+fib6_node＊p =root_node;
+while（p!=NULL）</p>
+
+<p>获取当前节点fib6_node的fn_bit和网络地址IP_XXXX
+如果当前地址属于ip_XXXX/fn_bit这个网段。GOOD! Got　it.</p>
+
+<p>否则fib6_node转向下一个节点。
+下一个节点是right还是left？
+根据IPa的第fn_bit位的值是0(right) 还是1(left)决定.
+注：这里的第fn_bit位是从１开始的序列而不是０。
+即: 没有被包含在掩码内的那部分地址的最高一位bit_X
+if bit_x的值是1</p>
+
+<p>p= p->right;
+else
+p=p->left;</p>
+
+<p>IPa:ＸＸＸＸＸＸＸＸＸＸＸＸＸＸＸＸＸＸＸＸ
+　　　　　　　　^</p>
+
+<p>相当于目的地IPa地址下有个浮标，随着遍历深度的增加。浮标不停的往后移动。
+直到找到相应的路由为止，或者p为空, 路由查找失败。</p>
+
+<p>本文描述的只是原理。
+１. 在实现中为了寻找到最佳路由，遍历时是首先沉到树的最低部的节点，
+然后再向树根方向反推。
+2. 为了实现按源地址作路由，每个fib6_node下还有个指向子树的指针subtree。
+子树的实现几乎没有变化只是对源IP地址进行类似的操作。
+在增加或者删除一个节点的时候都保持这这个原则。即上一层的节点比下一层的节点的掩码长度要大（至少大1）。
+如果增加的节点a和原有的节点b掩码长度相同。则还要临时引入一个新的节点p。 a 和b作为p的左右孩子。
+p的掩码长度为a和b的前缀相同部分的长度。</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2011-04-17T00:00:00+08:00'><span class='date'><span class='date-month'>Apr</span> <span class='date-day'>17</span><span class='date-suffix'>th</span>, <span class='date-year'>2011</span></span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/route/'>route</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2011/02/25/pernet-init/" title="Previous Post: register_pernet_subsys 笔记">&laquo; register_pernet_subsys 笔记</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2011/09/28/neighbour-in-kernel/" title="Next Post: neighbour 学习笔记（kernel 3.0)">neighbour 学习笔记（kernel 3.0) &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,690 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>IPv4-route-fib-create-info - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="summary 根据用户参数，创建并返回fib_create_info节点。 如果用户参数有问题，则返回空。
+参数检查过程中，会创建一个新的struct fib_info 节点，如果参数检查失败，
+该节点会被free_fib_info释放（通过rcu模式）
+如果存在一个相同配置参数的节点， &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/09/11/ipv4-route-fib-create-info/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">IPv4-route-fib-create-info</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-09-11T18:00:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>11</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>6:00 pm</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h3>summary</h3>
+
+<p>根据用户参数，创建并返回<code>fib_create_info</code>节点。</p>
+
+<ol>
+<li>如果用户参数有问题，则返回空。
+参数检查过程中，会创建一个新的<code>struct fib_info</code> 节点，如果参数检查失败，
+该节点会被<code>free_fib_info</code>释放（通过rcu模式）</li>
+<li>如果存在一个相同配置参数的节点，则返回已有的<code>struct fib_info</code> 节点。
+其实已经创建了一个新的<code>struct fib_info</code> 节点，该节点会被<code>free_fib_info</code>释放（通过rcu模式）同1。</li>
+<li>否则，创建一个<code>struct fib_info</code> 节点，并初始化，
+节点里相关的<code>ref</code>会被increase,同时将该节点链接到 <code>struct fib_info</code>
+相关的3个hash链(<code>fib_info_hash</code>, <code>fib_info_laddrhash</code>, <code>fib_info_devhash</code>)上.</li>
+<li>最后返回新建的节点。</li>
+</ol>
+
+
+<!-- more -->
+
+
+<h4>NOTE:</h4>
+
+<p> After this function <code>struct fib_info *fib_create_info(struct fib_config *cfg)</code>,
+ <code>struct fib_info</code>  is only inserted into <code>fib_info</code> hash lists, not the fib table(tree).</p>
+
+<p><code>struct fib_info *fib_create_info(struct fib_config *cfg)</code>只是把一个创建了一个
+<code>struct fib_info</code>节点，并没有真正链接到路由表（fib_tree）里。</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+<span class='line-number'>101</span>
+<span class='line-number'>102</span>
+<span class='line-number'>103</span>
+<span class='line-number'>104</span>
+<span class='line-number'>105</span>
+<span class='line-number'>106</span>
+<span class='line-number'>107</span>
+<span class='line-number'>108</span>
+<span class='line-number'>109</span>
+<span class='line-number'>110</span>
+<span class='line-number'>111</span>
+<span class='line-number'>112</span>
+<span class='line-number'>113</span>
+<span class='line-number'>114</span>
+<span class='line-number'>115</span>
+<span class='line-number'>116</span>
+<span class='line-number'>117</span>
+<span class='line-number'>118</span>
+<span class='line-number'>119</span>
+<span class='line-number'>120</span>
+<span class='line-number'>121</span>
+<span class='line-number'>122</span>
+<span class='line-number'>123</span>
+<span class='line-number'>124</span>
+<span class='line-number'>125</span>
+<span class='line-number'>126</span>
+<span class='line-number'>127</span>
+<span class='line-number'>128</span>
+<span class='line-number'>129</span>
+<span class='line-number'>130</span>
+<span class='line-number'>131</span>
+<span class='line-number'>132</span>
+<span class='line-number'>133</span>
+<span class='line-number'>134</span>
+<span class='line-number'>135</span>
+<span class='line-number'>136</span>
+<span class='line-number'>137</span>
+<span class='line-number'>138</span>
+<span class='line-number'>139</span>
+<span class='line-number'>140</span>
+<span class='line-number'>141</span>
+<span class='line-number'>142</span>
+<span class='line-number'>143</span>
+<span class='line-number'>144</span>
+<span class='line-number'>145</span>
+<span class='line-number'>146</span>
+<span class='line-number'>147</span>
+<span class='line-number'>148</span>
+<span class='line-number'>149</span>
+<span class='line-number'>150</span>
+<span class='line-number'>151</span>
+<span class='line-number'>152</span>
+<span class='line-number'>153</span>
+<span class='line-number'>154</span>
+<span class='line-number'>155</span>
+<span class='line-number'>156</span>
+<span class='line-number'>157</span>
+<span class='line-number'>158</span>
+<span class='line-number'>159</span>
+<span class='line-number'>160</span>
+<span class='line-number'>161</span>
+<span class='line-number'>162</span>
+<span class='line-number'>163</span>
+<span class='line-number'>164</span>
+<span class='line-number'>165</span>
+<span class='line-number'>166</span>
+<span class='line-number'>167</span>
+<span class='line-number'>168</span>
+<span class='line-number'>169</span>
+<span class='line-number'>170</span>
+<span class='line-number'>171</span>
+<span class='line-number'>172</span>
+<span class='line-number'>173</span>
+<span class='line-number'>174</span>
+<span class='line-number'>175</span>
+<span class='line-number'>176</span>
+<span class='line-number'>177</span>
+<span class='line-number'>178</span>
+<span class='line-number'>179</span>
+<span class='line-number'>180</span>
+<span class='line-number'>181</span>
+<span class='line-number'>182</span>
+<span class='line-number'>183</span>
+<span class='line-number'>184</span>
+<span class='line-number'>185</span>
+<span class='line-number'>186</span>
+<span class='line-number'>187</span>
+<span class='line-number'>188</span>
+<span class='line-number'>189</span>
+<span class='line-number'>190</span>
+<span class='line-number'>191</span>
+<span class='line-number'>192</span>
+<span class='line-number'>193</span>
+<span class='line-number'>194</span>
+<span class='line-number'>195</span>
+<span class='line-number'>196</span>
+<span class='line-number'>197</span>
+<span class='line-number'>198</span>
+<span class='line-number'>199</span>
+<span class='line-number'>200</span>
+<span class='line-number'>201</span>
+<span class='line-number'>202</span>
+<span class='line-number'>203</span>
+<span class='line-number'>204</span>
+<span class='line-number'>205</span>
+<span class='line-number'>206</span>
+<span class='line-number'>207</span>
+<span class='line-number'>208</span>
+<span class='line-number'>209</span>
+<span class='line-number'>210</span>
+<span class='line-number'>211</span>
+<span class='line-number'>212</span>
+<span class='line-number'>213</span>
+<span class='line-number'>214</span>
+<span class='line-number'>215</span>
+<span class='line-number'>216</span>
+<span class='line-number'>217</span>
+<span class='line-number'>218</span>
+<span class='line-number'>219</span>
+<span class='line-number'>220</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">774</span> <span class="k">struct</span> <span class="n">fib_info</span> <span class="o">*</span><span class="n">fib_create_info</span><span class="p">(</span><span class="k">struct</span> <span class="n">fib_config</span> <span class="o">*</span><span class="n">cfg</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">775</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">776</span>         <span class="kt">int</span> <span class="n">err</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">777</span>         <span class="k">struct</span> <span class="n">fib_info</span> <span class="o">*</span><span class="n">fi</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">778</span>         <span class="k">struct</span> <span class="n">fib_info</span> <span class="o">*</span><span class="n">ofi</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">779</span>         <span class="kt">int</span> <span class="n">nhs</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">780</span>         <span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_nlinfo</span><span class="p">.</span><span class="n">nl_net</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">781</span>
+</span><span class='line'> <span class="mi">782</span>         <span class="k">if</span> <span class="p">(</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_type</span> <span class="o">&gt;</span> <span class="n">RTN_MAX</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">783</span>                 <span class="k">goto</span> <span class="n">err_inval</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">784</span>
+</span><span class='line'> <span class="mi">785</span>         <span class="cm">/* Fast check to catch the most weird cases */</span>
+</span><span class='line'> <span class="mi">786</span>         <span class="k">if</span> <span class="p">(</span><span class="n">fib_props</span><span class="p">[</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_type</span><span class="p">].</span><span class="n">scope</span> <span class="o">&gt;</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_scope</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">787</span>                 <span class="k">goto</span> <span class="n">err_inval</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">788</span>
+</span><span class='line'> <span class="mi">789</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_IP_ROUTE_MULTIPATH</span>
+</span><span class='line'> <span class="mi">790</span>         <span class="k">if</span> <span class="p">(</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_mp</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">791</span>                 <span class="n">nhs</span> <span class="o">=</span> <span class="n">fib_count_nexthops</span><span class="p">(</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_mp</span><span class="p">,</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_mp_len</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">792</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">nhs</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">793</span>                         <span class="k">goto</span> <span class="n">err_inval</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">794</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">795</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'> <span class="mi">796</span>
+</span><span class='line'> <span class="mi">797</span>         <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">ENOBUFS</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">798</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">fib_info_cnt</span> <span class="o">&gt;=</span> <span class="n">fib_info_hash_size</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">799</span>                 <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">new_size</span> <span class="o">=</span> <span class="n">fib_info_hash_size</span> <span class="o">&lt;&lt;</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">800</span>                 <span class="k">struct</span> <span class="n">hlist_head</span> <span class="o">*</span><span class="n">new_info_hash</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">801</span>                 <span class="k">struct</span> <span class="n">hlist_head</span> <span class="o">*</span><span class="n">new_laddrhash</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">802</span>                 <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">bytes</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">803</span>
+</span><span class='line'> <span class="mi">804</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">new_size</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">805</span>                         <span class="n">new_size</span> <span class="o">=</span> <span class="mi">16</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">806</span>                 <span class="n">bytes</span> <span class="o">=</span> <span class="n">new_size</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">hlist_head</span> <span class="o">*</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">807</span>                 <span class="n">new_info_hash</span> <span class="o">=</span> <span class="n">fib_info_hash_alloc</span><span class="p">(</span><span class="n">bytes</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">808</span>                 <span class="n">new_laddrhash</span> <span class="o">=</span> <span class="n">fib_info_hash_alloc</span><span class="p">(</span><span class="n">bytes</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">809</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">new_info_hash</span> <span class="o">||</span> <span class="o">!</span><span class="n">new_laddrhash</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">810</span>                         <span class="n">fib_info_hash_free</span><span class="p">(</span><span class="n">new_info_hash</span><span class="p">,</span> <span class="n">bytes</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">811</span>                         <span class="n">fib_info_hash_free</span><span class="p">(</span><span class="n">new_laddrhash</span><span class="p">,</span> <span class="n">bytes</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">812</span>                 <span class="p">}</span> <span class="k">else</span>
+</span><span class='line'> <span class="mi">813</span>                         <span class="n">fib_info_hash_move</span><span class="p">(</span><span class="n">new_info_hash</span><span class="p">,</span> <span class="n">new_laddrhash</span><span class="p">,</span> <span class="n">new_size</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">814</span>
+</span><span class='line'> <span class="mi">815</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">fib_info_hash_size</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">816</span>                         <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">817</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">818</span>
+</span><span class='line'> <span class="mi">819</span>         <span class="n">fi</span> <span class="o">=</span> <span class="n">kzalloc</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">fi</span><span class="p">)</span><span class="o">+</span><span class="n">nhs</span><span class="o">*</span><span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">fib_nh</span><span class="p">),</span> <span class="n">GFP_KERNEL</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">820</span>         <span class="k">if</span> <span class="p">(</span><span class="n">fi</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">821</span>                 <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">822</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_mx</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">823</span>                 <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_metrics</span> <span class="o">=</span> <span class="n">kzalloc</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="n">u32</span><span class="p">)</span> <span class="o">*</span> <span class="n">RTAX_MAX</span><span class="p">,</span> <span class="n">GFP_KERNEL</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">824</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_metrics</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">825</span>                         <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">826</span>         <span class="p">}</span> <span class="k">else</span>
+</span><span class='line'> <span class="mi">827</span>                 <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_metrics</span> <span class="o">=</span> <span class="p">(</span><span class="n">u32</span> <span class="o">*</span><span class="p">)</span> <span class="n">dst_default_metrics</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">828</span>         <span class="n">fib_info_cnt</span><span class="o">++</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">829</span>
+</span><span class='line'> <span class="mi">830</span>         <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_net</span> <span class="o">=</span> <span class="n">hold_net</span><span class="p">(</span><span class="n">net</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">831</span>         <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_protocol</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_protocol</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">832</span>         <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_scope</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_scope</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">833</span>         <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_flags</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_flags</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">834</span>         <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_priority</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_priority</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">835</span>         <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_prefsrc</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_prefsrc</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">836</span>         <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_type</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_type</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">837</span>
+</span><span class='line'> <span class="mi">838</span>         <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_nhs</span> <span class="o">=</span> <span class="n">nhs</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">839</span>         <span class="nf">change_nexthops</span><span class="p">(</span><span class="n">fi</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">840</span>                 <span class="n">nexthop_nh</span><span class="o">-&gt;</span><span class="n">nh_parent</span> <span class="o">=</span> <span class="n">fi</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">841</span>                 <span class="n">nexthop_nh</span><span class="o">-&gt;</span><span class="n">nh_pcpu_rth_output</span> <span class="o">=</span> <span class="n">alloc_percpu</span><span class="p">(</span><span class="k">struct</span> <span class="n">rtable</span> <span class="n">__rcu</span> <span class="o">*</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">842</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">nexthop_nh</span><span class="o">-&gt;</span><span class="n">nh_pcpu_rth_output</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">843</span>                         <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">844</span>         <span class="p">}</span> <span class="n">endfor_nexthops</span><span class="p">(</span><span class="n">fi</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">845</span>         <span class="cm">/*  初始化 fib_metric 根据struct nlattr */</span>
+</span><span class='line'> <span class="mi">846</span>         <span class="k">if</span> <span class="p">(</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_mx</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">847</span>                 <span class="k">struct</span> <span class="n">nlattr</span> <span class="o">*</span><span class="n">nla</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">848</span>                 <span class="kt">int</span> <span class="n">remaining</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">849</span>
+</span><span class='line'> <span class="mi">850</span>                 <span class="nf">nla_for_each_attr</span><span class="p">(</span><span class="n">nla</span><span class="p">,</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_mx</span><span class="p">,</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_mx_len</span><span class="p">,</span> <span class="n">remaining</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">851</span>                         <span class="kt">int</span> <span class="n">type</span> <span class="o">=</span> <span class="n">nla_type</span><span class="p">(</span><span class="n">nla</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">852</span>
+</span><span class='line'> <span class="mi">853</span>                         <span class="k">if</span> <span class="p">(</span><span class="n">type</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">854</span>                                 <span class="n">u32</span> <span class="n">val</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">855</span>
+</span><span class='line'> <span class="mi">856</span>                                 <span class="k">if</span> <span class="p">(</span><span class="n">type</span> <span class="o">&gt;</span> <span class="n">RTAX_MAX</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">857</span>                                         <span class="k">goto</span> <span class="n">err_inval</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">858</span>                                 <span class="n">val</span> <span class="o">=</span> <span class="n">nla_get_u32</span><span class="p">(</span><span class="n">nla</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">859</span>                                 <span class="k">if</span> <span class="p">(</span><span class="n">type</span> <span class="o">==</span> <span class="n">RTAX_ADVMSS</span> <span class="o">&amp;&amp;</span> <span class="n">val</span> <span class="o">&gt;</span> <span class="mi">65535</span> <span class="o">-</span> <span class="mi">40</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">860</span>                                         <span class="n">val</span> <span class="o">=</span> <span class="mi">65535</span> <span class="o">-</span> <span class="mi">40</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">861</span>                                 <span class="k">if</span> <span class="p">(</span><span class="n">type</span> <span class="o">==</span> <span class="n">RTAX_MTU</span> <span class="o">&amp;&amp;</span> <span class="n">val</span> <span class="o">&gt;</span> <span class="mi">65535</span> <span class="o">-</span> <span class="mi">15</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">862</span>                                         <span class="n">val</span> <span class="o">=</span> <span class="mi">65535</span> <span class="o">-</span> <span class="mi">15</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">863</span>                                 <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_metrics</span><span class="p">[</span><span class="n">type</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">864</span>                         <span class="p">}</span>
+</span><span class='line'> <span class="mi">865</span>                 <span class="p">}</span>
+</span><span class='line'> <span class="mi">866</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">867</span>
+</span><span class='line'> <span class="mi">868</span>         <span class="k">if</span> <span class="p">(</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_mp</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/* 多个下一跳 */</span>
+</span><span class='line'> <span class="mi">869</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_IP_ROUTE_MULTIPATH</span>
+</span><span class='line'> <span class="mi">870</span>                 <span class="n">err</span> <span class="o">=</span> <span class="n">fib_get_nhs</span><span class="p">(</span><span class="n">fi</span><span class="p">,</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_mp</span><span class="p">,</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_mp_len</span><span class="p">,</span> <span class="n">cfg</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">871</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">872</span>                         <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">873</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_oif</span> <span class="o">&amp;&amp;</span> <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_nh</span><span class="o">-&gt;</span><span class="n">nh_oif</span> <span class="o">!=</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_oif</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">874</span>                         <span class="k">goto</span> <span class="n">err_inval</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">875</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_gw</span> <span class="o">&amp;&amp;</span> <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_nh</span><span class="o">-&gt;</span><span class="n">nh_gw</span> <span class="o">!=</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_gw</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">876</span>                         <span class="k">goto</span> <span class="n">err_inval</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">877</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_IP_ROUTE_CLASSID</span>
+</span><span class='line'> <span class="mi">878</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_flow</span> <span class="o">&amp;&amp;</span> <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_nh</span><span class="o">-&gt;</span><span class="n">nh_tclassid</span> <span class="o">!=</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_flow</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">879</span>                         <span class="k">goto</span> <span class="n">err_inval</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">880</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'> <span class="mi">881</span> <span class="err">#</span><span class="k">else</span>
+</span><span class='line'> <span class="mi">882</span>                 <span class="k">goto</span> <span class="n">err_inval</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">883</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'> <span class="mi">884</span>         <span class="p">}</span> <span class="k">else</span> <span class="p">{</span> <span class="cm">/* 单下一跳 */</span>
+</span><span class='line'> <span class="mi">885</span>                 <span class="k">struct</span> <span class="n">fib_nh</span> <span class="o">*</span><span class="n">nh</span> <span class="o">=</span> <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_nh</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">886</span>
+</span><span class='line'> <span class="mi">887</span>                 <span class="n">nh</span><span class="o">-&gt;</span><span class="n">nh_oif</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_oif</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">888</span>                 <span class="n">nh</span><span class="o">-&gt;</span><span class="n">nh_gw</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_gw</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">889</span>                 <span class="n">nh</span><span class="o">-&gt;</span><span class="n">nh_flags</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_flags</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">890</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_IP_ROUTE_CLASSID</span>
+</span><span class='line'> <span class="mi">891</span>                 <span class="n">nh</span><span class="o">-&gt;</span><span class="n">nh_tclassid</span> <span class="o">=</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_flow</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">892</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">nh</span><span class="o">-&gt;</span><span class="n">nh_tclassid</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">893</span>                         <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_net</span><span class="o">-&gt;</span><span class="n">ipv4</span><span class="p">.</span><span class="n">fib_num_tclassid_users</span><span class="o">++</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">894</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'> <span class="mi">895</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_IP_ROUTE_MULTIPATH</span>
+</span><span class='line'> <span class="mi">896</span>                 <span class="n">nh</span><span class="o">-&gt;</span><span class="n">nh_weight</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">897</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'> <span class="mi">898</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">899</span>
+</span><span class='line'> <span class="mi">900</span>         <span class="k">if</span> <span class="p">(</span><span class="n">fib_props</span><span class="p">[</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_type</span><span class="p">].</span><span class="n">error</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/* 有些特殊的路由，如blackhole, 不允许配置 gw, oif(指定出口 out interface）等参数。*/</span>
+</span><span class='line'> <span class="mi">901</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_gw</span> <span class="o">||</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_oif</span> <span class="o">||</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_mp</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">902</span>                         <span class="k">goto</span> <span class="n">err_inval</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">903</span>                 <span class="k">goto</span> <span class="n">link_it</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">904</span>         <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">905</span>                 <span class="k">switch</span> <span class="p">(</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_type</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">906</span>                 <span class="k">case</span> <span class="nl">RTN_UNICAST</span><span class="p">:</span>
+</span><span class='line'> <span class="mi">907</span>                 <span class="k">case</span> <span class="nl">RTN_LOCAL</span><span class="p">:</span>
+</span><span class='line'> <span class="mi">908</span>                 <span class="k">case</span> <span class="nl">RTN_BROADCAST</span><span class="p">:</span>
+</span><span class='line'> <span class="mi">909</span>                 <span class="k">case</span> <span class="nl">RTN_ANYCAST</span><span class="p">:</span>
+</span><span class='line'> <span class="mi">910</span>                 <span class="k">case</span> <span class="nl">RTN_MULTICAST</span><span class="p">:</span>
+</span><span class='line'> <span class="mi">911</span>                         <span class="k">break</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">912</span>                 <span class="k">default</span><span class="o">:</span>
+</span><span class='line'> <span class="mi">913</span>                         <span class="k">goto</span> <span class="n">err_inval</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">914</span>                 <span class="p">}</span>
+</span><span class='line'> <span class="mi">915</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">916</span>
+</span><span class='line'> <span class="mi">917</span>         <span class="k">if</span> <span class="p">(</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_scope</span> <span class="o">&gt;</span> <span class="n">RT_SCOPE_HOST</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">918</span>                 <span class="k">goto</span> <span class="n">err_inval</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">919</span>
+</span><span class='line'> <span class="mi">920</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_scope</span> <span class="o">==</span> <span class="n">RT_SCOPE_HOST</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/*  Local address 没有下一跳 */</span>
+</span><span class='line'> <span class="mi">921</span>                 <span class="k">struct</span> <span class="n">fib_nh</span> <span class="o">*</span><span class="n">nh</span> <span class="o">=</span> <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_nh</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">922</span>
+</span><span class='line'> <span class="mi">923</span>                 <span class="cm">/* Local address is added. */</span>
+</span><span class='line'> <span class="mi">924</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">nhs</span> <span class="o">!=</span> <span class="mi">1</span> <span class="o">||</span> <span class="n">nh</span><span class="o">-&gt;</span><span class="n">nh_gw</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">925</span>                         <span class="k">goto</span> <span class="n">err_inval</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">926</span>                 <span class="n">nh</span><span class="o">-&gt;</span><span class="n">nh_scope</span> <span class="o">=</span> <span class="n">RT_SCOPE_NOWHERE</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">927</span>                 <span class="n">nh</span><span class="o">-&gt;</span><span class="n">nh_dev</span> <span class="o">=</span> <span class="n">dev_get_by_index</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_nh</span><span class="o">-&gt;</span><span class="n">nh_oif</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">928</span>                 <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">ENODEV</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">929</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">nh</span><span class="o">-&gt;</span><span class="n">nh_dev</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">930</span>                         <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">931</span>         <span class="p">}</span> <span class="k">else</span> <span class="p">{</span> <span class="cm">/*  非Local address 必须配置下一跳 (gw,oif) */</span>
+</span><span class='line'> <span class="mi">932</span>                 <span class="n">change_nexthops</span><span class="p">(</span><span class="n">fi</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">933</span>                         <span class="n">err</span> <span class="o">=</span> <span class="n">fib_check_nh</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">fi</span><span class="p">,</span> <span class="n">nexthop_nh</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">934</span>                         <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">935</span>                                 <span class="k">goto</span> <span class="n">failure</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">936</span>                 <span class="p">}</span> <span class="n">endfor_nexthops</span><span class="p">(</span><span class="n">fi</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">937</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">938</span>
+</span><span class='line'> <span class="mi">939</span>         <span class="k">if</span> <span class="p">(</span><span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_prefsrc</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">940</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_type</span> <span class="o">!=</span> <span class="n">RTN_LOCAL</span> <span class="o">||</span> <span class="o">!</span><span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_dst</span> <span class="o">||</span>
+</span><span class='line'> <span class="mi">941</span>                     <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_prefsrc</span> <span class="o">!=</span> <span class="n">cfg</span><span class="o">-&gt;</span><span class="n">fc_dst</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">942</span>                         <span class="k">if</span> <span class="p">(</span><span class="n">inet_addr_type</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_prefsrc</span><span class="p">)</span> <span class="o">!=</span> <span class="n">RTN_LOCAL</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">943</span>                                 <span class="k">goto</span> <span class="n">err_inval</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">944</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">945</span>
+</span><span class='line'> <span class="mi">946</span>         <span class="n">change_nexthops</span><span class="p">(</span><span class="n">fi</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">947</span>                 <span class="n">fib_info_update_nh_saddr</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">nexthop_nh</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">948</span>         <span class="p">}</span> <span class="n">endfor_nexthops</span><span class="p">(</span><span class="n">fi</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">949</span>
+</span><span class='line'> <span class="mi">950</span> <span class="nl">link_it</span><span class="p">:</span>
+</span><span class='line'> <span class="mi">951</span>         <span class="n">ofi</span> <span class="o">=</span> <span class="n">fib_find_info</span><span class="p">(</span><span class="n">fi</span><span class="p">);</span> <span class="cm">/* 如果已经有相同的 fib，则是否新建的fib(fi), 并返回已有的fib节点  */</span>
+</span><span class='line'> <span class="mi">952</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">ofi</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">953</span>                 <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_dead</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">954</span>                 <span class="n">free_fib_info</span><span class="p">(</span><span class="n">fi</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">955</span>                 <span class="n">ofi</span><span class="o">-&gt;</span><span class="n">fib_treeref</span><span class="o">++</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">956</span>                 <span class="k">return</span> <span class="n">ofi</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">957</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">958</span>        <span class="cm">/* 至此，这是一个有效的fib， 加锁，增加ref， 并将其链接到 fib 3个hash链里(fib_info_hash, fib_info_laddrhash,fib_info_devhash) */</span>
+</span><span class='line'> <span class="mi">959</span>         <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_treeref</span><span class="o">++</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">960</span>         <span class="nf">atomic_inc</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_clntref</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">961</span>         <span class="nf">spin_lock_bh</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fib_info_lock</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">962</span>         <span class="nf">hlist_add_head</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_hash</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">963</span>                        <span class="o">&amp;</span><span class="n">fib_info_hash</span><span class="p">[</span><span class="n">fib_info_hashfn</span><span class="p">(</span><span class="n">fi</span><span class="p">)]);</span>
+</span><span class='line'> <span class="mi">964</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_prefsrc</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">965</span>                 <span class="k">struct</span> <span class="n">hlist_head</span> <span class="o">*</span><span class="n">head</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">966</span>
+</span><span class='line'> <span class="mi">967</span>                 <span class="n">head</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">fib_info_laddrhash</span><span class="p">[</span><span class="n">fib_laddr_hashfn</span><span class="p">(</span><span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_prefsrc</span><span class="p">)];</span>
+</span><span class='line'> <span class="mi">968</span>                 <span class="n">hlist_add_head</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_lhash</span><span class="p">,</span> <span class="n">head</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">969</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">970</span>         <span class="nf">change_nexthops</span><span class="p">(</span><span class="n">fi</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">971</span>                 <span class="k">struct</span> <span class="n">hlist_head</span> <span class="o">*</span><span class="n">head</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">972</span>                 <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">hash</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">973</span>
+</span><span class='line'> <span class="mi">974</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">nexthop_nh</span><span class="o">-&gt;</span><span class="n">nh_dev</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">975</span>                         <span class="k">continue</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">976</span>                 <span class="n">hash</span> <span class="o">=</span> <span class="n">fib_devindex_hashfn</span><span class="p">(</span><span class="n">nexthop_nh</span><span class="o">-&gt;</span><span class="n">nh_dev</span><span class="o">-&gt;</span><span class="n">ifindex</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">977</span>                 <span class="n">head</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">fib_info_devhash</span><span class="p">[</span><span class="n">hash</span><span class="p">];</span>
+</span><span class='line'> <span class="mi">978</span>                 <span class="n">hlist_add_head</span><span class="p">(</span><span class="o">&amp;</span><span class="n">nexthop_nh</span><span class="o">-&gt;</span><span class="n">nh_hash</span><span class="p">,</span> <span class="n">head</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">979</span>         <span class="p">}</span> <span class="n">endfor_nexthops</span><span class="p">(</span><span class="n">fi</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">980</span>         <span class="n">spin_unlock_bh</span><span class="p">(</span><span class="o">&amp;</span><span class="n">fib_info_lock</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">981</span>         <span class="k">return</span> <span class="n">fi</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">982</span>
+</span><span class='line'> <span class="mi">983</span> <span class="nl">err_inval</span><span class="p">:</span>
+</span><span class='line'> <span class="mi">984</span>         <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">EINVAL</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">985</span>
+</span><span class='line'> <span class="mi">986</span> <span class="nl">failure</span><span class="p">:</span>
+</span><span class='line'> <span class="mi">987</span>         <span class="k">if</span> <span class="p">(</span><span class="n">fi</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">988</span>                 <span class="n">fi</span><span class="o">-&gt;</span><span class="n">fib_dead</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">989</span>                 <span class="nf">free_fib_info</span><span class="p">(</span><span class="n">fi</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">990</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">991</span>
+</span><span class='line'> <span class="mi">992</span>         <span class="k">return</span> <span class="n">ERR_PTR</span><span class="p">(</span><span class="n">err</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">993</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-09-11T18:00:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>11</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>6:00 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/route/'>route</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/09/11/ipv4-route-fib-table-insert/" title="Previous Post: IPv4 route fib table insert">&laquo; IPv4 route fib table insert</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/09/12/ipv4-route-fib-insert-node/" title="Next Post: IPv4 route fib insert node">IPv4 route fib insert node &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

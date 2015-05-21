@@ -1,0 +1,904 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Unregister a Net Device - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="unregister_netdev is used to delete a net device. In fact, it equals: 1
+2
+3
+4
+rtnl_lock();
+rollback_registered_many( a temp list with a single net &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/08/02/unregister-a-new-device/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Unregister a Net Device</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-08-02T14:08:00+08:00'><span class='date'><span class='date-month'>Aug</span> <span class='date-day'>2</span><span class='date-suffix'>nd</span>, <span class='date-year'>2013</span></span> <span class='time'>2:08 pm</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p><code>unregister_netdev</code> is used to delete a net device. In fact, it equals:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">rtnl_lock</span><span class="p">();</span>
+</span><span class='line'><span class="n">rollback_registered_many</span><span class="p">(</span> <span class="n">a</span> <span class="n">temp</span> <span class="n">list</span> <span class="n">with</span> <span class="n">a</span> <span class="n">single</span> <span class="n">net</span> <span class="n">device</span><span class="p">);</span>
+</span><span class='line'><span class="n">list_add_tail</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">todo_list</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">net_todo_list</span><span class="p">);</span>
+</span><span class='line'><span class="n">rtnl_unlock</span><span class="p">();</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>a temporary list stores a single net device, which is to be deleted.
+<code>net_todo_list</code> stores all the net devices are <strong>being</strong> deleted.</p>
+
+<p>The core function is <code>rollback_registered_many</code>, which efficiently deletes many devices in a list.
+But here, in this case, one a single netdevice in the list.</p>
+
+<!-- more -->
+
+
+<ol>
+<li><p>firstly check the status and confirm the net device is registered(NETREG_REGISTERED),
+or it will do nothing for the net device.</p></li>
+<li><p>for each net device, close it by <code>dev_close_many</code>, and notify(broadcast) &lsquo;NETDEV_DOWN&rsquo; message by rtmsg and
+net device notify.</p></li>
+<li><p>remove netdevice from kernel net device list (by name, ifindex, ..).</p></li>
+<li><p>net device bemomes NETREG_UNREGISTERING.</p></li>
+<li><p>synchronize_net();</p></li>
+<li><p><code>dev_shutdown</code> shut down net device tx/rx queue.</p></li>
+<li><p>call <code>call_netdevice_notifiers</code> with  NETDEV_UNREGISTER</p></li>
+<li><p>Flush the unicast and multicast chains, remove sys, ..</p></li>
+<li><p>dev_put (here only decrease reference);</p></li>
+</ol>
+
+
+<p>in the finally, do rtnl_unlock, which do more than unlock rtnl.</p>
+
+<p>it will check all the devices in the net_todo_list and wait them to be freed.
+to enhace efficience, net_todo_list will be copied(moved) to a temp list,
+and empty net_todo_list. thus rtnl lock is freed.</p>
+
+<p>then for each netdevice in the temp list, wait them to be free(un-reference),
+and then free them(deconstruct).
+for safe, we Rebroadcast unregister notification every 250ms(try within 10s), during wait dev reference.</p>
+
+<h2>calltrace</h2>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="o">&gt;</span> <span class="n">unregister_netdev</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">rtnl_lock</span><span class="p">();</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">unregister_netdevice</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">unregister_netdevice_queue</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">rollback_registered</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">list_add</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">unreg_list</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">single</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">rollback_registered_many</span><span class="p">(</span><span class="o">&amp;</span><span class="n">single</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">confirm</span> <span class="n">each</span> <span class="n">dev</span><span class="o">-&gt;</span><span class="n">reg_state</span> <span class="n">is</span> <span class="n">NETREG_REGISTERED</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">dev_close_many</span><span class="p">(</span><span class="n">head</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">list_for_each_entry</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">head</span><span class="p">,</span> <span class="n">unreg_list</span><span class="p">)</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">unlist_netdevice</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">dev</span><span class="o">-&gt;</span><span class="n">reg_state</span> <span class="o">=</span> <span class="n">NETREG_UNREGISTERING</span><span class="p">;</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">synchronize_net</span><span class="p">();</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">list_for_each_entry</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">head</span><span class="p">,</span> <span class="n">unreg_list</span><span class="p">)</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">dev_shutdown</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">call_netdevice_notifiers</span><span class="p">(</span><span class="n">NETDEV_UNREGISTER</span><span class="p">,</span> <span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">rtmsg_ifinfo</span><span class="p">(</span><span class="n">RTM_DELLINK</span><span class="p">,</span> <span class="n">dev</span><span class="p">,</span> <span class="o">~</span><span class="mi">0U</span><span class="p">);</span> <span class="o">???</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">dev_uc_flush</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">dev_mc_flush</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">dev</span><span class="o">-&gt;</span><span class="n">netdev_ops</span><span class="o">-&gt;</span><span class="n">ndo_uninit</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">netdev_unregister_kobject</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">netif_reset_xps_queues_gt</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">synchronize_net</span><span class="p">();</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">list_for_each_entry</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">head</span><span class="p">,</span> <span class="n">unreg_list</span><span class="p">)</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">dev_put</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">net_set_todo</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">list_add_tail</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">todo_list</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">net_todo_list</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">rtnl_unlock</span><span class="p">();</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">list_replace_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net_todo_list</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">list</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">__rtnl_unlock</span><span class="p">();</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="p">...</span> <span class="n">real</span> <span class="n">net</span> <span class="n">dev</span> <span class="n">destruct</span><span class="o">/</span><span class="n">free</span><span class="p">...</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">5976</span> <span class="cm">/**</span>
+</span><span class='line'><span class="cm">5977  *      unregister_netdev - remove device from the kernel</span>
+</span><span class='line'><span class="cm">5978  *      @dev: device</span>
+</span><span class='line'><span class="cm">5979  *</span>
+</span><span class='line'><span class="cm">5980  *      This function shuts down a device interface and removes it</span>
+</span><span class='line'><span class="cm">5981  *      from the kernel tables.</span>
+</span><span class='line'><span class="cm">5982  *</span>
+</span><span class='line'><span class="cm">5983  *      This is just a wrapper for unregister_netdevice that takes</span>
+</span><span class='line'><span class="cm">5984  *      the rtnl semaphore.  In general you want to use this and not</span>
+</span><span class='line'><span class="cm">5985  *      unregister_netdevice.  </span>
+</span><span class='line'><span class="cm">5986  */</span>
+</span><span class='line'><span class="mi">5987</span> <span class="kt">void</span> <span class="n">unregister_netdev</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">)</span>
+</span><span class='line'><span class="mi">5988</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">5989</span>         <span class="n">rtnl_lock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">5990</span>         <span class="nf">unregister_netdevice</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5991</span>         <span class="nf">rtnl_unlock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">5992</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">5993</span> <span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">unregister_netdev</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1749</span> <span class="k">static</span> <span class="kr">inline</span> <span class="kt">void</span> <span class="nf">unregister_netdevice</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1750</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1751</span>         <span class="n">unregister_netdevice_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1752</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>head is NUll for unregister_netdevice case.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">5946</span> <span class="kt">void</span> <span class="nf">unregister_netdevice_queue</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">,</span> <span class="k">struct</span> <span class="n">list_head</span> <span class="o">*</span><span class="n">head</span><span class="p">)</span>
+</span><span class='line'><span class="mi">5947</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">5948</span>         <span class="n">ASSERT_RTNL</span><span class="p">();</span>
+</span><span class='line'><span class="mi">5949</span>
+</span><span class='line'><span class="mi">5950</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">head</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">5951</span>                 <span class="n">list_move_tail</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">unreg_list</span><span class="p">,</span> <span class="n">head</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5952</span>         <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">5953</span>                 <span class="n">rollback_registered</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5954</span>                 <span class="cm">/* Finish processing unregister after unlock */</span>
+</span><span class='line'><span class="mi">5955</span>                 <span class="n">net_set_todo</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5956</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">5957</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">5958</span> <span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">unregister_netdevice_queue</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">5094</span> <span class="k">static</span> <span class="kt">void</span> <span class="nf">rollback_registered</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">)</span>
+</span><span class='line'><span class="mi">5095</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">5096</span>         <span class="n">LIST_HEAD</span><span class="p">(</span><span class="n">single</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5097</span>
+</span><span class='line'><span class="mi">5098</span>         <span class="nf">list_add</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">unreg_list</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">single</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5099</span>         <span class="nf">rollback_registered_many</span><span class="p">(</span><span class="o">&amp;</span><span class="n">single</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5100</span>         <span class="nf">list_del</span><span class="p">(</span><span class="o">&amp;</span><span class="n">single</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5101</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">5018</span> <span class="k">static</span> <span class="kt">void</span> <span class="n">rollback_registered_many</span><span class="p">(</span><span class="k">struct</span> <span class="n">list_head</span> <span class="o">*</span><span class="n">head</span><span class="p">)</span>
+</span><span class='line'><span class="mi">5019</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">5020</span>         <span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">,</span> <span class="o">*</span><span class="n">tmp</span><span class="p">;</span>
+</span><span class='line'><span class="mi">5021</span>
+</span><span class='line'><span class="mi">5022</span>         <span class="nf">BUG_ON</span><span class="p">(</span><span class="n">dev_boot_phase</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5023</span>         <span class="nf">ASSERT_RTNL</span><span class="p">();</span>
+</span><span class='line'><span class="mi">5024</span>
+</span><span class='line'><span class="mi">5025</span>         <span class="nf">list_for_each_entry_safe</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">tmp</span><span class="p">,</span> <span class="n">head</span><span class="p">,</span> <span class="n">unreg_list</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">5026</span>                 <span class="cm">/* Some devices call without registering</span>
+</span><span class='line'><span class="cm">5027                  * for initialization unwind. Remove those</span>
+</span><span class='line'><span class="cm">5028                  * devices and proceed with the remaining.</span>
+</span><span class='line'><span class="cm">5029                  */</span>
+</span><span class='line'><span class="mi">5030</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">reg_state</span> <span class="o">==</span> <span class="n">NETREG_UNINITIALIZED</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">5031</span>                         <span class="n">pr_debug</span><span class="p">(</span><span class="s">&quot;unregister_netdevice: device %s/%p never was registered</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+</span><span class='line'><span class="mi">5032</span>                                  <span class="n">dev</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">,</span> <span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5033</span>
+</span><span class='line'><span class="mi">5034</span>                         <span class="n">WARN_ON</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5035</span>                         <span class="n">list_del</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">unreg_list</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5036</span>                         <span class="k">continue</span><span class="p">;</span>
+</span><span class='line'><span class="mi">5037</span>                 <span class="p">}</span>
+</span><span class='line'><span class="mi">5038</span>                 <span class="n">dev</span><span class="o">-&gt;</span><span class="n">dismantle</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span>
+</span><span class='line'><span class="mi">5039</span>                 <span class="n">BUG_ON</span><span class="p">(</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">reg_state</span> <span class="o">!=</span> <span class="n">NETREG_REGISTERED</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5040</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">5041</span>
+</span><span class='line'><span class="mi">5042</span>         <span class="cm">/* If device is running, close it first. */</span>
+</span><span class='line'><span class="mi">5043</span>         <span class="n">dev_close_many</span><span class="p">(</span><span class="n">head</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5044</span>
+</span><span class='line'><span class="mi">5045</span>         <span class="nf">list_for_each_entry</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">head</span><span class="p">,</span> <span class="n">unreg_list</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">5046</span>                 <span class="cm">/* And unlink it from device chain. */</span>
+</span><span class='line'><span class="mi">5047</span>                 <span class="n">unlist_netdevice</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5048</span>
+</span><span class='line'><span class="mi">5049</span>                 <span class="n">dev</span><span class="o">-&gt;</span><span class="n">reg_state</span> <span class="o">=</span> <span class="n">NETREG_UNREGISTERING</span><span class="p">;</span>
+</span><span class='line'><span class="mi">5050</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">5051</span>
+</span><span class='line'><span class="mi">5052</span>         <span class="nf">synchronize_net</span><span class="p">();</span>
+</span><span class='line'><span class="mi">5053</span>
+</span><span class='line'><span class="mi">5054</span>         <span class="nf">list_for_each_entry</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">head</span><span class="p">,</span> <span class="n">unreg_list</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">5055</span>                 <span class="cm">/* Shutdown queueing discipline. */</span>
+</span><span class='line'><span class="mi">5056</span>                 <span class="n">dev_shutdown</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5057</span>
+</span><span class='line'><span class="mi">5058</span>
+</span><span class='line'><span class="mi">5059</span>                 <span class="cm">/* Notify protocols, that we are about to destroy</span>
+</span><span class='line'><span class="cm">5060                    this device. They should clean all the things.</span>
+</span><span class='line'><span class="cm">5061                 */</span>
+</span><span class='line'><span class="mi">5062</span>                 <span class="n">call_netdevice_notifiers</span><span class="p">(</span><span class="n">NETDEV_UNREGISTER</span><span class="p">,</span> <span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5063</span>
+</span><span class='line'><span class="mi">5064</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">rtnl_link_ops</span> <span class="o">||</span>
+</span><span class='line'><span class="mi">5065</span>                     <span class="n">dev</span><span class="o">-&gt;</span><span class="n">rtnl_link_state</span> <span class="o">==</span> <span class="n">RTNL_LINK_INITIALIZED</span><span class="p">)</span>
+</span><span class='line'><span class="mi">5065</span>                     <span class="n">dev</span><span class="o">-&gt;</span><span class="n">rtnl_link_state</span> <span class="o">==</span> <span class="n">RTNL_LINK_INITIALIZED</span><span class="p">)</span>
+</span><span class='line'><span class="mi">5066</span>                         <span class="n">rtmsg_ifinfo</span><span class="p">(</span><span class="n">RTM_DELLINK</span><span class="p">,</span> <span class="n">dev</span><span class="p">,</span> <span class="o">~</span><span class="mi">0U</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5067</span>
+</span><span class='line'><span class="mi">5068</span>                 <span class="cm">/*</span>
+</span><span class='line'><span class="cm">5069                  *      Flush the unicast and multicast chains</span>
+</span><span class='line'><span class="cm">5070                  */</span>
+</span><span class='line'><span class="mi">5071</span>                 <span class="n">dev_uc_flush</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5072</span>                 <span class="n">dev_mc_flush</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5073</span>
+</span><span class='line'><span class="mi">5074</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">netdev_ops</span><span class="o">-&gt;</span><span class="n">ndo_uninit</span><span class="p">)</span>
+</span><span class='line'><span class="mi">5075</span>                         <span class="n">dev</span><span class="o">-&gt;</span><span class="n">netdev_ops</span><span class="o">-&gt;</span><span class="n">ndo_uninit</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5076</span>
+</span><span class='line'><span class="mi">5077</span>                 <span class="cm">/* Notifier chain MUST detach us all upper devices. */</span>
+</span><span class='line'><span class="mi">5078</span>                 <span class="n">WARN_ON</span><span class="p">(</span><span class="n">netdev_has_any_upper_dev</span><span class="p">(</span><span class="n">dev</span><span class="p">));</span>
+</span><span class='line'><span class="mi">5079</span>
+</span><span class='line'><span class="mi">5080</span>                 <span class="cm">/* Remove entries from kobject tree */</span>
+</span><span class='line'><span class="mi">5081</span>                 <span class="n">netdev_unregister_kobject</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5082</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_XPS</span>
+</span><span class='line'><span class="mi">5083</span>                 <span class="cm">/* Remove XPS queueing entries */</span>
+</span><span class='line'><span class="mi">5084</span>                 <span class="n">netif_reset_xps_queues_gt</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5085</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'><span class="mi">5086</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">5087</span>
+</span><span class='line'><span class="mi">5088</span>         <span class="nf">synchronize_net</span><span class="p">();</span>
+</span><span class='line'><span class="mi">5089</span>
+</span><span class='line'><span class="mi">5090</span>         <span class="nf">list_for_each_entry</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">head</span><span class="p">,</span> <span class="n">unreg_list</span><span class="p">)</span>
+</span><span class='line'><span class="mi">5091</span>                 <span class="n">dev_put</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5092</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1362</span> <span class="k">static</span> <span class="kt">int</span> <span class="n">dev_close_many</span><span class="p">(</span><span class="k">struct</span> <span class="n">list_head</span> <span class="o">*</span><span class="n">head</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1363</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1364</span>         <span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">,</span> <span class="o">*</span><span class="n">tmp</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1365</span>         <span class="nf">LIST_HEAD</span><span class="p">(</span><span class="n">tmp_list</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1366</span>
+</span><span class='line'><span class="mi">1367</span>         <span class="nf">list_for_each_entry_safe</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">tmp</span><span class="p">,</span> <span class="n">head</span><span class="p">,</span> <span class="n">unreg_list</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1368</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">IFF_UP</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1369</span>                         <span class="n">list_move</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">unreg_list</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">tmp_list</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1370</span>
+</span><span class='line'><span class="mi">1371</span>         <span class="nf">__dev_close_many</span><span class="p">(</span><span class="n">head</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1372</span>
+</span><span class='line'><span class="mi">1373</span>         <span class="nf">list_for_each_entry</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">head</span><span class="p">,</span> <span class="n">unreg_list</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1374</span>                 <span class="n">rtmsg_ifinfo</span><span class="p">(</span><span class="n">RTM_NEWLINK</span><span class="p">,</span> <span class="n">dev</span><span class="p">,</span> <span class="n">IFF_UP</span><span class="o">|</span><span class="n">IFF_RUNNING</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1375</span>                 <span class="n">call_netdevice_notifiers</span><span class="p">(</span><span class="n">NETDEV_DOWN</span><span class="p">,</span> <span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1376</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1377</span>
+</span><span class='line'><span class="mi">1378</span>         <span class="cm">/* rollback_registered_many needs the complete original list */</span>
+</span><span class='line'><span class="mi">1379</span>         <span class="n">list_splice</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tmp_list</span><span class="p">,</span> <span class="n">head</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1380</span>         <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1381</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1303</span> <span class="k">static</span> <span class="kt">int</span> <span class="n">__dev_close_many</span><span class="p">(</span><span class="k">struct</span> <span class="n">list_head</span> <span class="o">*</span><span class="n">head</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1304</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1305</span>         <span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1306</span>
+</span><span class='line'><span class="mi">1307</span>         <span class="nf">ASSERT_RTNL</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1308</span>         <span class="nf">might_sleep</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1309</span>
+</span><span class='line'><span class="mi">1310</span>         <span class="nf">list_for_each_entry</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">head</span><span class="p">,</span> <span class="n">unreg_list</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1311</span>                 <span class="n">call_netdevice_notifiers</span><span class="p">(</span><span class="n">NETDEV_GOING_DOWN</span><span class="p">,</span> <span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1312</span>
+</span><span class='line'><span class="mi">1313</span>                 <span class="n">clear_bit</span><span class="p">(</span><span class="n">__LINK_STATE_START</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">state</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1314</span>
+</span><span class='line'><span class="mi">1315</span>                 <span class="cm">/* Synchronize to scheduled poll. We cannot touch poll list, it</span>
+</span><span class='line'><span class="cm">1316                  * can be even on different cpu. So just clear netif_running().</span>
+</span><span class='line'><span class="cm">1317                  *</span>
+</span><span class='line'><span class="cm">1318                  * dev-&gt;stop() will invoke napi_disable() on all of it&#39;s</span>
+</span><span class='line'><span class="cm">1319                  * napi_struct instances on this device.</span>
+</span><span class='line'><span class="cm">1320                  */</span>
+</span><span class='line'><span class="mi">1321</span>                 <span class="n">smp_mb__after_clear_bit</span><span class="p">();</span> <span class="cm">/* Commit netif_running(). */</span>
+</span><span class='line'><span class="mi">1322</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1323</span>
+</span><span class='line'><span class="mi">1324</span>         <span class="nf">dev_deactivate_many</span><span class="p">(</span><span class="n">head</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1325</span>
+</span><span class='line'><span class="mi">1326</span>         <span class="nf">list_for_each_entry</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">head</span><span class="p">,</span> <span class="n">unreg_list</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1327</span>                 <span class="k">const</span> <span class="k">struct</span> <span class="n">net_device_ops</span> <span class="o">*</span><span class="n">ops</span> <span class="o">=</span> <span class="n">dev</span><span class="o">-&gt;</span><span class="n">netdev_ops</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1328</span>
+</span><span class='line'><span class="mi">1329</span>                 <span class="cm">/*</span>
+</span><span class='line'><span class="cm">1330                  *      Call the device specific close. This cannot fail.</span>
+</span><span class='line'><span class="cm">1331                  *      Only if device is UP</span>
+</span><span class='line'><span class="cm">1332                  *</span>
+</span><span class='line'><span class="cm">1333                  *      We allow it to be called even after a DETACH hot-plug</span>
+</span><span class='line'><span class="cm">1334                  *      event.</span>
+</span><span class='line'><span class="cm">1335                  */</span>
+</span><span class='line'><span class="mi">1336</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">ops</span><span class="o">-&gt;</span><span class="n">ndo_stop</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1337</span>                         <span class="n">ops</span><span class="o">-&gt;</span><span class="n">ndo_stop</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1338</span>
+</span><span class='line'><span class="mi">1339</span>                 <span class="n">dev</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">&amp;=</span> <span class="o">~</span><span class="n">IFF_UP</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1340</span>                 <span class="n">net_dmaengine_put</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1341</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1342</span>
+</span><span class='line'><span class="mi">1343</span>         <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1344</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>todo what is <code>dev-&gt;dismantl</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">809</span> <span class="cm">/**</span>
+</span><span class='line'><span class="cm">810  *      dev_deactivate_many - deactivate transmissions on several devices</span>
+</span><span class='line'><span class="cm">811  *      @head: list of devices to deactivate</span>
+</span><span class='line'><span class="cm">812  *</span>
+</span><span class='line'><span class="cm">813  *      This function returns only when all outstanding transmissions</span>
+</span><span class='line'><span class="cm">814  *      have completed, unless all devices are in dismantle phase.</span>
+</span><span class='line'><span class="cm">815  */</span>
+</span><span class='line'><span class="mi">816</span> <span class="kt">void</span> <span class="n">dev_deactivate_many</span><span class="p">(</span><span class="k">struct</span> <span class="n">list_head</span> <span class="o">*</span><span class="n">head</span><span class="p">)</span>
+</span><span class='line'><span class="mi">817</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">818</span>         <span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">;</span>
+</span><span class='line'><span class="mi">819</span>         <span class="kt">bool</span> <span class="n">sync_needed</span> <span class="o">=</span> <span class="nb">false</span><span class="p">;</span>
+</span><span class='line'><span class="mi">820</span>
+</span><span class='line'><span class="mi">821</span>         <span class="nf">list_for_each_entry</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">head</span><span class="p">,</span> <span class="n">unreg_list</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">822</span>                 <span class="n">netdev_for_each_tx_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">dev_deactivate_queue</span><span class="p">,</span>
+</span><span class='line'><span class="mi">823</span>                                          <span class="o">&amp;</span><span class="n">noop_qdisc</span><span class="p">);</span>
+</span><span class='line'><span class="mi">824</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">dev_ingress_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">))</span>
+</span><span class='line'><span class="mi">825</span>                         <span class="n">dev_deactivate_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">dev_ingress_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">),</span>
+</span><span class='line'><span class="mi">826</span>                                              <span class="o">&amp;</span><span class="n">noop_qdisc</span><span class="p">);</span>
+</span><span class='line'><span class="mi">827</span>
+</span><span class='line'><span class="mi">828</span>                 <span class="n">dev_watchdog_down</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">829</span>                 <span class="n">sync_needed</span> <span class="o">|=</span> <span class="o">!</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">dismantle</span><span class="p">;</span>
+</span><span class='line'><span class="mi">830</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">831</span>
+</span><span class='line'><span class="mi">832</span>         <span class="cm">/* Wait for outstanding qdisc-less dev_queue_xmit calls.</span>
+</span><span class='line'><span class="cm">833          * This is avoided if all devices are in dismantle phase :</span>
+</span><span class='line'><span class="cm">834          * Caller will call synchronize_net() for us</span>
+</span><span class='line'><span class="cm">835          */</span>
+</span><span class='line'><span class="mi">836</span>         <span class="k">if</span> <span class="p">(</span><span class="n">sync_needed</span><span class="p">)</span>
+</span><span class='line'><span class="mi">837</span>                 <span class="n">synchronize_net</span><span class="p">();</span>
+</span><span class='line'><span class="mi">838</span>
+</span><span class='line'><span class="mi">839</span>         <span class="cm">/* Wait for outstanding qdisc_run calls. */</span>
+</span><span class='line'><span class="mi">840</span>         <span class="n">list_for_each_entry</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">head</span><span class="p">,</span> <span class="n">unreg_list</span><span class="p">)</span>
+</span><span class='line'><span class="mi">841</span>                 <span class="k">while</span> <span class="p">(</span><span class="n">some_qdisc_is_busy</span><span class="p">(</span><span class="n">dev</span><span class="p">))</span>
+</span><span class='line'><span class="mi">842</span>                         <span class="n">yield</span><span class="p">();</span>
+</span><span class='line'><span class="mi">843</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">761</span> <span class="k">static</span> <span class="kt">void</span> <span class="n">dev_deactivate_queue</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">,</span>
+</span><span class='line'><span class="mi">762</span>                                  <span class="k">struct</span> <span class="n">netdev_queue</span> <span class="o">*</span><span class="n">dev_queue</span><span class="p">,</span>
+</span><span class='line'><span class="mi">763</span>                                  <span class="kt">void</span> <span class="o">*</span><span class="n">_qdisc_default</span><span class="p">)</span>
+</span><span class='line'><span class="mi">764</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">765</span>         <span class="k">struct</span> <span class="n">Qdisc</span> <span class="o">*</span><span class="n">qdisc_default</span> <span class="o">=</span> <span class="n">_qdisc_default</span><span class="p">;</span>
+</span><span class='line'><span class="mi">766</span>         <span class="k">struct</span> <span class="n">Qdisc</span> <span class="o">*</span><span class="n">qdisc</span><span class="p">;</span>
+</span><span class='line'><span class="mi">767</span>
+</span><span class='line'><span class="mi">768</span>         <span class="n">qdisc</span> <span class="o">=</span> <span class="n">dev_queue</span><span class="o">-&gt;</span><span class="n">qdisc</span><span class="p">;</span>
+</span><span class='line'><span class="mi">769</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">qdisc</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">770</span>                 <span class="n">spin_lock_bh</span><span class="p">(</span><span class="n">qdisc_lock</span><span class="p">(</span><span class="n">qdisc</span><span class="p">));</span>
+</span><span class='line'><span class="mi">771</span>
+</span><span class='line'><span class="mi">772</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">qdisc</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">TCQ_F_BUILTIN</span><span class="p">))</span>
+</span><span class='line'><span class="mi">773</span>                         <span class="n">set_bit</span><span class="p">(</span><span class="n">__QDISC_STATE_DEACTIVATED</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">qdisc</span><span class="o">-&gt;</span><span class="n">state</span><span class="p">);</span>
+</span><span class='line'><span class="mi">774</span>
+</span><span class='line'><span class="mi">775</span>                 <span class="n">rcu_assign_pointer</span><span class="p">(</span><span class="n">dev_queue</span><span class="o">-&gt;</span><span class="n">qdisc</span><span class="p">,</span> <span class="n">qdisc_default</span><span class="p">);</span>
+</span><span class='line'><span class="mi">776</span>                 <span class="n">qdisc_reset</span><span class="p">(</span><span class="n">qdisc</span><span class="p">);</span>
+</span><span class='line'><span class="mi">777</span>
+</span><span class='line'><span class="mi">778</span>                 <span class="n">spin_unlock_bh</span><span class="p">(</span><span class="n">qdisc_lock</span><span class="p">(</span><span class="n">qdisc</span><span class="p">));</span>
+</span><span class='line'><span class="mi">779</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">780</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">875</span> <span class="k">static</span> <span class="kt">void</span> <span class="n">shutdown_scheduler_queue</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">,</span>
+</span><span class='line'><span class="mi">876</span>                                      <span class="k">struct</span> <span class="n">netdev_queue</span> <span class="o">*</span><span class="n">dev_queue</span><span class="p">,</span>
+</span><span class='line'><span class="mi">877</span>                                      <span class="kt">void</span> <span class="o">*</span><span class="n">_qdisc_default</span><span class="p">)</span>
+</span><span class='line'><span class="mi">878</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">879</span>         <span class="k">struct</span> <span class="n">Qdisc</span> <span class="o">*</span><span class="n">qdisc</span> <span class="o">=</span> <span class="n">dev_queue</span><span class="o">-&gt;</span><span class="n">qdisc_sleeping</span><span class="p">;</span>
+</span><span class='line'><span class="mi">880</span>         <span class="k">struct</span> <span class="n">Qdisc</span> <span class="o">*</span><span class="n">qdisc_default</span> <span class="o">=</span> <span class="n">_qdisc_default</span><span class="p">;</span>
+</span><span class='line'><span class="mi">881</span>
+</span><span class='line'><span class="mi">882</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">qdisc</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">883</span>                 <span class="n">rcu_assign_pointer</span><span class="p">(</span><span class="n">dev_queue</span><span class="o">-&gt;</span><span class="n">qdisc</span><span class="p">,</span> <span class="n">qdisc_default</span><span class="p">);</span>
+</span><span class='line'><span class="mi">884</span>                 <span class="n">dev_queue</span><span class="o">-&gt;</span><span class="n">qdisc_sleeping</span> <span class="o">=</span> <span class="n">qdisc_default</span><span class="p">;</span>
+</span><span class='line'><span class="mi">885</span>
+</span><span class='line'><span class="mi">886</span>                 <span class="n">qdisc_destroy</span><span class="p">(</span><span class="n">qdisc</span><span class="p">);</span>
+</span><span class='line'><span class="mi">887</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">888</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">5010</span> <span class="cm">/* Delayed registration/unregisteration */</span>
+</span><span class='line'><span class="mi">5011</span> <span class="k">static</span> <span class="n">LIST_HEAD</span><span class="p">(</span><span class="n">net_todo_list</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5012</span>
+</span><span class='line'><span class="mi">5013</span> <span class="k">static</span> <span class="kt">void</span> <span class="nf">net_set_todo</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">)</span>
+</span><span class='line'><span class="mi">5014</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">5015</span>         <span class="n">list_add_tail</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">todo_list</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">net_todo_list</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5016</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-08-02T14:08:00+08:00'><span class='date'><span class='date-month'>Aug</span> <span class='date-day'>2</span><span class='date-suffix'>nd</span>, <span class='date-year'>2013</span></span> <span class='time'>2:08 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/netcore/'>netcore</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/07/26/draft-how-to-select-a-realtime-task-when-schedule/" title="Previous Post: draft: how to select a realtime task when schedule">&laquo; draft: how to select a realtime task when schedule</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/08/20/how-kernel-add-a-ipv4-address/" title="Next Post: how kernel add a IPv4 address">how kernel add a IPv4 address &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

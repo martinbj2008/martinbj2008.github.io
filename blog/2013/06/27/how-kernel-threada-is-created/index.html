@@ -1,0 +1,739 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>How Kernel Thread Is Created - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="JUN 27TH, 2013 | COMMENTS
+How to create a kernel thread create a kthread by kthread_create kthread_create(threadfn, data, namefmt, arg...) example: &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/06/27/how-kernel-threada-is-created/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">How Kernel Thread Is Created</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-06-27T00:00:00+08:00'><span class='date'><span class='date-month'>Jun</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>12:00 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>JUN 27TH, 2013 | COMMENTS
+How to create a kernel thread</p>
+
+<h2>create a kthread by <code>kthread_create</code></h2>
+
+<p><code>kthread_create(threadfn, data, namefmt, arg...)</code></p>
+
+<p>example: file drivers/char/apm-emulation.c</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>651 kapmd_tsk = kthread_create(kapmd, NULL, "kapmd");</span></code></pre></td></tr></table></div></figure>
+
+
+<!-- more -->
+
+
+<h2>Principle</h2>
+
+<p>When kernel bootup, two important threads are created. INIT thread(PID1) and kthreadd(PID2).</p>
+
+<p>PID2 is what we analysis here.</p>
+
+<p>kthread_create_list: all the threads to be created are stored in this list.
+To creae a new thread, we just fill the related information in a struct kthread_create_info, and list it to the list, then wait until the thread is ready by mutex.</p>
+
+<h3>kthreadd: PID2 main function</h3>
+
+<p>it is a infinite loop, which removes the nodes from kthread_create_list, and creates a thread per node struct kthread_create_info, then notify the kthread is ready.</p>
+
+<p>After the new thread is created by <code>do_fork</code>, a common funtion <code>thread</code> is call as the new thread entry, not the <code>threadfn</code> we give by API <code>kthread_create</code></p>
+
+<p><code>thread</code> will do some common initialization, and notify new thread is ready, and then the real new thread function <code>threadfn</code> is called.</p>
+
+<p>All the kernel threads are the children of PID2(kthreadd).</p>
+
+<h2>Data structure</h2>
+
+<h3><code>kthread_create_lock</code></h3>
+
+<p>spin lock kthread_create_lock is used to protect the kthread_create_list.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">23</span> <span class="k">static</span> <span class="nf">DEFINE_SPINLOCK</span><span class="p">(</span><span class="n">kthread_create_lock</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">24</span> <span class="k">static</span> <span class="nf">LIST_HEAD</span><span class="p">(</span><span class="n">kthread_create_list</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">25</span> <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">kthreadd_task</span><span class="p">;</span> <span class="o">&lt;==</span> <span class="n">store</span> <span class="n">PID2</span><span class="p">.</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In order to create a kernel thread, this structure MUST be created and filled.</p>
+
+<h3><code>kthread_create_info</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">27</span> <span class="k">struct</span> <span class="n">kthread_create_info</span>
+</span><span class='line'> <span class="mi">28</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">29</span>         <span class="cm">/* Information passed to kthread() from kthreadd. */</span>
+</span><span class='line'> <span class="mi">30</span>         <span class="kt">int</span> <span class="p">(</span><span class="o">*</span><span class="n">threadfn</span><span class="p">)(</span><span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">31</span>         <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">32</span>         <span class="kt">int</span> <span class="n">node</span><span class="p">;</span> <span class="o">&lt;==</span> <span class="n">memory</span> <span class="n">node</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">33</span>
+</span><span class='line'> <span class="mi">34</span>         <span class="cm">/* Result passed back to kthread_create() from kthreadd. */</span>
+</span><span class='line'> <span class="mi">35</span>         <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">result</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">36</span>         <span class="k">struct</span> <span class="n">completion</span> <span class="n">done</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">37</span>
+</span><span class='line'> <span class="mi">38</span>         <span class="k">struct</span> <span class="n">list_head</span> <span class="n">list</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">39</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>struct kthread</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">41</span> <span class="k">struct</span> <span class="n">kthread</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">42</span>         <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">flags</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">43</span>         <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">cpu</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">44</span>         <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">45</span>         <span class="k">struct</span> <span class="n">completion</span> <span class="n">parked</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">46</span>         <span class="k">struct</span> <span class="n">completion</span> <span class="n">exited</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">47</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>坑爹: There are a struct kthread and a static int kthread(void *_create). NND，看第一遍的时候没注意到。</p>
+
+<h2>method: kthread_create</h2>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">13</span> <span class="err">#</span><span class="n">define</span> <span class="n">kthread_create</span><span class="p">(</span><span class="n">threadfn</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">namefmt</span><span class="p">,</span> <span class="n">arg</span><span class="p">...)</span> \
+</span><span class='line'> <span class="mi">14</span>         <span class="n">kthread_create_on_node</span><span class="p">(</span><span class="n">threadfn</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">namefmt</span><span class="p">,</span> <span class="err">##</span><span class="n">arg</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Call Trace</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="o">&gt;</span> <span class="n">kthread_create</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">kthread_create_on_node</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">spin_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthread_create_lock</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">list_add_tail</span><span class="p">(</span><span class="o">&amp;</span><span class="n">create</span><span class="p">.</span><span class="n">list</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">kthread_create_list</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthread_create_lock</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">wake_up_process</span><span class="p">(</span><span class="n">kthreadd_task</span><span class="p">);</span> <span class="o">&lt;==</span> <span class="n">hi</span> <span class="n">PID2</span><span class="p">,</span> <span class="err">来活了</span> <span class="o">!!!</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">wait_for_completion</span><span class="p">(</span><span class="o">&amp;</span><span class="n">create</span><span class="p">.</span><span class="n">done</span><span class="p">);</span> <span class="o">&lt;==</span> <span class="n">waiting</span> <span class="k">for</span> <span class="n">ready</span><span class="p">.</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>kthread_create_on_node</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">231</span> <span class="cm">/**</span>
+</span><span class='line'><span class="cm">232  * kthread_create_on_node - create a kthread.</span>
+</span><span class='line'><span class="cm">233  * @threadfn: the function to run until signal_pending(current).</span>
+</span><span class='line'><span class="cm">234  * @data: data ptr for @threadfn.</span>
+</span><span class='line'><span class="cm">235  * @node: memory node number.</span>
+</span><span class='line'><span class="cm">236  * @namefmt: printf-style name for the thread.</span>
+</span><span class='line'><span class="cm">237  *</span>
+</span><span class='line'><span class="cm">238  * Description: This helper function creates and names a kernel</span>
+</span><span class='line'><span class="cm">239  * thread.  The thread will be stopped: use wake_up_process() to start</span>
+</span><span class='line'><span class="cm">240  * it.  See also kthread_run().</span>
+</span><span class='line'><span class="cm">241  *</span>
+</span><span class='line'><span class="cm">242  * If thread is going to be bound on a particular cpu, give its node</span>
+</span><span class='line'><span class="cm">243  * in @node, to get NUMA affinity for kthread stack, or else give -1.</span>
+</span><span class='line'><span class="cm">244  * When woken, the thread will run @threadfn() with @data as its</span>
+</span><span class='line'><span class="cm">245  * argument. @threadfn() can either call do_exit() directly if it is a</span>
+</span><span class='line'><span class="cm">246  * standalone thread for which no one will call kthread_stop(), or</span>
+</span><span class='line'><span class="cm">247  * return when &#39;kthread_should_stop()&#39; is true (which means</span>
+</span><span class='line'><span class="cm">248  * kthread_stop() has been called).  The return value should be zero</span>
+</span><span class='line'><span class="cm">249  * or a negative error number; it will be passed to kthread_stop().</span>
+</span><span class='line'><span class="cm">250  *</span>
+</span><span class='line'><span class="cm">251  * Returns a task_struct or ERR_PTR(-ENOMEM).</span>
+</span><span class='line'><span class="cm">252  */</span>
+</span><span class='line'><span class="mi">253</span> <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">kthread_create_on_node</span><span class="p">(</span><span class="kt">int</span> <span class="p">(</span><span class="o">*</span><span class="n">threadfn</span><span class="p">)(</span><span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">),</span>
+</span><span class='line'><span class="mi">254</span>                                            <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="kt">int</span> <span class="n">node</span><span class="p">,</span>
+</span><span class='line'><span class="mi">255</span>                                            <span class="k">const</span> <span class="kt">char</span> <span class="n">namefmt</span><span class="p">[],</span>
+</span><span class='line'><span class="mi">256</span>                                            <span class="p">...)</span>
+</span><span class='line'><span class="mi">257</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">258</span>         <span class="k">struct</span> <span class="n">kthread_create_info</span> <span class="n">create</span><span class="p">;</span>
+</span><span class='line'><span class="mi">259</span>
+</span><span class='line'><span class="mi">260</span>         <span class="n">create</span><span class="p">.</span><span class="n">threadfn</span> <span class="o">=</span> <span class="n">threadfn</span><span class="p">;</span>
+</span><span class='line'><span class="mi">261</span>         <span class="n">create</span><span class="p">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">;</span>
+</span><span class='line'><span class="mi">262</span>         <span class="n">create</span><span class="p">.</span><span class="n">node</span> <span class="o">=</span> <span class="n">node</span><span class="p">;</span>
+</span><span class='line'><span class="mi">263</span>         <span class="nf">init_completion</span><span class="p">(</span><span class="o">&amp;</span><span class="n">create</span><span class="p">.</span><span class="n">done</span><span class="p">);</span>
+</span><span class='line'><span class="mi">264</span>
+</span><span class='line'><span class="mi">265</span>         <span class="nf">spin_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthread_create_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">266</span>         <span class="nf">list_add_tail</span><span class="p">(</span><span class="o">&amp;</span><span class="n">create</span><span class="p">.</span><span class="n">list</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">kthread_create_list</span><span class="p">);</span>
+</span><span class='line'><span class="mi">267</span>         <span class="nf">spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthread_create_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">268</span>
+</span><span class='line'><span class="mi">269</span>         <span class="nf">wake_up_process</span><span class="p">(</span><span class="n">kthreadd_task</span><span class="p">);</span>
+</span><span class='line'><span class="mi">270</span>         <span class="nf">wait_for_completion</span><span class="p">(</span><span class="o">&amp;</span><span class="n">create</span><span class="p">.</span><span class="n">done</span><span class="p">);</span>
+</span><span class='line'><span class="mi">271</span>
+</span><span class='line'><span class="mi">272</span>         <span class="nf">if</span> <span class="p">(</span><span class="o">!</span><span class="n">IS_ERR</span><span class="p">(</span><span class="n">create</span><span class="p">.</span><span class="n">result</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">273</span>                 <span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">sched_param</span> <span class="n">param</span> <span class="o">=</span> <span class="p">{</span> <span class="p">.</span><span class="n">sched_priority</span> <span class="o">=</span> <span class="mi">0</span> <span class="p">};</span>
+</span><span class='line'><span class="mi">274</span>                 <span class="kt">va_list</span> <span class="n">args</span><span class="p">;</span>
+</span><span class='line'><span class="mi">275</span>
+</span><span class='line'><span class="mi">276</span>                 <span class="n">va_start</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">namefmt</span><span class="p">);</span>
+</span><span class='line'><span class="mi">277</span>                 <span class="n">vsnprintf</span><span class="p">(</span><span class="n">create</span><span class="p">.</span><span class="n">result</span><span class="o">-&gt;</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">create</span><span class="p">.</span><span class="n">result</span><span class="o">-&gt;</span><span class="n">comm</span><span class="p">),</span>
+</span><span class='line'><span class="mi">278</span>                           <span class="n">namefmt</span><span class="p">,</span> <span class="n">args</span><span class="p">);</span>
+</span><span class='line'><span class="mi">279</span>                 <span class="n">va_end</span><span class="p">(</span><span class="n">args</span><span class="p">);</span>
+</span><span class='line'><span class="mi">280</span>                 <span class="cm">/*</span>
+</span><span class='line'><span class="cm">281                  * root may have changed our (kthreadd&#39;s) priority or CPU mask.</span>
+</span><span class='line'><span class="cm">282                  * The kernel thread should not inherit these properties.</span>
+</span><span class='line'><span class="cm">283                  */</span>
+</span><span class='line'><span class="mi">284</span>                 <span class="n">sched_setscheduler_nocheck</span><span class="p">(</span><span class="n">create</span><span class="p">.</span><span class="n">result</span><span class="p">,</span> <span class="n">SCHED_NORMAL</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">param</span><span class="p">);</span>
+</span><span class='line'><span class="mi">285</span>                 <span class="n">set_cpus_allowed_ptr</span><span class="p">(</span><span class="n">create</span><span class="p">.</span><span class="n">result</span><span class="p">,</span> <span class="n">cpu_all_mask</span><span class="p">);</span>
+</span><span class='line'><span class="mi">286</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">287</span>         <span class="k">return</span> <span class="n">create</span><span class="p">.</span><span class="n">result</span><span class="p">;</span>
+</span><span class='line'><span class="mi">288</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">289</span> <span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">kthread_create_on_node</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>How a kthread is really created.</h3>
+
+<h4>Call Trace</h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="o">&gt;</span> <span class="n">kthreadd</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">spin_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthread_create_lock</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">create</span> <span class="o">=</span> <span class="n">list_entry</span><span class="p">(</span><span class="n">kthread_create_list</span><span class="p">.</span><span class="n">next</span><span class="p">,</span> <span class="k">struct</span> <span class="n">kthread_create_info</span><span class="p">,</span> <span class="n">list</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">list_del_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">create</span><span class="o">-&gt;</span><span class="n">list</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthread_create_lock</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">create_kthread</span><span class="p">(</span><span class="n">create</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span>  <span class="n">kernel_thread</span><span class="p">(</span><span class="n">kthread</span><span class="p">,</span> <span class="n">create</span><span class="p">,</span> <span class="n">CLONE_FS</span> <span class="o">|</span> <span class="n">CLONE_FILES</span> <span class="o">|</span> <span class="n">SIGCHLD</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">do_fork</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">kthread</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">__set_current_state</span><span class="p">(</span><span class="n">TASK_UNINTERRUPTIBLE</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">create</span><span class="o">-&gt;</span><span class="n">result</span> <span class="o">=</span> <span class="n">current</span><span class="p">;</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">complete</span><span class="p">(</span><span class="o">&amp;</span><span class="n">create</span><span class="o">-&gt;</span><span class="n">done</span><span class="p">);</span> <span class="o">&lt;===</span> <span class="n">NOTIFY</span> <span class="kr">thread</span> <span class="n">is</span> <span class="n">ready</span> <span class="o">!!!</span>
+</span><span class='line'><span class="nl">NOTE</span><span class="p">:</span> <span class="n">line</span> <span class="mi">224</span> <span class="n">the</span> <span class="n">pameter</span> <span class="n">kthread</span> <span class="n">in</span> <span class="n">funtion</span> <span class="n">create_thread</span><span class="p">,</span> <span class="n">is</span> <span class="n">a</span> <span class="n">funtion</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>method <code>kthreadd</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">446</span> <span class="kt">int</span> <span class="n">kthreadd</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">unused</span><span class="p">)</span>
+</span><span class='line'><span class="mi">447</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">448</span>         <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">tsk</span> <span class="o">=</span> <span class="n">current</span><span class="p">;</span>
+</span><span class='line'><span class="mi">449</span>
+</span><span class='line'><span class="mi">450</span>         <span class="cm">/* Setup a clean context for our children to inherit. */</span>
+</span><span class='line'><span class="mi">451</span>         <span class="n">set_task_comm</span><span class="p">(</span><span class="n">tsk</span><span class="p">,</span> <span class="s">&quot;kthreadd&quot;</span><span class="p">);</span>
+</span><span class='line'><span class="mi">452</span>         <span class="nf">ignore_signals</span><span class="p">(</span><span class="n">tsk</span><span class="p">);</span>
+</span><span class='line'><span class="mi">453</span>         <span class="nf">set_cpus_allowed_ptr</span><span class="p">(</span><span class="n">tsk</span><span class="p">,</span> <span class="n">cpu_all_mask</span><span class="p">);</span>
+</span><span class='line'><span class="mi">454</span>         <span class="nf">set_mems_allowed</span><span class="p">(</span><span class="n">node_states</span><span class="p">[</span><span class="n">N_MEMORY</span><span class="p">]);</span>
+</span><span class='line'><span class="mi">455</span>
+</span><span class='line'><span class="mi">456</span>         <span class="n">current</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">|=</span> <span class="n">PF_NOFREEZE</span><span class="p">;</span>
+</span><span class='line'><span class="mi">457</span>
+</span><span class='line'><span class="mi">458</span>         <span class="k">for</span> <span class="p">(;;)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">459</span>                 <span class="n">set_current_state</span><span class="p">(</span><span class="n">TASK_INTERRUPTIBLE</span><span class="p">);</span>
+</span><span class='line'><span class="mi">460</span>                 <span class="nf">if</span> <span class="p">(</span><span class="n">list_empty</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthread_create_list</span><span class="p">))</span>
+</span><span class='line'><span class="mi">461</span>                         <span class="n">schedule</span><span class="p">();</span>
+</span><span class='line'><span class="mi">462</span>                 <span class="nf">__set_current_state</span><span class="p">(</span><span class="n">TASK_RUNNING</span><span class="p">);</span>
+</span><span class='line'><span class="mi">463</span>
+</span><span class='line'><span class="mi">464</span>                 <span class="nf">spin_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthread_create_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">465</span>                 <span class="nf">while</span> <span class="p">(</span><span class="o">!</span><span class="n">list_empty</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthread_create_list</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">466</span>                         <span class="k">struct</span> <span class="n">kthread_create_info</span> <span class="o">*</span><span class="n">create</span><span class="p">;</span>
+</span><span class='line'><span class="mi">467</span>
+</span><span class='line'><span class="mi">468</span>                         <span class="n">create</span> <span class="o">=</span> <span class="n">list_entry</span><span class="p">(</span><span class="n">kthread_create_list</span><span class="p">.</span><span class="n">next</span><span class="p">,</span>
+</span><span class='line'><span class="mi">469</span>                                             <span class="k">struct</span> <span class="n">kthread_create_info</span><span class="p">,</span> <span class="n">list</span><span class="p">);</span>
+</span><span class='line'><span class="mi">470</span>                         <span class="n">list_del_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">create</span><span class="o">-&gt;</span><span class="n">list</span><span class="p">);</span>
+</span><span class='line'><span class="mi">471</span>                         <span class="n">spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthread_create_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">472</span>
+</span><span class='line'><span class="mi">473</span>                         <span class="n">create_kthread</span><span class="p">(</span><span class="n">create</span><span class="p">);</span>
+</span><span class='line'><span class="mi">474</span>
+</span><span class='line'><span class="mi">475</span>                         <span class="n">spin_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthread_create_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">476</span>                 <span class="p">}</span>
+</span><span class='line'><span class="mi">477</span>                 <span class="nf">spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthread_create_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">478</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">479</span>
+</span><span class='line'><span class="mi">480</span>         <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">481</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>create_kthread</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">216</span> <span class="k">static</span> <span class="kt">void</span> <span class="n">create_kthread</span><span class="p">(</span><span class="k">struct</span> <span class="n">kthread_create_info</span> <span class="o">*</span><span class="n">create</span><span class="p">)</span>
+</span><span class='line'><span class="mi">217</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">218</span>         <span class="kt">int</span> <span class="n">pid</span><span class="p">;</span>
+</span><span class='line'><span class="mi">219</span>
+</span><span class='line'><span class="mi">220</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_NUMA</span>
+</span><span class='line'><span class="mi">221</span>         <span class="n">current</span><span class="o">-&gt;</span><span class="n">pref_node_fork</span> <span class="o">=</span> <span class="n">create</span><span class="o">-&gt;</span><span class="n">node</span><span class="p">;</span>
+</span><span class='line'><span class="mi">222</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'><span class="mi">223</span>         <span class="cm">/* We want our own signal handler (we take no signals by default). */</span>
+</span><span class='line'><span class="mi">224</span>         <span class="n">pid</span> <span class="o">=</span> <span class="n">kernel_thread</span><span class="p">(</span><span class="n">kthread</span><span class="p">,</span> <span class="n">create</span><span class="p">,</span> <span class="n">CLONE_FS</span> <span class="o">|</span> <span class="n">CLONE_FILES</span> <span class="o">|</span> <span class="n">SIGCHLD</span><span class="p">);</span>
+</span><span class='line'><span class="mi">225</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">pid</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">226</span>                 <span class="n">create</span><span class="o">-&gt;</span><span class="n">result</span> <span class="o">=</span> <span class="n">ERR_PTR</span><span class="p">(</span><span class="n">pid</span><span class="p">);</span>
+</span><span class='line'><span class="mi">227</span>                 <span class="n">complete</span><span class="p">(</span><span class="o">&amp;</span><span class="n">create</span><span class="o">-&gt;</span><span class="n">done</span><span class="p">);</span>
+</span><span class='line'><span class="mi">228</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">229</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>kthread</code>: do some preparation before really run the threadfn.</h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">175</span> <span class="k">static</span> <span class="kt">int</span> <span class="n">kthread</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">_create</span><span class="p">)</span>
+</span><span class='line'><span class="mi">176</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">177</span>         <span class="cm">/* Copy data: it&#39;s on kthread&#39;s stack */</span>
+</span><span class='line'><span class="mi">178</span>         <span class="k">struct</span> <span class="n">kthread_create_info</span> <span class="o">*</span><span class="n">create</span> <span class="o">=</span> <span class="n">_create</span><span class="p">;</span>
+</span><span class='line'><span class="mi">179</span>         <span class="kt">int</span> <span class="p">(</span><span class="o">*</span><span class="n">threadfn</span><span class="p">)(</span><span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">)</span> <span class="o">=</span> <span class="n">create</span><span class="o">-&gt;</span><span class="n">threadfn</span><span class="p">;</span>
+</span><span class='line'><span class="mi">180</span>         <span class="kt">void</span> <span class="o">*</span><span class="n">data</span> <span class="o">=</span> <span class="n">create</span><span class="o">-&gt;</span><span class="n">data</span><span class="p">;</span>
+</span><span class='line'><span class="mi">181</span>         <span class="k">struct</span> <span class="n">kthread</span> <span class="n">self</span><span class="p">;</span>
+</span><span class='line'><span class="mi">182</span>         <span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
+</span><span class='line'><span class="mi">183</span>
+</span><span class='line'><span class="mi">184</span>         <span class="n">self</span><span class="p">.</span><span class="n">flags</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">185</span>         <span class="n">self</span><span class="p">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">;</span>
+</span><span class='line'><span class="mi">186</span>         <span class="nf">init_completion</span><span class="p">(</span><span class="o">&amp;</span><span class="n">self</span><span class="p">.</span><span class="n">exited</span><span class="p">);</span>
+</span><span class='line'><span class="mi">187</span>         <span class="nf">init_completion</span><span class="p">(</span><span class="o">&amp;</span><span class="n">self</span><span class="p">.</span><span class="n">parked</span><span class="p">);</span>
+</span><span class='line'><span class="mi">188</span>         <span class="n">current</span><span class="o">-&gt;</span><span class="n">vfork_done</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">self</span><span class="p">.</span><span class="n">exited</span><span class="p">;</span>
+</span><span class='line'><span class="mi">189</span>
+</span><span class='line'><span class="mi">190</span>         <span class="cm">/* OK, tell user we&#39;re spawned, wait for stop or wakeup */</span>
+</span><span class='line'><span class="mi">191</span>         <span class="n">__set_current_state</span><span class="p">(</span><span class="n">TASK_UNINTERRUPTIBLE</span><span class="p">);</span>
+</span><span class='line'><span class="mi">192</span>         <span class="n">create</span><span class="o">-&gt;</span><span class="n">result</span> <span class="o">=</span> <span class="n">current</span><span class="p">;</span>
+</span><span class='line'><span class="mi">193</span>         <span class="nf">complete</span><span class="p">(</span><span class="o">&amp;</span><span class="n">create</span><span class="o">-&gt;</span><span class="n">done</span><span class="p">);</span>   <span class="o">&lt;===</span> <span class="n">NOTIFY</span> <span class="n">new</span> <span class="kr">thread</span> <span class="n">is</span> <span class="n">ready</span><span class="p">.</span>
+</span><span class='line'><span class="mi">194</span>         <span class="n">schedule</span><span class="p">();</span>
+</span><span class='line'><span class="mi">195</span>
+</span><span class='line'><span class="mi">196</span>         <span class="n">ret</span> <span class="o">=</span> <span class="o">-</span><span class="n">EINTR</span><span class="p">;</span>
+</span><span class='line'><span class="mi">197</span>
+</span><span class='line'><span class="mi">198</span>         <span class="nf">if</span> <span class="p">(</span><span class="o">!</span><span class="n">test_bit</span><span class="p">(</span><span class="n">KTHREAD_SHOULD_STOP</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">self</span><span class="p">.</span><span class="n">flags</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">199</span>                 <span class="n">__kthread_parkme</span><span class="p">(</span><span class="o">&amp;</span><span class="n">self</span><span class="p">);</span>
+</span><span class='line'><span class="mi">200</span>                 <span class="n">ret</span> <span class="o">=</span> <span class="n">threadfn</span><span class="p">(</span><span class="n">data</span><span class="p">);</span>
+</span><span class='line'><span class="mi">201</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">202</span>         <span class="cm">/* we can&#39;t just return, we must preserve &quot;self&quot; on stack */</span>
+</span><span class='line'><span class="mi">203</span>         <span class="n">do_exit</span><span class="p">(</span><span class="n">ret</span><span class="p">);</span>
+</span><span class='line'><span class="mi">204</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Where is kthreadd_task created at?</h3>
+
+<p>PID2 and <code>kthreadd_task</code> is created just after boot up</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">364</span> <span class="k">static</span> <span class="n">noinline</span> <span class="kt">void</span> <span class="n">__init_refok</span> <span class="n">rest_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="mi">365</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">366</span>         <span class="kt">int</span> <span class="n">pid</span><span class="p">;</span>
+</span><span class='line'><span class="mi">367</span>
+</span><span class='line'><span class="mi">368</span>         <span class="nf">rcu_scheduler_starting</span><span class="p">();</span>
+</span><span class='line'><span class="mi">369</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">370          * We need to spawn init first so that it obtains pid 1, however</span>
+</span><span class='line'><span class="cm">371          * the init task will end up wanting to create kthreads, which, if</span>
+</span><span class='line'><span class="cm">372          * we schedule it before we create kthreadd, will OOPS.</span>
+</span><span class='line'><span class="cm">373          */</span>
+</span><span class='line'><span class="mi">374</span>         <span class="n">kernel_thread</span><span class="p">(</span><span class="n">kernel_init</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="n">CLONE_FS</span> <span class="o">|</span> <span class="n">CLONE_SIGHAND</span><span class="p">);</span>
+</span><span class='line'><span class="mi">375</span>         <span class="nf">numa_default_policy</span><span class="p">();</span>
+</span><span class='line'><span class="mi">376</span>         <span class="n">pid</span> <span class="o">=</span> <span class="n">kernel_thread</span><span class="p">(</span><span class="n">kthreadd</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="n">CLONE_FS</span> <span class="o">|</span> <span class="n">CLONE_FILES</span><span class="p">);</span> <span class="o">&lt;==</span><span class="n">PID1</span>
+</span><span class='line'><span class="mi">377</span>         <span class="n">rcu_read_lock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">378</span>         <span class="n">kthreadd_task</span> <span class="o">=</span> <span class="n">find_task_by_pid_ns</span><span class="p">(</span><span class="n">pid</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">init_pid_ns</span><span class="p">);</span> <span class="o">&lt;==</span> <span class="n">PID2</span>
+</span><span class='line'><span class="mi">379</span>         <span class="n">rcu_read_unlock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">380</span>         <span class="nf">complete</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthreadd_done</span><span class="p">);</span>
+</span><span class='line'><span class="mi">381</span>
+</span><span class='line'><span class="mi">382</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">383          * The boot idle thread must execute schedule()</span>
+</span><span class='line'><span class="cm">384          * at least once to get things moving:</span>
+</span><span class='line'><span class="cm">385          */</span>
+</span><span class='line'><span class="mi">386</span>         <span class="n">init_idle_bootup_task</span><span class="p">(</span><span class="n">current</span><span class="p">);</span>
+</span><span class='line'><span class="mi">387</span>         <span class="nf">schedule_preempt_disabled</span><span class="p">();</span>
+</span><span class='line'><span class="mi">388</span>         <span class="cm">/* Call into cpu_idle with preempt disabled */</span>
+</span><span class='line'><span class="mi">389</span>         <span class="n">cpu_startup_entry</span><span class="p">(</span><span class="n">CPUHP_ONLINE</span><span class="p">);</span>
+</span><span class='line'><span class="mi">390</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-06-27T00:00:00+08:00'><span class='date'><span class='date-month'>Jun</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/sched/'>sched</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/06/26/submit-kernel-patch-by-git-mail/" title="Previous Post: How to submit kernel patch by git-mail">&laquo; How to submit kernel patch by git-mail</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/07/10/isolcpus/" title="Next Post: draft: isolcpus">draft: isolcpus &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

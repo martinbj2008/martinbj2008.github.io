@@ -1,0 +1,949 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Tcp Checksum in Send Direction - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="summary When nic supports hardware checksum, tcp only partially calculate the sum and fill the related info into skb three item: ip_summed
+csum_start &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2012/07/13/tcpchecksum/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Tcp Checksum in Send Direction</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-07-13T00:00:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2012</span></span> <span class='time'>12:00 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2>summary</h2>
+
+<p>  When nic supports hardware checksum, tcp only partially calculate the sum and fill the related info into skb three item:</p>
+
+<ol>
+<li><code>ip_summed</code></li>
+<li><code>csum_start</code></li>
+<li><code>csum_offset</code></li>
+</ol>
+
+
+<p>when nic driver sends the packet, it will fill these information to hardware’s correspond register.</p>
+
+<!-- more -->
+
+
+<h2>call trace</h2>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="o">&gt;</span> <span class="n">tcp_sendmsg</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">__tcp_push_pending_frames</span> <span class="n">tcp_push_one</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">tcp_write_xmit</span> <span class="n">tcp_transmit_skb</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">icsk</span><span class="o">-&gt;</span><span class="n">icsk_af_ops</span><span class="o">-&gt;</span><span class="n">send_check</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">err</span> <span class="o">=</span> <span class="n">icsk</span><span class="o">-&gt;</span><span class="n">icsk_af_ops</span><span class="o">-&gt;</span><span class="n">queue_xmit</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">inet</span><span class="o">-&gt;</span><span class="n">cork</span><span class="p">.</span><span class="n">fl</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>注：<code>__tcp_push_pending_frames</code>和 <code>tcp_push_one</code>最终都调用<code>tcp_write_xmit</code></p>
+
+<h2>relate source</h2>
+
+<h3><code>tcp_prot</code> and <code>tcp_sendmsg</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">2612</span> <span class="k">struct</span> <span class="n">proto</span> <span class="n">tcp_prot</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'> <span class="mi">2620</span>         <span class="p">.</span><span class="n">init</span>                   <span class="o">=</span> <span class="n">tcp_v4_init_sock</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">2626</span>         <span class="p">.</span><span class="n">sendmsg</span>                <span class="o">=</span> <span class="n">tcp_sendmsg</span><span class="p">,</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>tcp_sendmsg</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">916</span> <span class="kt">int</span> <span class="n">tcp_sendmsg</span><span class="p">(</span><span class="k">struct</span> <span class="n">kiocb</span> <span class="o">*</span><span class="n">iocb</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="k">struct</span> <span class="n">msghdr</span> <span class="o">*</span><span class="n">msg</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">917</span>                 <span class="kt">size_t</span> <span class="n">size</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">918</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'> <span class="mi">987</span>    <span class="k">if</span> <span class="p">(</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_route_caps</span> <span class="o">&amp;</span> <span class="n">NETIF_F_ALL_CSUM</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">988</span>       <span class="n">skb</span><span class="o">-&gt;</span><span class="n">ip_summed</span> <span class="o">=</span> <span class="n">CHECKSUM_PARTIAL</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">989</span>
+</span><span class='line'><span class="p">....</span>
+</span><span class='line'><span class="mi">1096</span>                         <span class="k">if</span> <span class="p">(</span><span class="n">forced_push</span><span class="p">(</span><span class="n">tp</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1097</span>                                 <span class="n">tcp_mark_push</span><span class="p">(</span><span class="n">tp</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1098</span>                                 <span class="nf">__tcp_push_pending_frames</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">mss_now</span><span class="p">,</span> <span class="n">TCP_NAGLE_PUSH</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1099</span>                         <span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">skb</span> <span class="o">==</span> <span class="n">tcp_send_head</span><span class="p">(</span><span class="n">sk</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1100</span>                                 <span class="n">tcp_push_one</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">mss_now</span><span class="p">);</span>
+</span><span class='line'><span class="n">__tcp_push_pending_frames</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1828</span> <span class="kt">void</span> <span class="n">__tcp_push_pending_frames</span><span class="p">(</span><span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">cur_mss</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1829</span>                                <span class="kt">int</span> <span class="n">nonagle</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1830</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1831</span>         <span class="cm">/* If we are closed, the bytes will have to remain here.</span>
+</span><span class='line'><span class="cm">1832          * In time closedown will finish, we empty the write queue and</span>
+</span><span class='line'><span class="cm">1833          * all will be happy.</span>
+</span><span class='line'><span class="cm">1834          */</span>
+</span><span class='line'><span class="mi">1835</span>         <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state</span> <span class="o">==</span> <span class="n">TCP_CLOSE</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1836</span>                 <span class="k">return</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1837</span>
+</span><span class='line'><span class="mi">1838</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">tcp_write_xmit</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">cur_mss</span><span class="p">,</span> <span class="n">nonagle</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">GFP_ATOMIC</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1839</span>                 <span class="n">tcp_check_probe_timer</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1840</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>tcp_push_one</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1845</span> <span class="kt">void</span> <span class="nf">tcp_push_one</span><span class="p">(</span><span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">mss_now</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1846</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1847</span>         <span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span> <span class="o">=</span> <span class="n">tcp_send_head</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1848</span>
+</span><span class='line'><span class="mi">1849</span>         <span class="nf">BUG_ON</span><span class="p">(</span><span class="o">!</span><span class="n">skb</span> <span class="o">||</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">len</span> <span class="o">&lt;</span> <span class="n">mss_now</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1850</span>
+</span><span class='line'><span class="mi">1851</span>         <span class="nf">tcp_write_xmit</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">mss_now</span><span class="p">,</span> <span class="n">TCP_NAGLE_PUSH</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_allocation</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1852</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>tcp_write_xmit</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1743</span> <span class="k">static</span> <span class="kt">int</span> <span class="n">tcp_write_xmit</span><span class="p">(</span><span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">mss_now</span><span class="p">,</span> <span class="kt">int</span> <span class="n">nonagle</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1744</span>                           <span class="kt">int</span> <span class="n">push_one</span><span class="p">,</span> <span class="kt">gfp_t</span> <span class="n">gfp</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1745</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">1800</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="n">tcp_transmit_skb</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">gfp</span><span class="p">)))</span>
+</span><span class='line'><span class="mi">1801</span>                         <span class="k">break</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>tcp_transmit_skb</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">796</span> <span class="k">static</span> <span class="kt">int</span> <span class="nf">tcp_transmit_skb</span><span class="p">(</span><span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">,</span> <span class="kt">int</span> <span class="n">clone_it</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">797</span>                             <span class="kt">gfp_t</span> <span class="n">gfp_mask</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">798</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">799</span>         <span class="k">const</span> <span class="k">struct</span> <span class="n">inet_connection_sock</span> <span class="o">*</span><span class="n">icsk</span> <span class="o">=</span> <span class="n">inet_csk</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'> <span class="mi">892</span>         <span class="n">icsk</span><span class="o">-&gt;</span><span class="n">icsk_af_ops</span><span class="o">-&gt;</span><span class="n">send_check</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'> <span class="mi">904</span>         <span class="n">err</span> <span class="o">=</span> <span class="n">icsk</span><span class="o">-&gt;</span><span class="n">icsk_af_ops</span><span class="o">-&gt;</span><span class="n">queue_xmit</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">inet</span><span class="o">-&gt;</span><span class="n">cork</span><span class="p">.</span><span class="n">fl</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>tcp_v4_init_sock</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1875</span> <span class="k">static</span> <span class="kt">int</span> <span class="nf">tcp_v4_init_sock</span><span class="p">(</span><span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1876</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1877</span>         <span class="k">struct</span> <span class="n">inet_connection_sock</span> <span class="o">*</span><span class="n">icsk</span> <span class="o">=</span> <span class="n">inet_csk</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1878</span>         <span class="k">struct</span> <span class="n">tcp_sock</span> <span class="o">*</span><span class="n">tp</span> <span class="o">=</span> <span class="n">tcp_sk</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1879</span>
+</span><span class='line'><span class="mi">1880</span>         <span class="nf">skb_queue_head_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tp</span><span class="o">-&gt;</span><span class="n">out_of_order_queue</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1881</span>         <span class="nf">tcp_init_xmit_timers</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1882</span>         <span class="nf">tcp_prequeue_init</span><span class="p">(</span><span class="n">tp</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1883</span>
+</span><span class='line'><span class="mi">1884</span>         <span class="n">icsk</span><span class="o">-&gt;</span><span class="n">icsk_rto</span> <span class="o">=</span> <span class="n">TCP_TIMEOUT_INIT</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1885</span>         <span class="n">tp</span><span class="o">-&gt;</span><span class="n">mdev</span> <span class="o">=</span> <span class="n">TCP_TIMEOUT_INIT</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1886</span>
+</span><span class='line'><span class="mi">1887</span>         <span class="cm">/* So many TCP implementations out there (incorrectly) count the</span>
+</span><span class='line'><span class="cm">1888          * initial SYN frame in their delayed-ACK and congestion control</span>
+</span><span class='line'><span class="cm">1889          * algorithms that we must have the following bandaid to talk</span>
+</span><span class='line'><span class="cm">1890          * efficiently to them.  -DaveM</span>
+</span><span class='line'><span class="cm">1891          */</span>
+</span><span class='line'><span class="mi">1892</span>         <span class="n">tp</span><span class="o">-&gt;</span><span class="n">snd_cwnd</span> <span class="o">=</span> <span class="n">TCP_INIT_CWND</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1893</span>
+</span><span class='line'><span class="mi">1894</span>         <span class="cm">/* See draft-stevens-tcpca-spec-01 for discussion of the</span>
+</span><span class='line'><span class="cm">1895          * initialization of these values.</span>
+</span><span class='line'><span class="cm">1896          */</span>
+</span><span class='line'><span class="mi">1897</span>         <span class="n">tp</span><span class="o">-&gt;</span><span class="n">snd_ssthresh</span> <span class="o">=</span> <span class="n">TCP_INFINITE_SSTHRESH</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1898</span>         <span class="n">tp</span><span class="o">-&gt;</span><span class="n">snd_cwnd_clamp</span> <span class="o">=</span> <span class="o">~</span><span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1899</span>         <span class="n">tp</span><span class="o">-&gt;</span><span class="n">mss_cache</span> <span class="o">=</span> <span class="n">TCP_MSS_DEFAULT</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1900</span>
+</span><span class='line'><span class="mi">1901</span>         <span class="n">tp</span><span class="o">-&gt;</span><span class="n">reordering</span> <span class="o">=</span> <span class="n">sysctl_tcp_reordering</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1902</span>         <span class="n">icsk</span><span class="o">-&gt;</span><span class="n">icsk_ca_ops</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">tcp_init_congestion_ops</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1903</span>
+</span><span class='line'><span class="mi">1904</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state</span> <span class="o">=</span> <span class="n">TCP_CLOSE</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1905</span>
+</span><span class='line'><span class="mi">1906</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_write_space</span> <span class="o">=</span> <span class="n">sk_stream_write_space</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1907</span>         <span class="nf">sock_set_flag</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">SOCK_USE_WRITE_QUEUE</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1908</span>
+</span><span class='line'><span class="mi">1909</span>         <span class="n">icsk</span><span class="o">-&gt;</span><span class="n">icsk_af_ops</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">ipv4_specific</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1910</span>         <span class="n">icsk</span><span class="o">-&gt;</span><span class="n">icsk_sync_mss</span> <span class="o">=</span> <span class="n">tcp_sync_mss</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>inet_connection_sock_af_ops</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1844</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">inet_connection_sock_af_ops</span> <span class="n">ipv4_specific</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1845</span>         <span class="p">.</span><span class="n">queue_xmit</span>        <span class="o">=</span> <span class="n">ip_queue_xmit</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1846</span>         <span class="p">.</span><span class="n">send_check</span>        <span class="o">=</span> <span class="n">tcp_v4_send_check</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1847</span>         <span class="p">.</span><span class="n">rebuild_header</span>    <span class="o">=</span> <span class="n">inet_sk_rebuild_header</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1848</span>         <span class="p">.</span><span class="n">conn_request</span>      <span class="o">=</span> <span class="n">tcp_v4_conn_request</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1849</span>         <span class="p">.</span><span class="n">syn_recv_sock</span>     <span class="o">=</span> <span class="n">tcp_v4_syn_recv_sock</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1850</span>         <span class="p">.</span><span class="n">get_peer</span>          <span class="o">=</span> <span class="n">tcp_v4_get_peer</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1851</span>         <span class="p">.</span><span class="n">net_header_len</span>    <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">iphdr</span><span class="p">),</span>
+</span><span class='line'><span class="mi">1852</span>         <span class="p">.</span><span class="n">setsockopt</span>        <span class="o">=</span> <span class="n">ip_setsockopt</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1853</span>         <span class="p">.</span><span class="n">getsockopt</span>        <span class="o">=</span> <span class="n">ip_getsockopt</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1854</span>         <span class="p">.</span><span class="n">addr2sockaddr</span>     <span class="o">=</span> <span class="n">inet_csk_addr2sockaddr</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1855</span>         <span class="p">.</span><span class="n">sockaddr_len</span>      <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">sockaddr_in</span><span class="p">),</span>
+</span><span class='line'><span class="mi">1856</span>         <span class="p">.</span><span class="n">bind_conflict</span>     <span class="o">=</span> <span class="n">inet_csk_bind_conflict</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1857</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_COMPAT</span>
+</span><span class='line'><span class="mi">1858</span>         <span class="p">.</span><span class="n">compat_setsockopt</span> <span class="o">=</span> <span class="n">compat_ip_setsockopt</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1859</span>         <span class="p">.</span><span class="n">compat_getsockopt</span> <span class="o">=</span> <span class="n">compat_ip_getsockopt</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1860</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'><span class="mi">1861</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>tcp_v4_send_check</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">546</span> <span class="cm">/* This routine computes an IPv4 TCP checksum. */</span>
+</span><span class='line'> <span class="mi">547</span> <span class="kt">void</span> <span class="n">tcp_v4_send_check</span><span class="p">(</span><span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">548</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">549</span>         <span class="k">const</span> <span class="k">struct</span> <span class="n">inet_sock</span> <span class="o">*</span><span class="n">inet</span> <span class="o">=</span> <span class="n">inet_sk</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">550</span>
+</span><span class='line'> <span class="mi">551</span>         <span class="nf">__tcp_v4_send_check</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">inet</span><span class="o">-&gt;</span><span class="n">inet_saddr</span><span class="p">,</span> <span class="n">inet</span><span class="o">-&gt;</span><span class="n">inet_daddr</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">552</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>__tcp_v4_send_check</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">529</span> <span class="k">static</span> <span class="kt">void</span> <span class="nf">__tcp_v4_send_check</span><span class="p">(</span><span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">530</span>                                 <span class="n">__be32</span> <span class="n">saddr</span><span class="p">,</span> <span class="n">__be32</span> <span class="n">daddr</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">531</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">532</span>         <span class="k">struct</span> <span class="n">tcphdr</span> <span class="o">*</span><span class="n">th</span> <span class="o">=</span> <span class="n">tcp_hdr</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">533</span>
+</span><span class='line'> <span class="mi">534</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">ip_summed</span> <span class="o">==</span> <span class="n">CHECKSUM_PARTIAL</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">535</span>                 <span class="n">th</span><span class="o">-&gt;</span><span class="n">check</span> <span class="o">=</span> <span class="o">~</span><span class="n">tcp_v4_check</span><span class="p">(</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">,</span> <span class="n">saddr</span><span class="p">,</span> <span class="n">daddr</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">536</span>                 <span class="n">skb</span><span class="o">-&gt;</span><span class="n">csum_start</span> <span class="o">=</span> <span class="n">skb_transport_header</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span> <span class="o">-</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">head</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">537</span>                 <span class="n">skb</span><span class="o">-&gt;</span><span class="n">csum_offset</span> <span class="o">=</span> <span class="n">offsetof</span><span class="p">(</span><span class="k">struct</span> <span class="n">tcphdr</span><span class="p">,</span> <span class="n">check</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">538</span>         <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">539</span>                 <span class="n">th</span><span class="o">-&gt;</span><span class="n">check</span> <span class="o">=</span> <span class="n">tcp_v4_check</span><span class="p">(</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">,</span> <span class="n">saddr</span><span class="p">,</span> <span class="n">daddr</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">540</span>                                          <span class="n">csum_partial</span><span class="p">(</span><span class="n">th</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">541</span>                                                       <span class="n">th</span><span class="o">-&gt;</span><span class="n">doff</span> <span class="o">&lt;&lt;</span> <span class="mi">2</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">542</span>                                                       <span class="n">skb</span><span class="o">-&gt;</span><span class="n">csum</span><span class="p">));</span>
+</span><span class='line'> <span class="mi">543</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">544</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>neigh operations</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">129</span> <span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">neigh_ops</span> <span class="n">arp_generic_ops</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">130</span>         <span class="p">.</span><span class="n">family</span> <span class="o">=</span>               <span class="n">AF_INET</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">131</span>         <span class="p">.</span><span class="n">solicit</span> <span class="o">=</span>              <span class="n">arp_solicit</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">132</span>         <span class="p">.</span><span class="n">error_report</span> <span class="o">=</span>         <span class="n">arp_error_report</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">133</span>         <span class="p">.</span><span class="n">output</span> <span class="o">=</span>               <span class="n">neigh_resolve_output</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">134</span>         <span class="p">.</span><span class="n">connected_output</span> <span class="o">=</span>     <span class="n">neigh_connected_output</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">135</span> <span class="p">};</span>
+</span><span class='line'> <span class="mi">136</span>
+</span><span class='line'> <span class="mi">137</span> <span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">neigh_ops</span> <span class="n">arp_hh_ops</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">138</span>         <span class="p">.</span><span class="n">family</span> <span class="o">=</span>               <span class="n">AF_INET</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">139</span>         <span class="p">.</span><span class="n">solicit</span> <span class="o">=</span>              <span class="n">arp_solicit</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">140</span>         <span class="p">.</span><span class="n">error_report</span> <span class="o">=</span>         <span class="n">arp_error_report</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">141</span>         <span class="p">.</span><span class="n">output</span> <span class="o">=</span>               <span class="n">neigh_resolve_output</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">142</span>         <span class="p">.</span><span class="n">connected_output</span> <span class="o">=</span>     <span class="n">neigh_resolve_output</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">143</span> <span class="p">};</span>
+</span><span class='line'> <span class="mi">144</span>
+</span><span class='line'> <span class="mi">145</span> <span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">neigh_ops</span> <span class="n">arp_direct_ops</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">146</span>         <span class="p">.</span><span class="n">family</span> <span class="o">=</span>               <span class="n">AF_INET</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">147</span>         <span class="p">.</span><span class="n">output</span> <span class="o">=</span>               <span class="n">neigh_direct_output</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">148</span>         <span class="p">.</span><span class="n">connected_output</span> <span class="o">=</span>     <span class="n">neigh_direct_output</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">149</span> <span class="p">};</span>
+</span><span class='line'> <span class="mi">150</span>
+</span><span class='line'> <span class="mi">151</span> <span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">neigh_ops</span> <span class="n">arp_broken_ops</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">152</span>         <span class="p">.</span><span class="n">family</span> <span class="o">=</span>               <span class="n">AF_INET</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">153</span>         <span class="p">.</span><span class="n">solicit</span> <span class="o">=</span>              <span class="n">arp_solicit</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">154</span>         <span class="p">.</span><span class="n">error_report</span> <span class="o">=</span>         <span class="n">arp_error_report</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">155</span>         <span class="p">.</span><span class="n">output</span> <span class="o">=</span>               <span class="n">neigh_compat_output</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">156</span>         <span class="p">.</span><span class="n">connected_output</span> <span class="o">=</span>     <span class="n">neigh_compat_output</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">157</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1280</span> <span class="kt">int</span> <span class="nf">neigh_resolve_output</span><span class="p">(</span><span class="k">struct</span> <span class="n">neighbour</span> <span class="o">*</span><span class="n">neigh</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1281</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">1304</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1305</span>                         <span class="n">rc</span> <span class="o">=</span> <span class="n">dev_queue_xmit</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2511</span> <span class="kt">int</span> <span class="nf">dev_queue_xmit</span><span class="p">(</span><span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2512</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">2561</span>                                 <span class="n">rc</span> <span class="o">=</span> <span class="n">dev_hard_start_xmit</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">dev</span><span class="p">,</span> <span class="n">txq</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>dev_hard_start_xmit</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2184</span> <span class="kt">int</span> <span class="nf">dev_hard_start_xmit</span><span class="p">(</span><span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">,</span> <span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2185</span>                         <span class="k">struct</span> <span class="n">netdev_queue</span> <span class="o">*</span><span class="n">txq</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2186</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">2204</span>                 <span class="n">features</span> <span class="o">=</span> <span class="n">netif_skb_features</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">2215</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">netif_needs_gso</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">features</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2216</span>                         <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="n">dev_gso_segment</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">features</span><span class="p">)))</span>
+</span><span class='line'><span class="mi">2217</span>                                 <span class="k">goto</span> <span class="n">out_kfree_skb</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2218</span>                         <span class="k">if</span> <span class="p">(</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">next</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2219</span>                                 <span class="k">goto</span> <span class="n">gso</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2220</span>                 <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2221</span>                         <span class="k">if</span> <span class="p">(</span><span class="n">skb_needs_linearize</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">features</span><span class="p">)</span> <span class="o">&amp;&amp;</span>
+</span><span class='line'><span class="mi">2222</span>                             <span class="n">__skb_linearize</span><span class="p">(</span><span class="n">skb</span><span class="p">))</span>
+</span><span class='line'><span class="mi">2223</span>                                 <span class="k">goto</span> <span class="n">out_kfree_skb</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2224</span>
+</span><span class='line'><span class="mi">2225</span>                         <span class="cm">/* If packet is not checksummed and device does not</span>
+</span><span class='line'><span class="cm">2226                          * support checksumming for this protocol, complete</span>
+</span><span class='line'><span class="cm">2227                          * checksumming here.</span>
+</span><span class='line'><span class="cm">2228                          */</span>
+</span><span class='line'><span class="mi">2229</span>                         <span class="k">if</span> <span class="p">(</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">ip_summed</span> <span class="o">==</span> <span class="n">CHECKSUM_PARTIAL</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2230</span>                                 <span class="n">skb_set_transport_header</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2231</span>                                         <span class="n">skb_checksum_start_offset</span><span class="p">(</span><span class="n">skb</span><span class="p">));</span>
+</span><span class='line'><span class="mi">2232</span>                                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">features</span> <span class="o">&amp;</span> <span class="n">NETIF_F_ALL_CSUM</span><span class="p">)</span> <span class="o">&amp;&amp;</span>
+</span><span class='line'><span class="mi">2233</span>                                      <span class="n">skb_checksum_help</span><span class="p">(</span><span class="n">skb</span><span class="p">))</span>
+</span><span class='line'><span class="mi">2234</span>                                         <span class="k">goto</span> <span class="n">out_kfree_skb</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2235</span>                         <span class="p">}</span>
+</span><span class='line'><span class="mi">2236</span>                 <span class="p">}</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">2239</span>                 <span class="n">rc</span> <span class="o">=</span> <span class="n">ops</span><span class="o">-&gt;</span><span class="n">ndo_start_xmit</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">dev</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>nic dirver e1000</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">847</span> <span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">net_device_ops</span> <span class="n">e1000_netdev_ops</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">848</span>         <span class="p">.</span><span class="n">ndo_open</span>               <span class="o">=</span> <span class="n">e1000_open</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">849</span>         <span class="p">.</span><span class="n">ndo_stop</span>               <span class="o">=</span> <span class="n">e1000_close</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">850</span>         <span class="p">.</span><span class="n">ndo_start_xmit</span>         <span class="o">=</span> <span class="n">e1000_xmit_frame</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">851</span>         <span class="p">.</span><span class="n">ndo_get_stats</span>          <span class="o">=</span> <span class="n">e1000_get_stats</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">852</span>         <span class="p">.</span><span class="n">ndo_set_rx_mode</span>        <span class="o">=</span> <span class="n">e1000_set_rx_mode</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">853</span>         <span class="p">.</span><span class="n">ndo_set_mac_address</span>    <span class="o">=</span> <span class="n">e1000_set_mac</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">854</span>         <span class="p">.</span><span class="n">ndo_tx_timeout</span>         <span class="o">=</span> <span class="n">e1000_tx_timeout</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">855</span>         <span class="p">.</span><span class="n">ndo_change_mtu</span>         <span class="o">=</span> <span class="n">e1000_change_mtu</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">856</span>         <span class="p">.</span><span class="n">ndo_do_ioctl</span>           <span class="o">=</span> <span class="n">e1000_ioctl</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">857</span>         <span class="p">.</span><span class="n">ndo_validate_addr</span>      <span class="o">=</span> <span class="n">eth_validate_addr</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">858</span>         <span class="p">.</span><span class="n">ndo_vlan_rx_add_vid</span>    <span class="o">=</span> <span class="n">e1000_vlan_rx_add_vid</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">859</span>         <span class="p">.</span><span class="n">ndo_vlan_rx_kill_vid</span>   <span class="o">=</span> <span class="n">e1000_vlan_rx_kill_vid</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">860</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_NET_POLL_CONTROLLER</span>
+</span><span class='line'> <span class="mi">861</span>         <span class="p">.</span><span class="n">ndo_poll_controller</span>    <span class="o">=</span> <span class="n">e1000_netpoll</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">862</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'> <span class="mi">863</span>         <span class="p">.</span><span class="n">ndo_fix_features</span>       <span class="o">=</span> <span class="n">e1000_fix_features</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">864</span>         <span class="p">.</span><span class="n">ndo_set_features</span>       <span class="o">=</span> <span class="n">e1000_set_features</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">865</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">5013</span> <span class="k">static</span> <span class="kt">netdev_tx_t</span> <span class="n">e1000_xmit_frame</span><span class="p">(</span><span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">,</span>
+</span><span class='line'><span class="mi">5014</span>                                     <span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">netdev</span><span class="p">)</span>
+</span><span class='line'><span class="mi">5015</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">5113</span>         <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">e1000_tx_csum</span><span class="p">(</span><span class="n">tx_ring</span><span class="p">,</span> <span class="n">skb</span><span class="p">))</span>
+</span><span class='line'><span class="mi">5114</span>                 <span class="n">tx_flags</span> <span class="o">|=</span> <span class="n">E1000_TX_FLAGS_CSUM</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2781</span> <span class="k">static</span> <span class="kt">bool</span> <span class="n">e1000_tx_csum</span><span class="p">(</span><span class="k">struct</span> <span class="n">e1000_adapter</span> <span class="o">*</span><span class="n">adapter</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2782</span>                           <span class="k">struct</span> <span class="n">e1000_tx_ring</span> <span class="o">*</span><span class="n">tx_ring</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2783</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2784</span>         <span class="k">struct</span> <span class="n">e1000_context_desc</span> <span class="o">*</span><span class="n">context_desc</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2785</span>         <span class="k">struct</span> <span class="n">e1000_buffer</span> <span class="o">*</span><span class="n">buffer_info</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2786</span>         <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2787</span>         <span class="n">u8</span> <span class="n">css</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2788</span>         <span class="n">u32</span> <span class="n">cmd_len</span> <span class="o">=</span> <span class="n">E1000_TXD_CMD_DEXT</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2789</span>
+</span><span class='line'><span class="mi">2790</span>         <span class="k">if</span> <span class="p">(</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">ip_summed</span> <span class="o">!=</span> <span class="n">CHECKSUM_PARTIAL</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2791</span>                 <span class="k">return</span> <span class="nb">false</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2792</span>
+</span><span class='line'><span class="mi">2793</span>         <span class="nf">switch</span> <span class="p">(</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">protocol</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2794</span>         <span class="k">case</span> <span class="n">cpu_to_be16</span><span class="p">(</span><span class="n">ETH_P_IP</span><span class="p">)</span><span class="o">:</span>
+</span><span class='line'><span class="mi">2795</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">ip_hdr</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">protocol</span> <span class="o">==</span> <span class="n">IPPROTO_TCP</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2796</span>                         <span class="n">cmd_len</span> <span class="o">|=</span> <span class="n">E1000_TXD_CMD_TCP</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2797</span>                 <span class="k">break</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2798</span>         <span class="k">case</span> <span class="n">cpu_to_be16</span><span class="p">(</span><span class="n">ETH_P_IPV6</span><span class="p">)</span><span class="o">:</span>
+</span><span class='line'><span class="mi">2799</span>                 <span class="cm">/* XXX not handling all IPV6 headers */</span>
+</span><span class='line'><span class="mi">2800</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">ipv6_hdr</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">nexthdr</span> <span class="o">==</span> <span class="n">IPPROTO_TCP</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2801</span>                         <span class="n">cmd_len</span> <span class="o">|=</span> <span class="n">E1000_TXD_CMD_TCP</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2802</span>                 <span class="k">break</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2803</span>         <span class="k">default</span><span class="o">:</span>
+</span><span class='line'><span class="mi">2804</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="n">net_ratelimit</span><span class="p">()))</span>
+</span><span class='line'><span class="mi">2805</span>                         <span class="n">e_warn</span><span class="p">(</span><span class="n">drv</span><span class="p">,</span> <span class="s">&quot;checksum_partial proto=%x!</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2806</span>                                <span class="n">skb</span><span class="o">-&gt;</span><span class="n">protocol</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2807</span>                 <span class="k">break</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2808</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">2809</span>
+</span><span class='line'><span class="mi">2810</span>         <span class="n">css</span> <span class="o">=</span> <span class="n">skb_checksum_start_offset</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2811</span>
+</span><span class='line'><span class="mi">2812</span>         <span class="n">i</span> <span class="o">=</span> <span class="n">tx_ring</span><span class="o">-&gt;</span><span class="n">next_to_use</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2813</span>         <span class="n">buffer_info</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">tx_ring</span><span class="o">-&gt;</span><span class="n">buffer_info</span><span class="p">[</span><span class="n">i</span><span class="p">];</span>
+</span><span class='line'><span class="mi">2814</span>         <span class="n">context_desc</span> <span class="o">=</span> <span class="n">E1000_CONTEXT_DESC</span><span class="p">(</span><span class="o">*</span><span class="n">tx_ring</span><span class="p">,</span> <span class="n">i</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2815</span>
+</span><span class='line'><span class="mi">2816</span>         <span class="n">context_desc</span><span class="o">-&gt;</span><span class="n">lower_setup</span><span class="p">.</span><span class="n">ip_config</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2817</span>         <span class="n">context_desc</span><span class="o">-&gt;</span><span class="n">upper_setup</span><span class="p">.</span><span class="n">tcp_fields</span><span class="p">.</span><span class="n">tucss</span> <span class="o">=</span> <span class="n">css</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2818</span>         <span class="n">context_desc</span><span class="o">-&gt;</span><span class="n">upper_setup</span><span class="p">.</span><span class="n">tcp_fields</span><span class="p">.</span><span class="n">tucso</span> <span class="o">=</span>
+</span><span class='line'><span class="mi">2819</span>                 <span class="n">css</span> <span class="o">+</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">csum_offset</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2820</span>         <span class="n">context_desc</span><span class="o">-&gt;</span><span class="n">upper_setup</span><span class="p">.</span><span class="n">tcp_fields</span><span class="p">.</span><span class="n">tucse</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2821</span>         <span class="n">context_desc</span><span class="o">-&gt;</span><span class="n">tcp_seg_setup</span><span class="p">.</span><span class="n">data</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2822</span>         <span class="n">context_desc</span><span class="o">-&gt;</span><span class="n">cmd_and_length</span> <span class="o">=</span> <span class="n">cpu_to_le32</span><span class="p">(</span><span class="n">cmd_len</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2823</span>
+</span><span class='line'><span class="mi">2824</span>         <span class="n">buffer_info</span><span class="o">-&gt;</span><span class="n">time_stamp</span> <span class="o">=</span> <span class="n">jiffies</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2825</span>         <span class="n">buffer_info</span><span class="o">-&gt;</span><span class="n">next_to_watch</span> <span class="o">=</span> <span class="n">i</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2826</span>
+</span><span class='line'><span class="mi">2827</span>         <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="o">++</span><span class="n">i</span> <span class="o">==</span> <span class="n">tx_ring</span><span class="o">-&gt;</span><span class="n">count</span><span class="p">))</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">201</span> <span class="k">static</span> <span class="k">struct</span> <span class="n">pci_driver</span> <span class="n">e1000_driver</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">202</span>         <span class="p">.</span><span class="n">name</span>     <span class="o">=</span> <span class="n">e1000_driver_name</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">203</span>         <span class="p">.</span><span class="n">id_table</span> <span class="o">=</span> <span class="n">e1000_pci_tbl</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">204</span>         <span class="p">.</span><span class="n">probe</span>    <span class="o">=</span> <span class="n">e1000_probe</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">205</span>         <span class="p">.</span><span class="n">remove</span>   <span class="o">=</span> <span class="n">__devexit_p</span><span class="p">(</span><span class="n">e1000_remove</span><span class="p">),</span>
+</span><span class='line'> <span class="mi">206</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_PM</span>
+</span><span class='line'> <span class="mi">207</span>         <span class="cm">/* Power Management Hooks */</span>
+</span><span class='line'> <span class="mi">208</span>         <span class="p">.</span><span class="n">suspend</span>  <span class="o">=</span> <span class="n">e1000_suspend</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">209</span>         <span class="p">.</span><span class="n">resume</span>   <span class="o">=</span> <span class="n">e1000_resume</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">210</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'> <span class="mi">211</span>         <span class="p">.</span><span class="n">shutdown</span> <span class="o">=</span> <span class="n">e1000_shutdown</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">212</span>         <span class="p">.</span><span class="n">err_handler</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">e1000_err_handler</span>
+</span><span class='line'> <span class="mi">213</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">942</span> <span class="k">static</span> <span class="kt">int</span> <span class="n">__devinit</span> <span class="n">e1000_probe</span><span class="p">(</span><span class="k">struct</span> <span class="n">pci_dev</span> <span class="o">*</span><span class="n">pdev</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">943</span>                                  <span class="k">const</span> <span class="k">struct</span> <span class="n">pci_device_id</span> <span class="o">*</span><span class="n">ent</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">944</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">945</span>         <span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">netdev</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">946</span>         <span class="k">struct</span> <span class="n">e1000_adapter</span> <span class="o">*</span><span class="n">adapter</span><span class="p">;</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">1065</span>         <span class="k">if</span> <span class="p">(</span><span class="n">hw</span><span class="o">-&gt;</span><span class="n">mac_type</span> <span class="o">&gt;=</span> <span class="n">e1000_82543</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1066</span>                 <span class="n">netdev</span><span class="o">-&gt;</span><span class="n">hw_features</span> <span class="o">=</span> <span class="n">NETIF_F_SG</span> <span class="o">|</span>
+</span><span class='line'><span class="mi">1067</span>                                    <span class="n">NETIF_F_HW_CSUM</span> <span class="o">|</span>
+</span><span class='line'><span class="mi">1068</span>                                    <span class="n">NETIF_F_HW_VLAN_RX</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1069</span>                 <span class="n">netdev</span><span class="o">-&gt;</span><span class="n">features</span> <span class="o">=</span> <span class="n">NETIF_F_HW_VLAN_TX</span> <span class="o">|</span>
+</span><span class='line'><span class="mi">1070</span>                                    <span class="n">NETIF_F_HW_VLAN_FILTER</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1071</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1072</span>
+</span><span class='line'><span class="mi">1073</span>         <span class="k">if</span> <span class="p">((</span><span class="n">hw</span><span class="o">-&gt;</span><span class="n">mac_type</span> <span class="o">&gt;=</span> <span class="n">e1000_82544</span><span class="p">)</span> <span class="o">&amp;&amp;</span>
+</span><span class='line'><span class="mi">1074</span>            <span class="p">(</span><span class="n">hw</span><span class="o">-&gt;</span><span class="n">mac_type</span> <span class="o">!=</span> <span class="n">e1000_82547</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1075</span>                 <span class="n">netdev</span><span class="o">-&gt;</span><span class="n">hw_features</span> <span class="o">|=</span> <span class="n">NETIF_F_TSO</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1076</span>
+</span><span class='line'><span class="mi">1077</span>         <span class="n">netdev</span><span class="o">-&gt;</span><span class="n">priv_flags</span> <span class="o">|=</span> <span class="n">IFF_SUPP_NOFCS</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1078</span>
+</span><span class='line'><span class="mi">1079</span>         <span class="n">netdev</span><span class="o">-&gt;</span><span class="n">features</span> <span class="o">|=</span> <span class="n">netdev</span><span class="o">-&gt;</span><span class="n">hw_features</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1080</span>         <span class="n">netdev</span><span class="o">-&gt;</span><span class="n">hw_features</span> <span class="o">|=</span> <span class="n">NETIF_F_RXCSUM</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1081</span>         <span class="n">netdev</span><span class="o">-&gt;</span><span class="n">hw_features</span> <span class="o">|=</span> <span class="n">NETIF_F_RXFCS</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2012-07-13T00:00:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2012</span></span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/socket/'>socket</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2012/06/01/lfs-binutils-gcc-glibc/" title="Previous Post: LFS中Binutils,GCC,Glibc三者之间的关系">&laquo; LFS中Binutils,GCC,Glibc三者之间的关系</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2012/07/29/git-reflog/" title="Next Post: 通过git reflog 找回的commit">通过git reflog 找回的commit &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

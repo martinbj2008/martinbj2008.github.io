@@ -1,0 +1,863 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>How Does Xfrm Km Work - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="summary There is a list xfrm_km_list in kernel.
+Each node of the list is struct xfrm_mgr,
+which has several methods to notify usersapce by netlink &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/08/26/how-does-xfrm-km-work/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">How Does Xfrm Km Work</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-08-26T15:19:00+08:00'><span class='date'><span class='date-month'>Aug</span> <span class='date-day'>26</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>3:19 pm</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h3>summary</h3>
+
+<p>There is a list <code>xfrm_km_list</code> in kernel.
+Each node of the list is <code>struct xfrm_mgr</code>,
+which has several methods to notify usersapce by netlink message.
+Different methods has corresponding method,
+and it broadcast the netlink message with different xfrm groups.</p>
+
+<p><code>struct xfrm_mgr</code> has many methods, for example:
+    1. notify:  notify the sa change, ex: add, delete, expire ..
+    2. acquire: notify when sp is match, while no SA is got.
+    3. compile_policy:
+    4. new_mapping:
+    5: notify_policy: notify sp change. add, delete, expire.
+    6. report:
+    7. mirgrate:</p>
+
+<!-- more -->
+
+
+<h4><code>struct xfrm_mgr</code> and <code>xfrm_km_list</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1630</span> <span class="k">static</span> <span class="nf">LIST_HEAD</span><span class="p">(</span><span class="n">xfrm_km_list</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">579</span> <span class="k">struct</span> <span class="n">xfrm_mgr</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">580</span>         <span class="k">struct</span> <span class="n">list_head</span>        <span class="n">list</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">581</span>         <span class="kt">char</span>                    <span class="o">*</span><span class="n">id</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">582</span>         <span class="nf">int</span>                     <span class="p">(</span><span class="o">*</span><span class="n">notify</span><span class="p">)(</span><span class="k">struct</span> <span class="n">xfrm_state</span> <span class="o">*</span><span class="n">x</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">km_event</span> <span class="o">*</span><span class="n">c</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">583</span>         <span class="nf">int</span>                     <span class="p">(</span><span class="o">*</span><span class="n">acquire</span><span class="p">)(</span><span class="k">struct</span> <span class="n">xfrm_state</span> <span class="o">*</span><span class="n">x</span><span class="p">,</span> <span class="k">struct</span> <span class="n">xfrm_tmpl</span> <span class="o">*</span><span class="p">,</span> <span class="k">struct</span> <span class="n">xfrm_policy</span> <span class="o">*</span><span class="n">xp</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">584</span>         <span class="k">struct</span> <span class="n">xfrm_policy</span>      <span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="n">compile_policy</span><span class="p">)(</span><span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="kt">int</span> <span class="n">opt</span><span class="p">,</span> <span class="n">u8</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="kt">int</span> <span class="n">len</span><span class="p">,</span> <span class="kt">int</span> <span class="o">*</span><span class="n">dir</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">585</span>         <span class="nf">int</span>                     <span class="p">(</span><span class="o">*</span><span class="n">new_mapping</span><span class="p">)(</span><span class="k">struct</span> <span class="n">xfrm_state</span> <span class="o">*</span><span class="n">x</span><span class="p">,</span> <span class="kt">xfrm_address_t</span> <span class="o">*</span><span class="n">ipaddr</span><span class="p">,</span> <span class="n">__be16</span> <span class="n">sport</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">586</span>         <span class="nf">int</span>                     <span class="p">(</span><span class="o">*</span><span class="n">notify_policy</span><span class="p">)(</span><span class="k">struct</span> <span class="n">xfrm_policy</span> <span class="o">*</span><span class="n">x</span><span class="p">,</span> <span class="kt">int</span> <span class="n">dir</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">km_event</span> <span class="o">*</span><span class="n">c</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">587</span>         <span class="nf">int</span>                     <span class="p">(</span><span class="o">*</span><span class="n">report</span><span class="p">)(</span><span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span><span class="p">,</span> <span class="n">u8</span> <span class="n">proto</span><span class="p">,</span> <span class="k">struct</span> <span class="n">xfrm_selector</span> <span class="o">*</span><span class="n">sel</span><span class="p">,</span> <span class="kt">xfrm_address_t</span> <span class="o">*</span><span class="n">addr</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">588</span>         <span class="nf">int</span>                     <span class="p">(</span><span class="o">*</span><span class="n">migrate</span><span class="p">)(</span><span class="k">const</span> <span class="k">struct</span> <span class="n">xfrm_selector</span> <span class="o">*</span><span class="n">sel</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">589</span>                                            <span class="n">u8</span> <span class="n">dir</span><span class="p">,</span> <span class="n">u8</span> <span class="n">type</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">590</span>                                            <span class="k">const</span> <span class="k">struct</span> <span class="n">xfrm_migrate</span> <span class="o">*</span><span class="n">m</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">591</span>                                            <span class="kt">int</span> <span class="n">num_bundles</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">592</span>                                            <span class="k">const</span> <span class="k">struct</span> <span class="n">xfrm_kmaddress</span> <span class="o">*</span><span class="n">k</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">593</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>xfrm_register_km</code> vs <code>xfrm_unregister_km</code></h4>
+
+<p>Register or unregister a <code>xfrm_mgr</code> to <code>xfrm_km_list</code>.</p>
+
+<p>NOTE:  here we <code>use spin_lock_bh</code>,
+because the <code>km_notify</code> method maybe used in irq bottom half.
+ex: the first packet which trigger the dynamic sa
+negotiation, which is processed in softirq(rx).</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1807</span> <span class="kt">int</span> <span class="nf">xfrm_register_km</span><span class="p">(</span><span class="k">struct</span> <span class="n">xfrm_mgr</span> <span class="o">*</span><span class="n">km</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1808</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1809</span>         <span class="n">spin_lock_bh</span><span class="p">(</span><span class="o">&amp;</span><span class="n">xfrm_km_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1810</span>         <span class="nf">list_add_tail_rcu</span><span class="p">(</span><span class="o">&amp;</span><span class="n">km</span><span class="o">-&gt;</span><span class="n">list</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">xfrm_km_list</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1811</span>         <span class="nf">spin_unlock_bh</span><span class="p">(</span><span class="o">&amp;</span><span class="n">xfrm_km_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1812</span>         <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1813</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1816</span> <span class="kt">int</span> <span class="nf">xfrm_unregister_km</span><span class="p">(</span><span class="k">struct</span> <span class="n">xfrm_mgr</span> <span class="o">*</span><span class="n">km</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1817</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1818</span>         <span class="n">spin_lock_bh</span><span class="p">(</span><span class="o">&amp;</span><span class="n">xfrm_km_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1819</span>         <span class="nf">list_del_rcu</span><span class="p">(</span><span class="o">&amp;</span><span class="n">km</span><span class="o">-&gt;</span><span class="n">list</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1820</span>         <span class="nf">spin_unlock_bh</span><span class="p">(</span><span class="o">&amp;</span><span class="n">xfrm_km_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1821</span>         <span class="nf">synchronize_rcu</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1822</span>         <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1823</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>register with <code>netlink_mgr</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">3031</span> <span class="k">static</span> <span class="kt">int</span> <span class="n">__init</span> <span class="nf">xfrm_user_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">3040</span>         <span class="n">rv</span> <span class="o">=</span> <span class="n">xfrm_register_km</span><span class="p">(</span><span class="o">&amp;</span><span class="n">netlink_mgr</span><span class="p">);</span>
+</span><span class='line'><span class="p">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2989</span> <span class="k">static</span> <span class="k">struct</span> <span class="n">xfrm_mgr</span> <span class="n">netlink_mgr</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2990</span>         <span class="p">.</span><span class="n">id</span>             <span class="o">=</span> <span class="s">&quot;netlink&quot;</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2991</span>         <span class="p">.</span><span class="n">notify</span>         <span class="o">=</span> <span class="n">xfrm_send_state_notify</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2992</span>         <span class="p">.</span><span class="n">acquire</span>        <span class="o">=</span> <span class="n">xfrm_send_acquire</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2993</span>         <span class="p">.</span><span class="n">compile_policy</span> <span class="o">=</span> <span class="n">xfrm_compile_policy</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2994</span>         <span class="p">.</span><span class="n">notify_policy</span>  <span class="o">=</span> <span class="n">xfrm_send_policy_notify</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2995</span>         <span class="p">.</span><span class="n">report</span>         <span class="o">=</span> <span class="n">xfrm_send_report</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2996</span>         <span class="p">.</span><span class="n">migrate</span>        <span class="o">=</span> <span class="n">xfrm_send_migrate</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2997</span>         <span class="p">.</span><span class="n">new_mapping</span>    <span class="o">=</span> <span class="n">xfrm_send_mapping</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2998</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>km_state_expired</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1643</span> <span class="kt">void</span> <span class="n">km_state_notify</span><span class="p">(</span><span class="k">struct</span> <span class="n">xfrm_state</span> <span class="o">*</span><span class="n">x</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">km_event</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1644</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1645</span>         <span class="k">struct</span> <span class="n">xfrm_mgr</span> <span class="o">*</span><span class="n">km</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1646</span>         <span class="nf">rcu_read_lock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1647</span>         <span class="nf">list_for_each_entry_rcu</span><span class="p">(</span><span class="n">km</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">xfrm_km_list</span><span class="p">,</span> <span class="n">list</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1648</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">km</span><span class="o">-&gt;</span><span class="n">notify</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1649</span>                         <span class="n">km</span><span class="o">-&gt;</span><span class="n">notify</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">c</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1650</span>         <span class="nf">rcu_read_unlock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1651</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1656</span> <span class="kt">void</span> <span class="nf">km_state_expired</span><span class="p">(</span><span class="k">struct</span> <span class="n">xfrm_state</span> <span class="o">*</span><span class="n">x</span><span class="p">,</span> <span class="kt">int</span> <span class="n">hard</span><span class="p">,</span> <span class="n">u32</span> <span class="n">portid</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1657</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1658</span>         <span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span> <span class="o">=</span> <span class="n">xs_net</span><span class="p">(</span><span class="n">x</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1659</span>         <span class="k">struct</span> <span class="n">km_event</span> <span class="n">c</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1660</span>
+</span><span class='line'><span class="mi">1661</span>         <span class="n">c</span><span class="p">.</span><span class="n">data</span><span class="p">.</span><span class="n">hard</span> <span class="o">=</span> <span class="n">hard</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1662</span>         <span class="n">c</span><span class="p">.</span><span class="n">portid</span> <span class="o">=</span> <span class="n">portid</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1663</span>         <span class="n">c</span><span class="p">.</span><span class="n">event</span> <span class="o">=</span> <span class="n">XFRM_MSG_EXPIRE</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1664</span>         <span class="nf">km_state_notify</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">c</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1665</span>
+</span><span class='line'><span class="mi">1666</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">hard</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1667</span>                 <span class="n">wake_up</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net</span><span class="o">-&gt;</span><span class="n">xfrm</span><span class="p">.</span><span class="n">km_waitq</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1668</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">1669</span>
+</span><span class='line'><span class="mi">1670</span> <span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">km_state_expired</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>km_policy_expired</code> vs <code>km_policy_notify</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1632</span> <span class="kt">void</span> <span class="n">km_policy_notify</span><span class="p">(</span><span class="k">struct</span> <span class="n">xfrm_policy</span> <span class="o">*</span><span class="n">xp</span><span class="p">,</span> <span class="kt">int</span> <span class="n">dir</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">km_event</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1633</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1634</span>         <span class="k">struct</span> <span class="n">xfrm_mgr</span> <span class="o">*</span><span class="n">km</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1635</span>
+</span><span class='line'><span class="mi">1636</span>         <span class="nf">rcu_read_lock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1637</span>         <span class="nf">list_for_each_entry_rcu</span><span class="p">(</span><span class="n">km</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">xfrm_km_list</span><span class="p">,</span> <span class="n">list</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1638</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">km</span><span class="o">-&gt;</span><span class="n">notify_policy</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1639</span>                         <span class="n">km</span><span class="o">-&gt;</span><span class="n">notify_policy</span><span class="p">(</span><span class="n">xp</span><span class="p">,</span> <span class="n">dir</span><span class="p">,</span> <span class="n">c</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1640</span>         <span class="nf">rcu_read_unlock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1641</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1708</span> <span class="kt">void</span> <span class="nf">km_policy_expired</span><span class="p">(</span><span class="k">struct</span> <span class="n">xfrm_policy</span> <span class="o">*</span><span class="n">pol</span><span class="p">,</span> <span class="kt">int</span> <span class="n">dir</span><span class="p">,</span> <span class="kt">int</span> <span class="n">hard</span><span class="p">,</span> <span class="n">u32</span> <span class="n">portid</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1709</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1710</span>         <span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span> <span class="o">=</span> <span class="n">xp_net</span><span class="p">(</span><span class="n">pol</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1711</span>         <span class="k">struct</span> <span class="n">km_event</span> <span class="n">c</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1712</span>
+</span><span class='line'><span class="mi">1713</span>         <span class="n">c</span><span class="p">.</span><span class="n">data</span><span class="p">.</span><span class="n">hard</span> <span class="o">=</span> <span class="n">hard</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1714</span>         <span class="n">c</span><span class="p">.</span><span class="n">portid</span> <span class="o">=</span> <span class="n">portid</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1715</span>         <span class="n">c</span><span class="p">.</span><span class="n">event</span> <span class="o">=</span> <span class="n">XFRM_MSG_POLEXPIRE</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1716</span>         <span class="nf">km_policy_notify</span><span class="p">(</span><span class="n">pol</span><span class="p">,</span> <span class="n">dir</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">c</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1717</span>
+</span><span class='line'><span class="mi">1718</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">hard</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1719</span>                 <span class="n">wake_up</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net</span><span class="o">-&gt;</span><span class="n">xfrm</span><span class="p">.</span><span class="n">km_waitq</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1720</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">1721</span> <span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">km_policy_expired</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>xfrm_send_state_notify</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2577</span> <span class="k">static</span> <span class="kt">int</span> <span class="nf">xfrm_send_state_notify</span><span class="p">(</span><span class="k">struct</span> <span class="n">xfrm_state</span> <span class="o">*</span><span class="n">x</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">km_event</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2578</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2579</span>
+</span><span class='line'><span class="mi">2580</span>         <span class="k">switch</span> <span class="p">(</span><span class="n">c</span><span class="o">-&gt;</span><span class="n">event</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2581</span>         <span class="k">case</span> <span class="nl">XFRM_MSG_EXPIRE</span><span class="p">:</span>
+</span><span class='line'><span class="mi">2582</span>                 <span class="k">return</span> <span class="n">xfrm_exp_state_notify</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">c</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2583</span>         <span class="k">case</span> <span class="nl">XFRM_MSG_NEWAE</span><span class="p">:</span>
+</span><span class='line'><span class="mi">2584</span>                 <span class="k">return</span> <span class="n">xfrm_aevent_state_notify</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">c</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2585</span>         <span class="k">case</span> <span class="nl">XFRM_MSG_DELSA</span><span class="p">:</span>
+</span><span class='line'><span class="mi">2586</span>         <span class="k">case</span> <span class="nl">XFRM_MSG_UPDSA</span><span class="p">:</span>
+</span><span class='line'><span class="mi">2587</span>         <span class="k">case</span> <span class="nl">XFRM_MSG_NEWSA</span><span class="p">:</span>
+</span><span class='line'><span class="mi">2588</span>                 <span class="k">return</span> <span class="n">xfrm_notify_sa</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">c</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2589</span>         <span class="k">case</span> <span class="nl">XFRM_MSG_FLUSHSA</span><span class="p">:</span>
+</span><span class='line'><span class="mi">2590</span>                 <span class="k">return</span> <span class="n">xfrm_notify_sa_flush</span><span class="p">(</span><span class="n">c</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2591</span>         <span class="k">default</span><span class="o">:</span>
+</span><span class='line'><span class="mi">2592</span>                 <span class="n">printk</span><span class="p">(</span><span class="n">KERN_NOTICE</span> <span class="s">&quot;xfrm_user: Unknown SA event %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2593</span>                        <span class="n">c</span><span class="o">-&gt;</span><span class="n">event</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2594</span>                 <span class="k">break</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2595</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">2596</span>
+</span><span class='line'><span class="mi">2597</span>         <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2598</span>
+</span><span class='line'><span class="mi">2599</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2428</span> <span class="k">static</span> <span class="kt">int</span> <span class="nf">xfrm_exp_state_notify</span><span class="p">(</span><span class="k">struct</span> <span class="n">xfrm_state</span> <span class="o">*</span><span class="n">x</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">km_event</span> <span class="o">*</span><span class="n">c</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2429</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2430</span>         <span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span> <span class="o">=</span> <span class="n">xs_net</span><span class="p">(</span><span class="n">x</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2431</span>         <span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2432</span>
+</span><span class='line'><span class="mi">2433</span>         <span class="n">skb</span> <span class="o">=</span> <span class="n">nlmsg_new</span><span class="p">(</span><span class="n">xfrm_expire_msgsize</span><span class="p">(),</span> <span class="n">GFP_ATOMIC</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2434</span>         <span class="k">if</span> <span class="p">(</span><span class="n">skb</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2435</span>                 <span class="k">return</span> <span class="o">-</span><span class="n">ENOMEM</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2436</span>
+</span><span class='line'><span class="mi">2437</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">build_expire</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">c</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2438</span>                 <span class="n">kfree_skb</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2439</span>                 <span class="k">return</span> <span class="o">-</span><span class="n">EMSGSIZE</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2440</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">2441</span>
+</span><span class='line'><span class="mi">2442</span>         <span class="k">return</span> <span class="nf">nlmsg_multicast</span><span class="p">(</span><span class="n">net</span><span class="o">-&gt;</span><span class="n">xfrm</span><span class="p">.</span><span class="n">nlsk</span><span class="p">,</span> <span class="n">skb</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">XFRMNLGRP_EXPIRE</span><span class="p">,</span> <span class="n">GFP_ATOMIC</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2443</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>xfrm_send_acquire</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2648</span> <span class="k">static</span> <span class="kt">int</span> <span class="nf">xfrm_send_acquire</span><span class="p">(</span><span class="k">struct</span> <span class="n">xfrm_state</span> <span class="o">*</span><span class="n">x</span><span class="p">,</span> <span class="k">struct</span> <span class="n">xfrm_tmpl</span> <span class="o">*</span><span class="n">xt</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2649</span>                              <span class="k">struct</span> <span class="n">xfrm_policy</span> <span class="o">*</span><span class="n">xp</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2650</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2651</span>         <span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span> <span class="o">=</span> <span class="n">xs_net</span><span class="p">(</span><span class="n">x</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2652</span>         <span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2653</span>
+</span><span class='line'><span class="mi">2654</span>         <span class="n">skb</span> <span class="o">=</span> <span class="n">nlmsg_new</span><span class="p">(</span><span class="n">xfrm_acquire_msgsize</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">xp</span><span class="p">),</span> <span class="n">GFP_ATOMIC</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2655</span>         <span class="k">if</span> <span class="p">(</span><span class="n">skb</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2656</span>                 <span class="k">return</span> <span class="o">-</span><span class="n">ENOMEM</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2657</span>
+</span><span class='line'><span class="mi">2658</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">build_acquire</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">xt</span><span class="p">,</span> <span class="n">xp</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2659</span>                 <span class="n">BUG</span><span class="p">();</span>
+</span><span class='line'><span class="mi">2660</span>
+</span><span class='line'><span class="mi">2661</span>         <span class="k">return</span> <span class="nf">nlmsg_multicast</span><span class="p">(</span><span class="n">net</span><span class="o">-&gt;</span><span class="n">xfrm</span><span class="p">.</span><span class="n">nlsk</span><span class="p">,</span> <span class="n">skb</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">XFRMNLGRP_ACQUIRE</span><span class="p">,</span> <span class="n">GFP_ATOMIC</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2662</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>how to notify strongswan negotiate a new sa.</h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="o">&gt;</span> <span class="n">xfrm_stat_find</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span>  <span class="n">km_query</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span>  <span class="n">km</span><span class="o">-&gt;</span><span class="n">acquire</span>
+</span><span class='line'><span class="nl">equal</span><span class="p">:</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span>  <span class="n">xfrm_send_acquire</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1671</span> <span class="cm">/*</span>
+</span><span class='line'><span class="cm">1672  * We send to all registered managers regardless of failure</span>
+</span><span class='line'><span class="cm">1673  * We are happy with one success</span>
+</span><span class='line'><span class="cm">1674 */</span>
+</span><span class='line'><span class="mi">1675</span> <span class="kt">int</span> <span class="n">km_query</span><span class="p">(</span><span class="k">struct</span> <span class="n">xfrm_state</span> <span class="o">*</span><span class="n">x</span><span class="p">,</span> <span class="k">struct</span> <span class="n">xfrm_tmpl</span> <span class="o">*</span><span class="n">t</span><span class="p">,</span> <span class="k">struct</span> <span class="n">xfrm_policy</span> <span class="o">*</span><span class="n">pol</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1676</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1677</span>         <span class="kt">int</span> <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">EINVAL</span><span class="p">,</span> <span class="n">acqret</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1678</span>         <span class="k">struct</span> <span class="n">xfrm_mgr</span> <span class="o">*</span><span class="n">km</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1679</span>
+</span><span class='line'><span class="mi">1680</span>         <span class="nf">rcu_read_lock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1681</span>         <span class="nf">list_for_each_entry_rcu</span><span class="p">(</span><span class="n">km</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">xfrm_km_list</span><span class="p">,</span> <span class="n">list</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1682</span>                 <span class="n">acqret</span> <span class="o">=</span> <span class="n">km</span><span class="o">-&gt;</span><span class="n">acquire</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">t</span><span class="p">,</span> <span class="n">pol</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1683</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">acqret</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1684</span>                         <span class="n">err</span> <span class="o">=</span> <span class="n">acqret</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1685</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1686</span>         <span class="nf">rcu_read_unlock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1687</span>         <span class="k">return</span> <span class="n">err</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1688</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">1689</span> <span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">km_query</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">788</span> <span class="k">struct</span> <span class="n">xfrm_state</span> <span class="o">*</span>
+</span><span class='line'> <span class="mi">789</span> <span class="n">xfrm_state_find</span><span class="p">(</span><span class="k">const</span> <span class="kt">xfrm_address_t</span> <span class="o">*</span><span class="n">daddr</span><span class="p">,</span> <span class="k">const</span> <span class="kt">xfrm_address_t</span> <span class="o">*</span><span class="n">saddr</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">790</span>                 <span class="k">const</span> <span class="k">struct</span> <span class="n">flowi</span> <span class="o">*</span><span class="n">fl</span><span class="p">,</span> <span class="k">struct</span> <span class="n">xfrm_tmpl</span> <span class="o">*</span><span class="n">tmpl</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">791</span>                 <span class="k">struct</span> <span class="n">xfrm_policy</span> <span class="o">*</span><span class="n">pol</span><span class="p">,</span> <span class="kt">int</span> <span class="o">*</span><span class="n">err</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">792</span>                 <span class="kt">unsigned</span> <span class="kt">short</span> <span class="n">family</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">793</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'> <span class="mi">838</span>         <span class="n">x</span> <span class="o">=</span> <span class="n">best</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">839</span>         <span class="nf">if</span> <span class="p">(</span><span class="o">!</span><span class="n">x</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">error</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">acquire_in_progress</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">840</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">tmpl</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">.</span><span class="n">spi</span> <span class="o">&amp;&amp;</span>
+</span><span class='line'> <span class="mi">841</span>                     <span class="p">(</span><span class="n">x0</span> <span class="o">=</span> <span class="n">__xfrm_state_lookup</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">mark</span><span class="p">,</span> <span class="n">daddr</span><span class="p">,</span> <span class="n">tmpl</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">.</span><span class="n">spi</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">842</span>                                               <span class="n">tmpl</span><span class="o">-&gt;</span><span class="n">id</span><span class="p">.</span><span class="n">proto</span><span class="p">,</span> <span class="n">encap_family</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">843</span>                         <span class="n">to_put</span> <span class="o">=</span> <span class="n">x0</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">844</span>                         <span class="n">error</span> <span class="o">=</span> <span class="o">-</span><span class="n">EEXIST</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">845</span>                         <span class="k">goto</span> <span class="n">out</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">846</span>                 <span class="p">}</span>
+</span><span class='line'> <span class="mi">847</span>                 <span class="n">x</span> <span class="o">=</span> <span class="n">xfrm_state_alloc</span><span class="p">(</span><span class="n">net</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">848</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">x</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">849</span>                         <span class="n">error</span> <span class="o">=</span> <span class="o">-</span><span class="n">ENOMEM</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">850</span>                         <span class="k">goto</span> <span class="n">out</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">851</span>                 <span class="p">}</span>
+</span><span class='line'> <span class="mi">852</span>                 <span class="cm">/* Initialize temporary state matching only</span>
+</span><span class='line'><span class="cm"> 853                  * to current session. */</span>
+</span><span class='line'> <span class="mi">854</span>                 <span class="n">xfrm_init_tempstate</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">fl</span><span class="p">,</span> <span class="n">tmpl</span><span class="p">,</span> <span class="n">daddr</span><span class="p">,</span> <span class="n">saddr</span><span class="p">,</span> <span class="n">family</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">855</span>                 <span class="n">memcpy</span><span class="p">(</span><span class="o">&amp;</span><span class="n">x</span><span class="o">-&gt;</span><span class="n">mark</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">pol</span><span class="o">-&gt;</span><span class="n">mark</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">x</span><span class="o">-&gt;</span><span class="n">mark</span><span class="p">));</span>
+</span><span class='line'> <span class="mi">856</span>
+</span><span class='line'> <span class="mi">857</span>                 <span class="n">error</span> <span class="o">=</span> <span class="n">security_xfrm_state_alloc_acquire</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">pol</span><span class="o">-&gt;</span><span class="n">security</span><span class="p">,</span> <span class="n">fl</span><span class="o">-&gt;</span><span class="n">flowi_secid</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">858</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">error</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">859</span>                         <span class="n">x</span><span class="o">-&gt;</span><span class="n">km</span><span class="p">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">XFRM_STATE_DEAD</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">860</span>                         <span class="n">to_put</span> <span class="o">=</span> <span class="n">x</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">861</span>                         <span class="n">x</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">862</span>                         <span class="k">goto</span> <span class="n">out</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">863</span>                 <span class="p">}</span>
+</span><span class='line'> <span class="mi">864</span>
+</span><span class='line'> <span class="mi">865</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">km_query</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">tmpl</span><span class="p">,</span> <span class="n">pol</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">866</span>                         <span class="n">x</span><span class="o">-&gt;</span><span class="n">km</span><span class="p">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">XFRM_STATE_ACQ</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">867</span>                         <span class="n">list_add</span><span class="p">(</span><span class="o">&amp;</span><span class="n">x</span><span class="o">-&gt;</span><span class="n">km</span><span class="p">.</span><span class="n">all</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">net</span><span class="o">-&gt;</span><span class="n">xfrm</span><span class="p">.</span><span class="n">state_all</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">868</span>                         <span class="n">hlist_add_head</span><span class="p">(</span><span class="o">&amp;</span><span class="n">x</span><span class="o">-&gt;</span><span class="n">bydst</span><span class="p">,</span> <span class="n">net</span><span class="o">-&gt;</span><span class="n">xfrm</span><span class="p">.</span><span class="n">state_bydst</span><span class="o">+</span><span class="n">h</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>pernet <code>net-&gt;xfrm.nlsk</code></h4>
+
+<p>It is a basic of xfrm netlink.
+All the message sent to/from kernel will use it.
+See detail with blog about netlink.</p>
+
+<p><a href="http://martinbj2008.github.io/blog/2013/02/16/netlink-in-kernel">http://martinbj2008.github.io/blog/2013/02/16/netlink-in-kernel</a>
+<a href="http://martinbj2008.github.io/blog/2013/03/15/netlink-in-kernel">http://martinbj2008.github.io/blog/2013/03/15/netlink-in-kernel</a></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">3000</span> <span class="k">static</span> <span class="kt">int</span> <span class="n">__net_init</span> <span class="n">xfrm_user_net_init</span><span class="p">(</span><span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span><span class="p">)</span>
+</span><span class='line'><span class="mi">3001</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">3002</span>         <span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">nlsk</span><span class="p">;</span>
+</span><span class='line'><span class="mi">3003</span>         <span class="k">struct</span> <span class="n">netlink_kernel_cfg</span> <span class="n">cfg</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">3004</span>                 <span class="p">.</span><span class="n">groups</span> <span class="o">=</span> <span class="n">XFRMNLGRP_MAX</span><span class="p">,</span>
+</span><span class='line'><span class="mi">3005</span>                 <span class="p">.</span><span class="n">input</span>  <span class="o">=</span> <span class="n">xfrm_netlink_rcv</span><span class="p">,</span>
+</span><span class='line'><span class="mi">3006</span>         <span class="p">};</span>
+</span><span class='line'><span class="mi">3007</span>
+</span><span class='line'><span class="mi">3008</span>         <span class="n">nlsk</span> <span class="o">=</span> <span class="n">netlink_kernel_create</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">NETLINK_XFRM</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">cfg</span><span class="p">);</span>
+</span><span class='line'><span class="mi">3009</span>         <span class="k">if</span> <span class="p">(</span><span class="n">nlsk</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+</span><span class='line'><span class="mi">3010</span>                 <span class="k">return</span> <span class="o">-</span><span class="n">ENOMEM</span><span class="p">;</span>
+</span><span class='line'><span class="mi">3011</span>         <span class="n">net</span><span class="o">-&gt;</span><span class="n">xfrm</span><span class="p">.</span><span class="n">nlsk_stash</span> <span class="o">=</span> <span class="n">nlsk</span><span class="p">;</span> <span class="cm">/* Don&#39;t set to NULL */</span>
+</span><span class='line'><span class="mi">3012</span>         <span class="nf">rcu_assign_pointer</span><span class="p">(</span><span class="n">net</span><span class="o">-&gt;</span><span class="n">xfrm</span><span class="p">.</span><span class="n">nlsk</span><span class="p">,</span> <span class="n">nlsk</span><span class="p">);</span>
+</span><span class='line'><span class="mi">3013</span>         <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">3014</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>net-&gt;xfrm.km_waitq</code></h4>
+
+<p>It is used to wait SA negotiation complete,
+and is not related with km.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2121</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">route</span> <span class="o">==</span> <span class="nb">NULL</span> <span class="o">&amp;&amp;</span> <span class="n">num_xfrms</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2122</span>                 <span class="cm">/* The only case when xfrm_bundle_lookup() returns a</span>
+</span><span class='line'><span class="cm">2123                  * bundle with null route, is when the template could</span>
+</span><span class='line'><span class="cm">2124                  * not be resolved. It means policies are there, but</span>
+</span><span class='line'><span class="cm">2125                  * bundle could not be created, since we don&#39;t yet</span>
+</span><span class='line'><span class="cm">2126                  * have the xfrm_state&#39;s. We need to wait for KM to</span>
+</span><span class='line'><span class="cm">2127                  * negotiate new SA&#39;s or bail out with error.*/</span>
+</span><span class='line'><span class="mi">2128</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">net</span><span class="o">-&gt;</span><span class="n">xfrm</span><span class="p">.</span><span class="n">sysctl_larval_drop</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2129</span>                         <span class="cm">/* EREMOTE tells the caller to generate</span>
+</span><span class='line'><span class="cm">2130                          * a one-shot blackhole route. */</span>
+</span><span class='line'><span class="mi">2131</span>                         <span class="n">dst_release</span><span class="p">(</span><span class="n">dst</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2132</span>                         <span class="n">xfrm_pols_put</span><span class="p">(</span><span class="n">pols</span><span class="p">,</span> <span class="n">drop_pols</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2133</span>                         <span class="n">XFRM_INC_STATS</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">LINUX_MIB_XFRMOUTNOSTATES</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2134</span>
+</span><span class='line'><span class="mi">2135</span>                         <span class="k">return</span> <span class="n">make_blackhole</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">family</span><span class="p">,</span> <span class="n">dst_orig</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2136</span>                 <span class="p">}</span>
+</span><span class='line'><span class="mi">2137</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">fl</span><span class="o">-&gt;</span><span class="n">flowi_flags</span> <span class="o">&amp;</span> <span class="n">FLOWI_FLAG_CAN_SLEEP</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2138</span>                         <span class="n">DECLARE_WAITQUEUE</span><span class="p">(</span><span class="n">wait</span><span class="p">,</span> <span class="n">current</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2139</span>
+</span><span class='line'><span class="mi">2140</span>                         <span class="n">add_wait_queue</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net</span><span class="o">-&gt;</span><span class="n">xfrm</span><span class="p">.</span><span class="n">km_waitq</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">wait</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2141</span>                         <span class="n">set_current_state</span><span class="p">(</span><span class="n">TASK_INTERRUPTIBLE</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2142</span>                         <span class="n">schedule</span><span class="p">();</span>
+</span><span class='line'><span class="mi">2143</span>                         <span class="n">set_current_state</span><span class="p">(</span><span class="n">TASK_RUNNING</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2144</span>                         <span class="n">remove_wait_queue</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net</span><span class="o">-&gt;</span><span class="n">xfrm</span><span class="p">.</span><span class="n">km_waitq</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">wait</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2145</span>
+</span><span class='line'><span class="mi">2146</span>                         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">signal_pending</span><span class="p">(</span><span class="n">current</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2147</span>                                 <span class="n">dst_release</span><span class="p">(</span><span class="n">dst</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2148</span>                                 <span class="k">goto</span> <span class="n">restart</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2149</span>                         <span class="p">}</span>
+</span><span class='line'><span class="mi">2150</span>
+</span><span class='line'><span class="mi">2151</span>                         <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">ERESTART</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2152</span>                 <span class="p">}</span> <span class="k">else</span>
+</span><span class='line'><span class="mi">2153</span>                         <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">EAGAIN</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2154</span>
+</span><span class='line'><span class="mi">2155</span>                 <span class="n">XFRM_INC_STATS</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">LINUX_MIB_XFRMOUTNOSTATES</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2156</span>                 <span class="k">goto</span> <span class="n">error</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2157</span>         <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-08-26T15:19:00+08:00'><span class='date'><span class='date-month'>Aug</span> <span class='date-day'>26</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>3:19 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/xfrm/'>xfrm</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/08/26/ipv4-route-study-basic-fun/" title="Previous Post: IPv4 route study part 1: basic fun">&laquo; IPv4 route study part 1: basic fun</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/09/06/pfn-to-page-and-page-to-pfn/" title="Next Post: pfn_to_page and page_to_pfn">pfn_to_page and page_to_pfn &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

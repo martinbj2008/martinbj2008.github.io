@@ -1,0 +1,555 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Socket Net_proto_family - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="summary Each family has a corresponding array element of struct net_proto_family,
+which will be called in system call socket. Data Structure 1
+2
+3
+4 &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/11/22/socket-net-proto-family/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Socket Net_proto_family</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-11-22T11:29:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>22</span><span class='date-suffix'>nd</span>, <span class='date-year'>2013</span></span> <span class='time'>11:29 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h3>summary</h3>
+
+<p>Each <code>family</code> has a corresponding array element of <code>struct net_proto_family</code>,
+which will be called in system call <code>socket</code>.</p>
+
+<h3>Data Structure</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">181</span> <span class="k">struct</span> <span class="n">net_proto_family</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">182</span>         <span class="kt">int</span>             <span class="n">family</span><span class="p">;</span>
+</span><span class='line'><span class="mi">183</span>         <span class="nf">int</span>             <span class="p">(</span><span class="o">*</span><span class="n">create</span><span class="p">)(</span><span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span><span class="p">,</span> <span class="k">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock</span><span class="p">,</span>
+</span><span class='line'><span class="mi">184</span>                                   <span class="kt">int</span> <span class="n">protocol</span><span class="p">,</span> <span class="kt">int</span> <span class="n">kern</span><span class="p">);</span>
+</span><span class='line'><span class="mi">185</span>         <span class="k">struct</span> <span class="n">module</span>   <span class="o">*</span><span class="n">owner</span><span class="p">;</span>
+</span><span class='line'><span class="mi">186</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The <code>create</code> is <em>important</em>, which is first and basic function during
+system call <code>socket</code>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">164</span> <span class="k">static</span> <span class="nf">DEFINE_SPINLOCK</span><span class="p">(</span><span class="n">net_family_lock</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">165</span> <span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">net_proto_family</span> <span class="n">__rcu</span> <span class="o">*</span><span class="n">net_families</span><span class="p">[</span><span class="n">NPROTO</span><span class="p">]</span> <span class="n">__read_mostly</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<!-- more -->
+
+
+<h4>NOTE:</h4>
+
+<ol>
+<li>A pointer array and a spin_lock to protect it.</li>
+<li>The spin_lock is used for mutex of <strong>multi writer</strong> (register or unregister).</li>
+<li>RUC lock is used for the mutex between <strong>writer</strong>  and <strong>reader</strong> .</li>
+</ol>
+
+
+<h4>Register/Unregister a net famliy&rsquo;s <code>ops</code></h4>
+
+<h5>sock_register</h5>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2567</span> <span class="cm">/**</span>
+</span><span class='line'><span class="cm">2568  *      sock_register - add a socket protocol handler</span>
+</span><span class='line'><span class="cm">2569  *      @ops: description of protocol</span>
+</span><span class='line'><span class="cm">2570  *</span>
+</span><span class='line'><span class="cm">2571  *      This function is called by a protocol handler that wants to</span>
+</span><span class='line'><span class="cm">2572  *      advertise its address family, and have it linked into the</span>
+</span><span class='line'><span class="cm">2573  *      socket interface. The value ops-&gt;family coresponds to the</span>
+</span><span class='line'><span class="cm">2574  *      socket system call protocol family.</span>
+</span><span class='line'><span class="cm">2575  */</span>
+</span><span class='line'><span class="mi">2576</span> <span class="kt">int</span> <span class="n">sock_register</span><span class="p">(</span><span class="k">const</span> <span class="k">struct</span> <span class="n">net_proto_family</span> <span class="o">*</span><span class="n">ops</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2577</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2578</span>         <span class="kt">int</span> <span class="n">err</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2579</span>
+</span><span class='line'><span class="mi">2580</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">ops</span><span class="o">-&gt;</span><span class="n">family</span> <span class="o">&gt;=</span> <span class="n">NPROTO</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2581</span>                 <span class="n">printk</span><span class="p">(</span><span class="n">KERN_CRIT</span> <span class="s">&quot;protocol %d &gt;= NPROTO(%d)</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">ops</span><span class="o">-&gt;</span><span class="n">family</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2582</span>                        <span class="n">NPROTO</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2583</span>                 <span class="k">return</span> <span class="o">-</span><span class="n">ENOBUFS</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2584</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">2585</span>
+</span><span class='line'><span class="mi">2586</span>         <span class="nf">spin_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net_family_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2587</span>         <span class="k">if</span> <span class="p">(</span><span class="n">rcu_dereference_protected</span><span class="p">(</span><span class="n">net_families</span><span class="p">[</span><span class="n">ops</span><span class="o">-&gt;</span><span class="n">family</span><span class="p">],</span>
+</span><span class='line'><span class="mi">2588</span>                                       <span class="n">lockdep_is_held</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net_family_lock</span><span class="p">)))</span>
+</span><span class='line'><span class="mi">2589</span>                 <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">EEXIST</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2590</span>         <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2591</span>                 <span class="n">rcu_assign_pointer</span><span class="p">(</span><span class="n">net_families</span><span class="p">[</span><span class="n">ops</span><span class="o">-&gt;</span><span class="n">family</span><span class="p">],</span> <span class="n">ops</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2592</span>                 <span class="n">err</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2593</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">2594</span>         <span class="n">spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net_family_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2595</span>
+</span><span class='line'><span class="mi">2596</span>         <span class="nf">printk</span><span class="p">(</span><span class="n">KERN_INFO</span> <span class="s">&quot;NET: Registered protocol family %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">ops</span><span class="o">-&gt;</span><span class="n">family</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2597</span>         <span class="k">return</span> <span class="n">err</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2598</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">2599</span> <span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">sock_register</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>sock_unregister</h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2601</span> <span class="cm">/**</span>
+</span><span class='line'><span class="cm">2602  *      sock_unregister - remove a protocol handler</span>
+</span><span class='line'><span class="cm">2603  *      @family: protocol family to remove</span>
+</span><span class='line'><span class="cm">2604  *</span>
+</span><span class='line'><span class="cm">2605  *      This function is called by a protocol handler that wants to</span>
+</span><span class='line'><span class="cm">2606  *      remove its address family, and have it unlinked from the</span>
+</span><span class='line'><span class="cm">2607  *      new socket creation.</span>
+</span><span class='line'><span class="cm">2608  *</span>
+</span><span class='line'><span class="cm">2609  *      If protocol handler is a module, then it can use module reference</span>
+</span><span class='line'><span class="cm">2610  *      counts to protect against new references. If protocol handler is not</span>
+</span><span class='line'><span class="cm">2611  *      a module then it needs to provide its own protection in</span>
+</span><span class='line'><span class="cm">2612  *      the ops-&gt;create routine.</span>
+</span><span class='line'><span class="cm">2613  */</span>
+</span><span class='line'><span class="mi">2614</span> <span class="kt">void</span> <span class="n">sock_unregister</span><span class="p">(</span><span class="kt">int</span> <span class="n">family</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2615</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2616</span>         <span class="n">BUG_ON</span><span class="p">(</span><span class="n">family</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="o">||</span> <span class="n">family</span> <span class="o">&gt;=</span> <span class="n">NPROTO</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2617</span>
+</span><span class='line'><span class="mi">2618</span>         <span class="nf">spin_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net_family_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2619</span>         <span class="nf">RCU_INIT_POINTER</span><span class="p">(</span><span class="n">net_families</span><span class="p">[</span><span class="n">family</span><span class="p">],</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2620</span>         <span class="nf">spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net_family_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2621</span>
+</span><span class='line'><span class="mi">2622</span>         <span class="nf">synchronize_rcu</span><span class="p">();</span>
+</span><span class='line'><span class="mi">2623</span>
+</span><span class='line'><span class="mi">2624</span>         <span class="nf">printk</span><span class="p">(</span><span class="n">KERN_INFO</span> <span class="s">&quot;NET: Unregistered protocol family %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span> <span class="n">family</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2625</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">2626</span> <span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">sock_unregister</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>who are registered to <code>net_families</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">phonet</span><span class="o">/</span><span class="n">af_phonet</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>    <span class="n">err</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">phonet_proto_family</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">rds</span><span class="o">/</span><span class="n">af_rds</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>    <span class="n">ret</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rds_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">netrom</span><span class="o">/</span><span class="n">af_netrom</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>  <span class="k">if</span> <span class="p">(</span><span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">nr_family_ops</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ipx</span><span class="o">/</span><span class="n">af_ipx</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>    <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ipx_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">vmw_vsock</span><span class="o">/</span><span class="n">af_vsock</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>    <span class="n">err</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">vsock_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">iucv</span><span class="o">/</span><span class="n">af_iucv</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>  <span class="n">err</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">iucv_sock_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">caif</span><span class="o">/</span><span class="n">caif_socket</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>  <span class="kt">int</span> <span class="n">err</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">caif_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">decnet</span><span class="o">/</span><span class="n">af_decnet</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>  <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dn_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">nfc</span><span class="o">/</span><span class="n">af_nfc</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>    <span class="k">return</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">nfc_sock_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">unix</span><span class="o">/</span><span class="n">af_unix</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>  <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">unix_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">packet</span><span class="o">/</span><span class="n">af_packet</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>  <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">packet_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">appletalk</span><span class="o">/</span><span class="n">ddp</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span> <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">atalk_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">can</span><span class="o">/</span><span class="n">af_can</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>    <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">can_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">irda</span><span class="o">/</span><span class="n">af_irda</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>      <span class="n">rc</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">irda_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ax25</span><span class="o">/</span><span class="n">af_ax25</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>  <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ax25_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">atm</span><span class="o">/</span><span class="n">svc</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>   <span class="k">return</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">svc_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">atm</span><span class="o">/</span><span class="n">pvc</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>   <span class="k">return</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pvc_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">rose</span><span class="o">/</span><span class="n">af_rose</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>  <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rose_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">rxrpc</span><span class="o">/</span><span class="n">af_rxrpc</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>    <span class="n">ret</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rxrpc_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">x25</span><span class="o">/</span><span class="n">af_x25</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>    <span class="n">rc</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">x25_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">netlink</span><span class="o">/</span><span class="n">af_netlink</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>    <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">netlink_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ipv6</span><span class="o">/</span><span class="n">af_inet6</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span> <span class="n">err</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inet6_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">bluetooth</span><span class="o">/</span><span class="n">af_bluetooth</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>    <span class="n">err</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">bt_sock_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">tipc</span><span class="o">/</span><span class="n">socket</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>   <span class="n">res</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tipc_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">socket</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span> <span class="o">*</span> <span class="n">sock_register</span> <span class="o">-</span> <span class="n">add</span> <span class="n">a</span> <span class="n">socket</span> <span class="n">protocol</span> <span class="n">handler</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">socket</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="kt">int</span> <span class="n">sock_register</span><span class="p">(</span><span class="k">const</span> <span class="k">struct</span> <span class="n">net_proto_family</span> <span class="o">*</span><span class="n">ops</span><span class="p">)</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">socket</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">sock_register</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">key</span><span class="o">/</span><span class="n">af_key</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>    <span class="n">err</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pfkey_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ieee802154</span><span class="o">/</span><span class="n">af_ieee802154</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>  <span class="n">rc</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ieee802154_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ipv4</span><span class="o">/</span><span class="n">af_inet</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>  <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inet_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">llc</span><span class="o">/</span><span class="n">af_llc</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>    <span class="n">rc</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">llc_ui_family_ops</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>For example:
+    <code>AF_INET</code> and <code>inet_family_ops</code>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1019</span> <span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">net_proto_family</span> <span class="n">inet_family_ops</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1020</span>         <span class="p">.</span><span class="n">family</span> <span class="o">=</span> <span class="n">PF_INET</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1021</span>         <span class="p">.</span><span class="n">create</span> <span class="o">=</span> <span class="n">inet_create</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1022</span>         <span class="p">.</span><span class="n">owner</span>  <span class="o">=</span> <span class="n">THIS_MODULE</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1023</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>register when inet init.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1670</span> <span class="k">static</span> <span class="kt">int</span> <span class="n">__init</span> <span class="nf">inet_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1671</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">1702</span>         <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inet_family_ops</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>net_families</code> is used in system call <code>socket</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1243</span> <span class="kt">int</span> <span class="nf">__sock_create</span><span class="p">(</span><span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span><span class="p">,</span> <span class="kt">int</span> <span class="n">family</span><span class="p">,</span> <span class="kt">int</span> <span class="n">type</span><span class="p">,</span> <span class="kt">int</span> <span class="n">protocol</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1244</span>                          <span class="k">struct</span> <span class="n">socket</span> <span class="o">**</span><span class="n">res</span><span class="p">,</span> <span class="kt">int</span> <span class="n">kern</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1245</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">1291</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_MODULES</span>
+</span><span class='line'><span class="mi">1292</span>         <span class="cm">/* Attempt to load a protocol module if the find failed.</span>
+</span><span class='line'><span class="cm">1293          *</span>
+</span><span class='line'><span class="cm">1294          * 12/09/1996 Marcin: But! this makes REALLY only sense, if the user</span>
+</span><span class='line'><span class="cm">1295          * requested real, full-featured networking support upon configuration.</span>
+</span><span class='line'><span class="cm">1296          * Otherwise module support will break!</span>
+</span><span class='line'><span class="cm">1297          */</span>
+</span><span class='line'><span class="mi">1298</span>         <span class="k">if</span> <span class="p">(</span><span class="n">rcu_access_pointer</span><span class="p">(</span><span class="n">net_families</span><span class="p">[</span><span class="n">family</span><span class="p">])</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1299</span>                 <span class="n">request_module</span><span class="p">(</span><span class="s">&quot;net-pf-%d&quot;</span><span class="p">,</span> <span class="n">family</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1300</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'><span class="mi">1301</span>
+</span><span class='line'><span class="mi">1302</span>         <span class="n">rcu_read_lock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1303</span>         <span class="n">pf</span> <span class="o">=</span> <span class="n">rcu_dereference</span><span class="p">(</span><span class="n">net_families</span><span class="p">[</span><span class="n">family</span><span class="p">]);</span>
+</span><span class='line'><span class="mi">1304</span>         <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">EAFNOSUPPORT</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1305</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pf</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1306</span>                 <span class="k">goto</span> <span class="n">out_release</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1307</span>
+</span><span class='line'><span class="mi">1308</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">1309          * We will call the -&gt;create function, that possibly is in a loadable</span>
+</span><span class='line'><span class="cm">1310          * module, so we have to bump that loadable module refcnt first.</span>
+</span><span class='line'><span class="cm">1311          */</span>
+</span><span class='line'><span class="mi">1312</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">try_module_get</span><span class="p">(</span><span class="n">pf</span><span class="o">-&gt;</span><span class="n">owner</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1313</span>                 <span class="k">goto</span> <span class="n">out_release</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1314</span>
+</span><span class='line'><span class="mi">1315</span>         <span class="cm">/* Now protected by module ref count */</span>
+</span><span class='line'><span class="mi">1316</span>         <span class="n">rcu_read_unlock</span><span class="p">();</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-11-22T11:29:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>22</span><span class='date-suffix'>nd</span>, <span class='date-year'>2013</span></span> <span class='time'>11:29 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/socket/'>socket</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/11/20/how-to-update-github-page-in-multi-pos/" title="Previous Post: how to update github page in multi pos">&laquo; how to update github page in multi pos</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/11/22/system-call-socket/" title="Next Post: system call socket">system call socket &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

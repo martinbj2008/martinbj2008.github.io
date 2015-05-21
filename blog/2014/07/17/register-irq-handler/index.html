@@ -1,0 +1,599 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Register Irq Handler - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="call trace 以handle_level_irq为例说明. 1
+2
+3
+4
+===&gt; handle_level_irq
+==&gt; ==&gt; handle_irq_event
+==&gt; ==&gt; ==&gt; handle_irq_event_percpu
+==&gt &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2014/07/17/register-irq-handler/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Register Irq Handler</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-07-17T11:41:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>17</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>11:41 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h3>call trace</h3>
+
+<p>以<code>handle_level_irq</code>为例说明.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>===&gt; handle_level_irq
+</span><span class='line'>==&gt; ==&gt; handle_irq_event
+</span><span class='line'>==&gt; ==&gt; ==&gt; handle_irq_event_percpu
+</span><span class='line'>==&gt; ==&gt; ==&gt; ==&gt;action-&gt;handler</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>where handler is registered</h4>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>127 static inline int __must_check
+</span><span class='line'>128 request_irq(unsigned int irq, irq_handler_t handler, unsigned long flags,
+</span><span class='line'>129             const char *name, void *dev)
+</span><span class='line'>130 {
+</span><span class='line'>131         return request_threaded_irq(irq, handler, NULL, flags, name, dev);
+</span><span class='line'>132 }</span></code></pre></td></tr></table></div></figure>
+
+
+<!-- more -->
+
+
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>1473 int request_threaded_irq(unsigned int irq, irq_handler_t handler,
+</span><span class='line'>1474                          irq_handler_t thread_fn, unsigned long irqflags,
+</span><span class='line'>1475                          const char *devname, void *dev_id)
+</span><span class='line'>1476 {
+</span><span class='line'>1477         struct irqaction *action;
+</span><span class='line'>1478         struct irq_desc *desc;
+</span><span class='line'>1479         int retval;
+</span><span class='line'>1480
+</span><span class='line'>1481         /*
+</span><span class='line'>1482          * Sanity-check: shared interrupts must pass in a real dev-ID,
+</span><span class='line'>1483          * otherwise we'll have trouble later trying to figure out
+</span><span class='line'>1484          * which interrupt is which (messes up the interrupt freeing
+</span><span class='line'>1485          * logic etc).
+</span><span class='line'>1486          */
+</span><span class='line'>1487         if ((irqflags & IRQF_SHARED) && !dev_id)
+</span><span class='line'>1488                 return -EINVAL;
+</span><span class='line'>1489
+</span><span class='line'>1490         desc = irq_to_desc(irq);
+</span><span class='line'>1491         if (!desc)
+</span><span class='line'>1492                 return -EINVAL;
+</span><span class='line'>1493
+</span><span class='line'>1494         if (!irq_settings_can_request(desc) ||
+</span><span class='line'>1495             WARN_ON(irq_settings_is_per_cpu_devid(desc)))
+</span><span class='line'>1496                 return -EINVAL;
+</span><span class='line'>1497
+</span><span class='line'>1498         if (!handler) {
+</span><span class='line'>1499                 if (!thread_fn)
+</span><span class='line'>1500                         return -EINVAL;
+</span><span class='line'>1501                 handler = irq_default_primary_handler;
+</span><span class='line'>1502         }
+</span><span class='line'>1503
+</span><span class='line'>1504         action = kzalloc(sizeof(struct irqaction), GFP_KERNEL);
+</span><span class='line'>1505         if (!action)
+</span><span class='line'>1506                 return -ENOMEM;
+</span><span class='line'>1507
+</span><span class='line'>1508         action-&gt;handler = handler;
+</span><span class='line'>1509         action-&gt;thread_fn = thread_fn;
+</span><span class='line'>1510         action-&gt;flags = irqflags;
+</span><span class='line'>1511         action-&gt;name = devname;
+</span><span class='line'>1512         action-&gt;dev_id = dev_id;
+</span><span class='line'>1513
+</span><span class='line'>1514         chip_bus_lock(desc);
+</span><span class='line'>1515         retval = __setup_irq(irq, desc, action);
+</span><span class='line'>1516         chip_bus_sync_unlock(desc);
+</span><span class='line'>1517
+</span><span class='line'>1518         if (retval)
+</span><span class='line'>1519                 kfree(action);
+</span><span class='line'>1520
+</span><span class='line'>1521 #ifdef CONFIG_DEBUG_SHIRQ_FIXME
+</span><span class='line'>1522         if (!retval && (irqflags & IRQF_SHARED)) {
+</span><span class='line'>1523                 /*
+</span><span class='line'>1524                  * It's a shared IRQ -- the driver ought to be prepared for it
+</span><span class='line'>1525                  * to happen immediately, so let's make sure....
+</span><span class='line'>1526                  * We disable the irq to make sure that a 'real' IRQ doesn't
+</span><span class='line'>1527                  * run in parallel with our fake.
+</span><span class='line'>1528                  */
+</span><span class='line'>1529                 unsigned long flags;
+</span><span class='line'>1530
+</span><span class='line'>1531                 disable_irq(irq);
+</span><span class='line'>1532                 local_irq_save(flags);
+</span><span class='line'>1533
+</span><span class='line'>1534                 handler(irq, dev_id);
+</span><span class='line'>1535
+</span><span class='line'>1536                 local_irq_restore(flags);
+</span><span class='line'>1537                 enable_irq(irq);
+</span><span class='line'>1538         }
+</span><span class='line'>1539 #endif
+</span><span class='line'>1540         return retval;
+</span><span class='line'>1541 }
+</span><span class='line'>1542 EXPORT_SYMBOL(request_threaded_irq);
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>how to call the handler function</h4>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>409 void
+</span><span class='line'>410 handle_level_irq(unsigned int irq, struct irq_desc *desc)
+</span><span class='line'>411 {
+</span><span class='line'>412         raw_spin_lock(&desc-&gt;lock);
+</span><span class='line'>413         mask_ack_irq(desc);
+</span><span class='line'>414
+</span><span class='line'>415         if (unlikely(irqd_irq_inprogress(&desc-&gt;irq_data)))
+</span><span class='line'>416                 if (!irq_check_poll(desc))
+</span><span class='line'>417                         goto out_unlock;
+</span><span class='line'>418
+</span><span class='line'>419         desc-&gt;istate &= ~(IRQS_REPLAY | IRQS_WAITING);
+</span><span class='line'>420         kstat_incr_irqs_this_cpu(irq, desc);
+</span><span class='line'>421
+</span><span class='line'>422         /*
+</span><span class='line'>423          * If its disabled or no action available
+</span><span class='line'>424          * keep it masked and get out of here
+</span><span class='line'>425          */
+</span><span class='line'>426         if (unlikely(!desc-&gt;action || irqd_irq_disabled(&desc-&gt;irq_data))) {
+</span><span class='line'>427                 desc-&gt;istate |= IRQS_PENDING;
+</span><span class='line'>428                 goto out_unlock;
+</span><span class='line'>429         }
+</span><span class='line'>430
+</span><span class='line'>431         handle_irq_event(desc);
+</span><span class='line'>432
+</span><span class='line'>433         cond_unmask_irq(desc);
+</span><span class='line'>434
+</span><span class='line'>435 out_unlock:
+</span><span class='line'>436         raw_spin_unlock(&desc-&gt;lock);
+</span><span class='line'>437 }
+</span><span class='line'>438 EXPORT_SYMBOL_GPL(handle_level_irq);</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>183 irqreturn_t handle_irq_event(struct irq_desc *desc)
+</span><span class='line'>184 {
+</span><span class='line'>185         struct irqaction *action = desc-&gt;action;
+</span><span class='line'>186         irqreturn_t ret;
+</span><span class='line'>187
+</span><span class='line'>188         desc-&gt;istate &= ~IRQS_PENDING;
+</span><span class='line'>189         irqd_set(&desc-&gt;irq_data, IRQD_IRQ_INPROGRESS);
+</span><span class='line'>190         raw_spin_unlock(&desc-&gt;lock);
+</span><span class='line'>191
+</span><span class='line'>192         ret = handle_irq_event_percpu(desc, action);
+</span><span class='line'>193
+</span><span class='line'>194         raw_spin_lock(&desc-&gt;lock);
+</span><span class='line'>195         irqd_clear(&desc-&gt;irq_data, IRQD_IRQ_INPROGRESS);
+</span><span class='line'>196         return ret;
+</span><span class='line'>197 }</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>133 irqreturn_t
+</span><span class='line'>134 handle_irq_event_percpu(struct irq_desc *desc, struct irqaction *action)
+</span><span class='line'>135 {
+</span><span class='line'>136         irqreturn_t retval = IRQ_NONE;
+</span><span class='line'>137         unsigned int flags = 0, irq = desc-&gt;irq_data.irq;
+</span><span class='line'>138
+</span><span class='line'>139         do {
+</span><span class='line'>140                 irqreturn_t res;
+</span><span class='line'>141
+</span><span class='line'>142                 trace_irq_handler_entry(irq, action);
+</span><span class='line'>143                 res = action-&gt;handler(irq, action-&gt;dev_id);
+</span><span class='line'>144                 trace_irq_handler_exit(irq, action, res);
+</span><span class='line'>145
+</span><span class='line'>146                 if (WARN_ONCE(!irqs_disabled(),"irq %u handler %pF enabled interrupts\n",
+</span><span class='line'>147                               irq, action-&gt;handler))
+</span><span class='line'>148                         local_irq_disable();
+</span><span class='line'>149
+</span><span class='line'>150                 switch (res) {
+</span><span class='line'>151                 case IRQ_WAKE_THREAD:
+</span><span class='line'>152                         /*
+</span><span class='line'>153                          * Catch drivers which return WAKE_THREAD but
+</span><span class='line'>154                          * did not set up a thread function
+</span><span class='line'>155                          */
+</span><span class='line'>156                         if (unlikely(!action-&gt;thread_fn)) {
+</span><span class='line'>157                                 warn_no_thread(irq, action);
+</span><span class='line'>158                                 break;
+</span><span class='line'>159                         }
+</span><span class='line'>160
+</span><span class='line'>161                         __irq_wake_thread(desc, action);
+</span><span class='line'>162
+</span><span class='line'>163                         /* Fall through to add to randomness */
+</span><span class='line'>164                 case IRQ_HANDLED:
+</span><span class='line'>165                         flags |= action-&gt;flags;
+</span><span class='line'>166                         break;
+</span><span class='line'>167
+</span><span class='line'>168                 default:
+</span><span class='line'>169                         break;
+</span><span class='line'>170                 }
+</span><span class='line'>171
+</span><span class='line'>172                 retval |= res;
+</span><span class='line'>173                 action = action-&gt;next;
+</span><span class='line'>174         } while (action);
+</span><span class='line'>175
+</span><span class='line'>176         add_interrupt_randomness(irq, flags);
+</span><span class='line'>177
+</span><span class='line'>178         if (!noirqdebug)
+</span><span class='line'>179                 note_interrupt(irq, desc, retval);
+</span><span class='line'>180         return retval;
+</span><span class='line'>181 }</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2014-07-17T11:41:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>17</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>11:41 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/irqs/'>irqs</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2014/07/17/irq-study/" title="Previous Post: irq vector">&laquo; irq vector</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/" title="Next Post: how to select source ip for a tcp socket">how to select source ip for a tcp socket &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

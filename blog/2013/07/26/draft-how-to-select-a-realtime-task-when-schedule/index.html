@@ -1,0 +1,470 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Draft: How to Select a Realtime Task When Schedule - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="summary There is a struct rt_rq in struct rq. struct rt_rq is used to store all
+the realtime task in current struct rq. which has a struct &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/07/26/draft-how-to-select-a-realtime-task-when-schedule/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Draft: How to Select a Realtime Task When Schedule</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-07-26T09:00:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>26</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>9:00 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2>summary</h2>
+
+<p>There is a <code>struct rt_rq</code> in <code>struct rq</code>. <code>struct rt_rq</code> is used to store all
+the realtime task in current <code>struct rq</code>. which has a <code>struct rt_prio_array active</code>.</p>
+
+<!-- more -->
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">struct</span> <span class="n">rq</span> <span class="p">{</span>
+</span><span class='line'>  <span class="p">...</span>
+</span><span class='line'>  <span class="k">struct</span> <span class="n">rt_rq</span> <span class="p">{</span>
+</span><span class='line'>      <span class="p">...</span>
+</span><span class='line'>      <span class="k">struct</span> <span class="n">rt_prio_array</span> <span class="n">active</span> <span class="p">{</span>
+</span><span class='line'>          <span class="n">DECLARE_BITMAP</span><span class="p">(</span><span class="n">bitmap</span><span class="p">,</span> <span class="n">MAX_RT_PRIO</span><span class="o">+</span><span class="mi">1</span><span class="p">);</span> <span class="cm">/* include 1 bit for delimiter */</span>
+</span><span class='line'>          <span class="k">struct</span> <span class="n">list_head</span> <span class="n">queue</span><span class="p">[</span><span class="n">MAX_RT_PRIO</span><span class="p">];</span>
+</span><span class='line'>      <span class="p">}</span>
+</span><span class='line'>      <span class="p">...</span>
+</span><span class='line'>  <span class="p">}</span>
+</span><span class='line'>  <span class="p">...</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><em>for a</em> <code>rq</code>:
+All the realtime tasks are stored by a bit map and a list array.</p>
+
+<ol>
+<li><p><code>DECLARE_BITMAP(bitmap, MAX_RT_PRIO+1)</code>
+This is a bit map to show if a priority level has task to be selected.
+One bit set to 1 means one or more task(s).</p></li>
+<li><p><code>struct list_head queue[MAX_RT_PRIO]</code>
+This is list array, each element is a list head.
+All tasks are linked into different lists according their priority by
+<code>struct sched_rt_entity</code>&rsquo;s <code>struct list_head run_list</code>.</p></li>
+</ol>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1001</span> <span class="k">struct</span> <span class="n">sched_rt_entity</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1002</span>         <span class="k">struct</span> <span class="n">list_head</span> <span class="n">run_list</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>   Each list has a corresponding bit in previous bitmap.</p>
+
+<p>When we need pick a task, we find find the first bit in the map,
+and then select one task from the corresponding list.</p>
+
+<p>Q1: what is group_rt_rq? what is it used for?
+  CONFIG_RT_GROUP_SCHED??</p>
+
+<h3>Call Trac</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="o">&gt;</span> <span class="n">pick_next_task</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">for_each_class</span><span class="p">(</span><span class="n">class</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'>        <span class="n">p</span> <span class="o">=</span> <span class="n">class</span><span class="o">-&gt;</span><span class="n">pick_next_task</span><span class="p">(</span><span class="n">rq</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">pick_next_task_rt</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">_pick_next_task_rt</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">pick_next_rt_entity</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">sched_find_first_bit</span><span class="p">(</span><span class="n">array</span><span class="o">-&gt;</span><span class="n">bitmap</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">list_entry</span><span class="p">(</span><span class="n">queue</span><span class="o">-&gt;</span><span class="n">next</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sched_rt_entity</span><span class="p">,</span> <span class="n">run_list</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Data Structure</h2>
+
+<h3>realtime runqueue <code>struct rt_rq</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">332</span> <span class="cm">/* Real-Time classes&#39; related field in a runqueue: */</span>
+</span><span class='line'> <span class="mi">333</span> <span class="k">struct</span> <span class="n">rt_rq</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">334</span>         <span class="k">struct</span> <span class="n">rt_prio_array</span> <span class="n">active</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">335</span>         <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">rt_nr_running</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">336</span> <span class="err">#</span><span class="k">if</span> <span class="n">defined</span> <span class="n">CONFIG_SMP</span> <span class="o">||</span> <span class="n">defined</span> <span class="n">CONFIG_RT_GROUP_SCHED</span>
+</span><span class='line'> <span class="mi">337</span>         <span class="k">struct</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">338</span>                 <span class="kt">int</span> <span class="n">curr</span><span class="p">;</span> <span class="cm">/* highest queued rt task prio */</span>
+</span><span class='line'> <span class="mi">339</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_SMP</span>
+</span><span class='line'> <span class="mi">340</span>                 <span class="kt">int</span> <span class="n">next</span><span class="p">;</span> <span class="cm">/* next highest */</span>
+</span><span class='line'> <span class="mi">341</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'> <span class="mi">342</span>         <span class="p">}</span> <span class="n">highest_prio</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">343</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'> <span class="mi">344</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_SMP</span>
+</span><span class='line'> <span class="mi">345</span>         <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">rt_nr_migratory</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">346</span>         <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">rt_nr_total</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">347</span>         <span class="kt">int</span> <span class="n">overloaded</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">348</span>         <span class="k">struct</span> <span class="n">plist_head</span> <span class="n">pushable_tasks</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">349</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'> <span class="mi">350</span>         <span class="kt">int</span> <span class="n">rt_throttled</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">351</span>         <span class="n">u64</span> <span class="n">rt_time</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">352</span>         <span class="n">u64</span> <span class="n">rt_runtime</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">353</span>         <span class="cm">/* Nests inside the rq lock: */</span>
+</span><span class='line'> <span class="mi">354</span>         <span class="kt">raw_spinlock_t</span> <span class="n">rt_runtime_lock</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">355</span>
+</span><span class='line'> <span class="mi">356</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_RT_GROUP_SCHED</span>
+</span><span class='line'> <span class="mi">357</span>         <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">rt_nr_boosted</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">358</span>
+</span><span class='line'> <span class="mi">359</span>         <span class="k">struct</span> <span class="n">rq</span> <span class="o">*</span><span class="n">rq</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">360</span>         <span class="k">struct</span> <span class="n">task_group</span> <span class="o">*</span><span class="n">tg</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">361</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'> <span class="mi">362</span> <span class="p">};</span>
+</span><span class='line'> <span class="mi">363</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>struct rt_prio_array</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'>  <span class="mi">95</span> <span class="cm">/*</span>
+</span><span class='line'><span class="cm">  96  * This is the priority-queue data structure of the RT scheduling class:</span>
+</span><span class='line'><span class="cm">  97  */</span>
+</span><span class='line'>  <span class="mi">98</span> <span class="k">struct</span> <span class="n">rt_prio_array</span> <span class="p">{</span>
+</span><span class='line'>  <span class="mi">99</span>         <span class="n">DECLARE_BITMAP</span><span class="p">(</span><span class="n">bitmap</span><span class="p">,</span> <span class="n">MAX_RT_PRIO</span><span class="o">+</span><span class="mi">1</span><span class="p">);</span> <span class="cm">/* include 1 bit for delimiter */</span>
+</span><span class='line'> <span class="mi">100</span>         <span class="k">struct</span> <span class="n">list_head</span> <span class="n">queue</span><span class="p">[</span><span class="n">MAX_RT_PRIO</span><span class="p">];</span>
+</span><span class='line'> <span class="mi">101</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1001</span> <span class="k">struct</span> <span class="n">sched_rt_entity</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1002</span>         <span class="k">struct</span> <span class="n">list_head</span> <span class="n">run_list</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1003</span>         <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">timeout</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1004</span>         <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">watchdog_stamp</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1005</span>         <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">time_slice</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1006</span>
+</span><span class='line'><span class="mi">1007</span>         <span class="k">struct</span> <span class="n">sched_rt_entity</span> <span class="o">*</span><span class="n">back</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1008</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_RT_GROUP_SCHED</span>
+</span><span class='line'><span class="mi">1009</span>         <span class="k">struct</span> <span class="n">sched_rt_entity</span>  <span class="o">*</span><span class="n">parent</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1010</span>         <span class="cm">/* rq on which this entity is (to be) queued: */</span>
+</span><span class='line'><span class="mi">1011</span>         <span class="k">struct</span> <span class="n">rt_rq</span>            <span class="o">*</span><span class="n">rt_rq</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1012</span>         <span class="cm">/* rq &quot;owned&quot; by this entity/group: */</span>
+</span><span class='line'><span class="mi">1013</span>         <span class="k">struct</span> <span class="n">rt_rq</span>            <span class="o">*</span><span class="n">my_q</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1014</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'><span class="mi">1015</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>pick_next_task_rt</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1323</span> <span class="k">static</span> <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="nf">pick_next_task_rt</span><span class="p">(</span><span class="k">struct</span> <span class="n">rq</span> <span class="o">*</span><span class="n">rq</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1324</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1325</span>         <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">p</span> <span class="o">=</span> <span class="n">_pick_next_task_rt</span><span class="p">(</span><span class="n">rq</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1326</span>
+</span><span class='line'><span class="mi">1327</span>         <span class="cm">/* The running task is never eligible for pushing */</span>
+</span><span class='line'><span class="mi">1328</span>         <span class="k">if</span> <span class="p">(</span><span class="n">p</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1329</span>                 <span class="n">dequeue_pushable_task</span><span class="p">(</span><span class="n">rq</span><span class="p">,</span> <span class="n">p</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1330</span>
+</span><span class='line'><span class="mi">1331</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_SMP</span>
+</span><span class='line'><span class="mi">1332</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">1333          * We detect this state here so that we can avoid taking the RQ</span>
+</span><span class='line'><span class="cm">1334          * lock again later if there is no need to push</span>
+</span><span class='line'><span class="cm">1335          */</span>
+</span><span class='line'><span class="mi">1336</span>         <span class="n">rq</span><span class="o">-&gt;</span><span class="n">post_schedule</span> <span class="o">=</span> <span class="n">has_pushable_tasks</span><span class="p">(</span><span class="n">rq</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1337</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'><span class="mi">1338</span>
+</span><span class='line'><span class="mi">1339</span>         <span class="k">return</span> <span class="n">p</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1340</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-07-26T09:00:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>26</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>9:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/sched/'>sched</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/07/26/how-to-pick-next-task/" title="Previous Post: draft: how to pick next task">&laquo; draft: how to pick next task</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/08/02/unregister-a-new-device/" title="Next Post: unregister a net device">unregister a net device &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

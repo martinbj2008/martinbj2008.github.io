@@ -1,0 +1,718 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Workqueue Basic Structure - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="summary worker 1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+39 15 /* 16 * The poor guys &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2014/02/12/workqueue-basic-structure/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Workqueue Basic Structure</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-02-12T18:19:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>12</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>6:19 pm</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h3>summary</h3>
+
+<!-- more-->
+
+
+<h4><code>worker</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">15</span> <span class="cm">/*</span>
+</span><span class='line'><span class="cm"> 16  * The poor guys doing the actual heavy lifting.  All on-duty workers are</span>
+</span><span class='line'><span class="cm"> 17  * either serving the manager role, on idle list or on busy hash.  For</span>
+</span><span class='line'><span class="cm"> 18  * details on the locking annotation (L, I, X...), refer to workqueue.c.</span>
+</span><span class='line'><span class="cm"> 19  *</span>
+</span><span class='line'><span class="cm"> 20  * Only to be used in workqueue and async.</span>
+</span><span class='line'><span class="cm"> 21  */</span>
+</span><span class='line'> <span class="mi">22</span> <span class="k">struct</span> <span class="n">worker</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">23</span>         <span class="cm">/* on idle list while idle, on busy hash table while busy */</span>
+</span><span class='line'> <span class="mi">24</span>         <span class="k">union</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">25</span>                 <span class="k">struct</span> <span class="n">list_head</span>        <span class="n">entry</span><span class="p">;</span>  <span class="cm">/* L: while idle */</span>
+</span><span class='line'> <span class="mi">26</span>                 <span class="k">struct</span> <span class="n">hlist_node</span>       <span class="n">hentry</span><span class="p">;</span> <span class="cm">/* L: while busy */</span>
+</span><span class='line'> <span class="mi">27</span>         <span class="p">};</span>
+</span><span class='line'> <span class="mi">28</span>
+</span><span class='line'> <span class="mi">29</span>         <span class="k">struct</span> <span class="n">work_struct</span>      <span class="o">*</span><span class="n">current_work</span><span class="p">;</span>  <span class="cm">/* L: work being processed */</span>
+</span><span class='line'> <span class="mi">30</span>         <span class="kt">work_func_t</span>             <span class="n">current_func</span><span class="p">;</span>   <span class="cm">/* L: current_work&#39;s fn */</span>
+</span><span class='line'> <span class="mi">31</span>         <span class="k">struct</span> <span class="n">pool_workqueue</span>   <span class="o">*</span><span class="n">current_pwq</span><span class="p">;</span> <span class="cm">/* L: current_work&#39;s pwq */</span>
+</span><span class='line'> <span class="mi">32</span>         <span class="kt">bool</span>                    <span class="n">desc_valid</span><span class="p">;</span>     <span class="cm">/* -&gt;desc is valid */</span>
+</span><span class='line'> <span class="mi">33</span>         <span class="k">struct</span> <span class="n">list_head</span>        <span class="n">scheduled</span><span class="p">;</span>      <span class="cm">/* L: scheduled works */</span>
+</span><span class='line'> <span class="mi">34</span>
+</span><span class='line'> <span class="mi">35</span>         <span class="cm">/* 64 bytes boundary on 64bit, 32 on 32bit */</span>
+</span><span class='line'> <span class="mi">36</span>
+</span><span class='line'> <span class="mi">37</span>         <span class="k">struct</span> <span class="n">task_struct</span>      <span class="o">*</span><span class="n">task</span><span class="p">;</span>          <span class="cm">/* I: worker task */</span>
+</span><span class='line'> <span class="mi">38</span>         <span class="k">struct</span> <span class="n">worker_pool</span>      <span class="o">*</span><span class="n">pool</span><span class="p">;</span>          <span class="cm">/* I: the associated pool */</span>
+</span><span class='line'> <span class="mi">39</span>                                                 <span class="cm">/* L: for rescuers */</span>
+</span><span class='line'> <span class="mi">40</span>
+</span><span class='line'> <span class="mi">41</span>         <span class="kt">unsigned</span> <span class="kt">long</span>           <span class="n">last_active</span><span class="p">;</span>    <span class="cm">/* L: last active timestamp */</span>
+</span><span class='line'> <span class="mi">42</span>         <span class="kt">unsigned</span> <span class="kt">int</span>            <span class="n">flags</span><span class="p">;</span>          <span class="cm">/* X: flags */</span>
+</span><span class='line'> <span class="mi">43</span>         <span class="kt">int</span>                     <span class="n">id</span><span class="p">;</span>             <span class="cm">/* I: worker id */</span>
+</span><span class='line'> <span class="mi">44</span>
+</span><span class='line'> <span class="mi">45</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm"> 46          * Opaque string set with work_set_desc().  Printed out with task</span>
+</span><span class='line'><span class="cm"> 47          * dump for debugging - WARN, BUG, panic or sysrq.</span>
+</span><span class='line'><span class="cm"> 48          */</span>
+</span><span class='line'> <span class="mi">49</span>         <span class="kt">char</span>                    <span class="n">desc</span><span class="p">[</span><span class="n">WORKER_DESC_LEN</span><span class="p">];</span>
+</span><span class='line'> <span class="mi">50</span>
+</span><span class='line'> <span class="mi">51</span>         <span class="cm">/* used only by rescuers to point to the target workqueue */</span>
+</span><span class='line'> <span class="mi">52</span>         <span class="k">struct</span> <span class="n">workqueue_struct</span> <span class="o">*</span><span class="n">rescue_wq</span><span class="p">;</span>     <span class="cm">/* I: the workqueue to rescue */</span>
+</span><span class='line'> <span class="mi">53</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>workqueue_struct</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">228</span> <span class="cm">/*</span>
+</span><span class='line'><span class="cm"> 229  * The externally visible workqueue.  It relays the issued work items to</span>
+</span><span class='line'><span class="cm"> 230  * the appropriate worker_pool through its pool_workqueues.</span>
+</span><span class='line'><span class="cm"> 231  */</span>
+</span><span class='line'> <span class="mi">232</span> <span class="k">struct</span> <span class="n">workqueue_struct</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">233</span>         <span class="k">struct</span> <span class="n">list_head</span>        <span class="n">pwqs</span><span class="p">;</span>           <span class="cm">/* WR: all pwqs of this wq */</span>
+</span><span class='line'> <span class="mi">234</span>         <span class="k">struct</span> <span class="n">list_head</span>        <span class="n">list</span><span class="p">;</span>           <span class="cm">/* PL: list of all workqueues */</span>
+</span><span class='line'> <span class="mi">235</span>
+</span><span class='line'> <span class="mi">236</span>         <span class="k">struct</span> <span class="n">mutex</span>            <span class="n">mutex</span><span class="p">;</span>          <span class="cm">/* protects this wq */</span>
+</span><span class='line'> <span class="mi">237</span>         <span class="kt">int</span>                     <span class="n">work_color</span><span class="p">;</span>     <span class="cm">/* WQ: current work color */</span>
+</span><span class='line'> <span class="mi">238</span>         <span class="kt">int</span>                     <span class="n">flush_color</span><span class="p">;</span>    <span class="cm">/* WQ: current flush color */</span>
+</span><span class='line'> <span class="mi">239</span>         <span class="kt">atomic_t</span>                <span class="n">nr_pwqs_to_flush</span><span class="p">;</span> <span class="cm">/* flush in progress */</span>
+</span><span class='line'> <span class="mi">240</span>         <span class="k">struct</span> <span class="n">wq_flusher</span>       <span class="o">*</span><span class="n">first_flusher</span><span class="p">;</span> <span class="cm">/* WQ: first flusher */</span>
+</span><span class='line'> <span class="mi">241</span>         <span class="k">struct</span> <span class="n">list_head</span>        <span class="n">flusher_queue</span><span class="p">;</span>  <span class="cm">/* WQ: flush waiters */</span>
+</span><span class='line'> <span class="mi">242</span>         <span class="k">struct</span> <span class="n">list_head</span>        <span class="n">flusher_overflow</span><span class="p">;</span> <span class="cm">/* WQ: flush overflow list */</span>
+</span><span class='line'> <span class="mi">243</span>
+</span><span class='line'> <span class="mi">244</span>         <span class="k">struct</span> <span class="n">list_head</span>        <span class="n">maydays</span><span class="p">;</span>        <span class="cm">/* MD: pwqs requesting rescue */</span>
+</span><span class='line'> <span class="mi">245</span>         <span class="k">struct</span> <span class="n">worker</span>           <span class="o">*</span><span class="n">rescuer</span><span class="p">;</span>       <span class="cm">/* I: rescue worker */</span>
+</span><span class='line'> <span class="mi">246</span>
+</span><span class='line'> <span class="mi">247</span>         <span class="kt">int</span>                     <span class="n">nr_drainers</span><span class="p">;</span>    <span class="cm">/* WQ: drain in progress */</span>
+</span><span class='line'> <span class="mi">248</span>         <span class="kt">int</span>                     <span class="n">saved_max_active</span><span class="p">;</span> <span class="cm">/* WQ: saved pwq max_active */</span>
+</span><span class='line'> <span class="mi">249</span>
+</span><span class='line'> <span class="mi">250</span>         <span class="k">struct</span> <span class="n">workqueue_attrs</span>  <span class="o">*</span><span class="n">unbound_attrs</span><span class="p">;</span> <span class="cm">/* WQ: only for unbound wqs */</span>
+</span><span class='line'> <span class="mi">251</span>         <span class="k">struct</span> <span class="n">pool_workqueue</span>   <span class="o">*</span><span class="n">dfl_pwq</span><span class="p">;</span>       <span class="cm">/* WQ: only for unbound wqs */</span>
+</span><span class='line'> <span class="mi">252</span>
+</span><span class='line'> <span class="mi">253</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_SYSFS</span>
+</span><span class='line'> <span class="mi">254</span>         <span class="k">struct</span> <span class="n">wq_device</span>        <span class="o">*</span><span class="n">wq_dev</span><span class="p">;</span>        <span class="cm">/* I: for sysfs interface */</span>
+</span><span class='line'> <span class="mi">255</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'> <span class="mi">256</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_LOCKDEP</span>
+</span><span class='line'> <span class="mi">257</span>         <span class="k">struct</span> <span class="n">lockdep_map</span>      <span class="n">lockdep_map</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">258</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'> <span class="mi">259</span>         <span class="kt">char</span>                    <span class="n">name</span><span class="p">[</span><span class="n">WQ_NAME_LEN</span><span class="p">];</span> <span class="cm">/* I: workqueue name */</span>
+</span><span class='line'> <span class="mi">260</span>
+</span><span class='line'> <span class="mi">261</span>         <span class="cm">/* hot fields used during command issue, aligned to cacheline */</span>
+</span><span class='line'> <span class="mi">262</span>         <span class="kt">unsigned</span> <span class="kt">int</span>            <span class="n">flags</span> <span class="n">____cacheline_aligned</span><span class="p">;</span> <span class="cm">/* WQ: WQ_* flags */</span>
+</span><span class='line'> <span class="mi">263</span>         <span class="k">struct</span> <span class="n">pool_workqueue</span> <span class="n">__percpu</span> <span class="o">*</span><span class="n">cpu_pwqs</span><span class="p">;</span> <span class="cm">/* I: per-cpu pwqs */</span>
+</span><span class='line'> <span class="mi">264</span>         <span class="k">struct</span> <span class="n">pool_workqueue</span> <span class="n">__rcu</span> <span class="o">*</span><span class="n">numa_pwq_tbl</span><span class="p">[];</span> <span class="cm">/* FR: unbound pwqs indexed by node */</span>
+</span><span class='line'> <span class="mi">265</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>struct worker_pool</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">143</span> <span class="k">struct</span> <span class="n">worker_pool</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">144</span>         <span class="kt">spinlock_t</span>              <span class="n">lock</span><span class="p">;</span>           <span class="cm">/* the pool lock */</span>
+</span><span class='line'> <span class="mi">145</span>         <span class="kt">int</span>                     <span class="n">cpu</span><span class="p">;</span>            <span class="cm">/* I: the associated cpu */</span>
+</span><span class='line'> <span class="mi">146</span>         <span class="kt">int</span>                     <span class="n">node</span><span class="p">;</span>           <span class="cm">/* I: the associated node ID */</span>
+</span><span class='line'> <span class="mi">147</span>         <span class="kt">int</span>                     <span class="n">id</span><span class="p">;</span>             <span class="cm">/* I: pool ID */</span>
+</span><span class='line'> <span class="mi">148</span>         <span class="kt">unsigned</span> <span class="kt">int</span>            <span class="n">flags</span><span class="p">;</span>          <span class="cm">/* X: flags */</span>
+</span><span class='line'> <span class="mi">149</span>
+</span><span class='line'> <span class="mi">150</span>         <span class="k">struct</span> <span class="n">list_head</span>        <span class="n">worklist</span><span class="p">;</span>       <span class="cm">/* L: list of pending works */</span>
+</span><span class='line'> <span class="mi">151</span>         <span class="kt">int</span>                     <span class="n">nr_workers</span><span class="p">;</span>     <span class="cm">/* L: total number of workers */</span>
+</span><span class='line'> <span class="mi">152</span>
+</span><span class='line'> <span class="mi">153</span>         <span class="cm">/* nr_idle includes the ones off idle_list for rebinding */</span>
+</span><span class='line'> <span class="mi">154</span>         <span class="kt">int</span>                     <span class="n">nr_idle</span><span class="p">;</span>        <span class="cm">/* L: currently idle ones */</span>
+</span><span class='line'> <span class="mi">155</span>
+</span><span class='line'> <span class="mi">156</span>         <span class="k">struct</span> <span class="n">list_head</span>        <span class="n">idle_list</span><span class="p">;</span>      <span class="cm">/* X: list of idle workers */</span>
+</span><span class='line'> <span class="mi">157</span>         <span class="k">struct</span> <span class="n">timer_list</span>       <span class="n">idle_timer</span><span class="p">;</span>     <span class="cm">/* L: worker idle timeout */</span>
+</span><span class='line'> <span class="mi">158</span>         <span class="k">struct</span> <span class="n">timer_list</span>       <span class="n">mayday_timer</span><span class="p">;</span>   <span class="cm">/* L: SOS timer for workers */</span>
+</span><span class='line'> <span class="mi">159</span>
+</span><span class='line'> <span class="mi">160</span>         <span class="cm">/* a workers is either on busy_hash or idle_list, or the manager */</span>
+</span><span class='line'> <span class="mi">161</span>         <span class="n">DECLARE_HASHTABLE</span><span class="p">(</span><span class="n">busy_hash</span><span class="p">,</span> <span class="n">BUSY_WORKER_HASH_ORDER</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">162</span>                                                 <span class="cm">/* L: hash of busy workers */</span>
+</span><span class='line'> <span class="mi">163</span>
+</span><span class='line'> <span class="mi">164</span>         <span class="cm">/* see manage_workers() for details on the two manager mutexes */</span>
+</span><span class='line'> <span class="mi">165</span>         <span class="k">struct</span> <span class="n">mutex</span>            <span class="n">manager_arb</span><span class="p">;</span>    <span class="cm">/* manager arbitration */</span>
+</span><span class='line'> <span class="mi">166</span>         <span class="k">struct</span> <span class="n">mutex</span>            <span class="n">manager_mutex</span><span class="p">;</span>  <span class="cm">/* manager exclusion */</span>
+</span><span class='line'> <span class="mi">167</span>         <span class="k">struct</span> <span class="n">idr</span>              <span class="n">worker_idr</span><span class="p">;</span>     <span class="cm">/* MG: worker IDs and iteration */</span>
+</span><span class='line'> <span class="mi">168</span>
+</span><span class='line'> <span class="mi">169</span>         <span class="k">struct</span> <span class="n">workqueue_attrs</span>  <span class="o">*</span><span class="n">attrs</span><span class="p">;</span>         <span class="cm">/* I: worker attributes */</span>
+</span><span class='line'> <span class="mi">170</span>         <span class="k">struct</span> <span class="n">hlist_node</span>       <span class="n">hash_node</span><span class="p">;</span>      <span class="cm">/* PL: unbound_pool_hash node */</span>
+</span><span class='line'> <span class="mi">171</span>         <span class="kt">int</span>                     <span class="n">refcnt</span><span class="p">;</span>         <span class="cm">/* PL: refcnt for unbound pools */</span>
+</span><span class='line'> <span class="mi">172</span>
+</span><span class='line'> <span class="mi">173</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm"> 174          * The current concurrency level.  As it&#39;s likely to be accessed</span>
+</span><span class='line'><span class="cm"> 175          * from other CPUs during try_to_wake_up(), put it in a separate</span>
+</span><span class='line'><span class="cm"> 176          * cacheline.</span>
+</span><span class='line'><span class="cm"> 177          */</span>
+</span><span class='line'> <span class="mi">178</span>         <span class="kt">atomic_t</span>                <span class="n">nr_running</span> <span class="n">____cacheline_aligned_in_smp</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">179</span>
+</span><span class='line'> <span class="mi">180</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm"> 181          * Destruction of pool is sched-RCU protected to allow dereferences</span>
+</span><span class='line'><span class="cm"> 182          * from get_work_pool().</span>
+</span><span class='line'><span class="cm"> 183          */</span>
+</span><span class='line'> <span class="mi">184</span>         <span class="k">struct</span> <span class="n">rcu_head</span>         <span class="n">rcu</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">185</span> <span class="p">}</span> <span class="n">____cacheline_aligned_in_smp</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">297</span> <span class="k">static</span> <span class="nf">DEFINE_PER_CPU_SHARED_ALIGNED</span><span class="p">(</span><span class="k">struct</span> <span class="n">worker_pool</span> <span class="p">[</span><span class="n">NR_STD_WORKER_POOLS</span><span class="p">],</span>
+</span><span class='line'><span class="mi">298</span>                                      <span class="n">cpu_worker_pools</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>struct pool_workqueue</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">193</span> <span class="k">struct</span> <span class="n">pool_workqueue</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">194</span>         <span class="k">struct</span> <span class="n">worker_pool</span>      <span class="o">*</span><span class="n">pool</span><span class="p">;</span>          <span class="cm">/* I: the associated pool */</span>
+</span><span class='line'> <span class="mi">195</span>         <span class="k">struct</span> <span class="n">workqueue_struct</span> <span class="o">*</span><span class="n">wq</span><span class="p">;</span>            <span class="cm">/* I: the owning workqueue */</span>
+</span><span class='line'> <span class="mi">196</span>         <span class="kt">int</span>                     <span class="n">work_color</span><span class="p">;</span>     <span class="cm">/* L: current color */</span>
+</span><span class='line'> <span class="mi">197</span>         <span class="kt">int</span>                     <span class="n">flush_color</span><span class="p">;</span>    <span class="cm">/* L: flushing color */</span>
+</span><span class='line'> <span class="mi">198</span>         <span class="kt">int</span>                     <span class="n">refcnt</span><span class="p">;</span>         <span class="cm">/* L: reference count */</span>
+</span><span class='line'> <span class="mi">199</span>         <span class="kt">int</span>                     <span class="n">nr_in_flight</span><span class="p">[</span><span class="n">WORK_NR_COLORS</span><span class="p">];</span>
+</span><span class='line'> <span class="mi">200</span>                                                 <span class="cm">/* L: nr of in_flight works */</span>
+</span><span class='line'> <span class="mi">201</span>         <span class="kt">int</span>                     <span class="n">nr_active</span><span class="p">;</span>      <span class="cm">/* L: nr of active works */</span>
+</span><span class='line'> <span class="mi">202</span>         <span class="kt">int</span>                     <span class="n">max_active</span><span class="p">;</span>     <span class="cm">/* L: max active works */</span>
+</span><span class='line'> <span class="mi">203</span>         <span class="k">struct</span> <span class="n">list_head</span>        <span class="n">delayed_works</span><span class="p">;</span>  <span class="cm">/* L: delayed works */</span>
+</span><span class='line'> <span class="mi">204</span>         <span class="k">struct</span> <span class="n">list_head</span>        <span class="n">pwqs_node</span><span class="p">;</span>      <span class="cm">/* WR: node on wq-&gt;pwqs */</span>
+</span><span class='line'> <span class="mi">205</span>         <span class="k">struct</span> <span class="n">list_head</span>        <span class="n">mayday_node</span><span class="p">;</span>    <span class="cm">/* MD: node on wq-&gt;maydays */</span>
+</span><span class='line'> <span class="mi">206</span>
+</span><span class='line'> <span class="mi">207</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm"> 208          * Release of unbound pwq is punted to system_wq.  See put_pwq()</span>
+</span><span class='line'><span class="cm"> 209          * and pwq_unbound_release_workfn() for details.  pool_workqueue</span>
+</span><span class='line'><span class="cm"> 210          * itself is also sched-RCU protected so that the first pwq can be</span>
+</span><span class='line'><span class="cm"> 211          * determined without grabbing wq-&gt;mutex.</span>
+</span><span class='line'><span class="cm"> 212          */</span>
+</span><span class='line'> <span class="mi">213</span>         <span class="k">struct</span> <span class="n">work_struct</span>      <span class="n">unbound_release_work</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">214</span>         <span class="k">struct</span> <span class="n">rcu_head</span>         <span class="n">rcu</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">215</span> <span class="p">}</span> <span class="n">__aligned</span><span class="p">(</span><span class="mi">1</span> <span class="o">&lt;&lt;</span> <span class="n">WORK_STRUCT_FLAG_BITS</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>work_struct</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">100</span> <span class="k">struct</span> <span class="n">work_struct</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">101</span>         <span class="kt">atomic_long_t</span> <span class="n">data</span><span class="p">;</span>
+</span><span class='line'><span class="mi">102</span>         <span class="k">struct</span> <span class="n">list_head</span> <span class="n">entry</span><span class="p">;</span>
+</span><span class='line'><span class="mi">103</span>         <span class="kt">work_func_t</span> <span class="n">func</span><span class="p">;</span>
+</span><span class='line'><span class="mi">104</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_LOCKDEP</span>
+</span><span class='line'><span class="mi">105</span>         <span class="k">struct</span> <span class="n">lockdep_map</span> <span class="n">lockdep_map</span><span class="p">;</span>
+</span><span class='line'><span class="mi">106</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'><span class="mi">107</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>struct delayed_work</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">113</span> <span class="k">struct</span> <span class="n">delayed_work</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">114</span>         <span class="k">struct</span> <span class="n">work_struct</span> <span class="n">work</span><span class="p">;</span>
+</span><span class='line'><span class="mi">115</span>         <span class="k">struct</span> <span class="n">timer_list</span> <span class="n">timer</span><span class="p">;</span>
+</span><span class='line'><span class="mi">116</span>
+</span><span class='line'><span class="mi">117</span>         <span class="cm">/* target workqueue and CPU -&gt;timer uses to queue -&gt;work */</span>
+</span><span class='line'><span class="mi">118</span>         <span class="k">struct</span> <span class="n">workqueue_struct</span> <span class="o">*</span><span class="n">wq</span><span class="p">;</span>
+</span><span class='line'><span class="mi">119</span>         <span class="kt">int</span> <span class="n">cpu</span><span class="p">;</span>
+</span><span class='line'><span class="mi">120</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Define a delayed worker.</h4>
+
+<p>include two parts:</p>
+
+<ol>
+<li><p>timer: to process the &lsquo;delay&rsquo;, define a timer with <code>delayed_work_timer_fn</code>.
+ which just call <code>__queue_work</code>.</p></li>
+<li><p>all the other parts are done for <code>work</code>.</p></li>
+</ol>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">static</span> <span class="nf">DECLARE_DELAYED_WORK</span><span class="p">(</span><span class="n">dst_gc_work</span><span class="p">,</span> <span class="n">dst_gc_task</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">174</span> <span class="err">#</span><span class="n">define</span> <span class="n">DECLARE_DELAYED_WORK</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>                                      \
+</span><span class='line'><span class="mi">175</span>         <span class="k">struct</span> <span class="n">delayed_work</span> <span class="n">n</span> <span class="o">=</span> <span class="n">__DELAYED_WORK_INITIALIZER</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">164</span> <span class="err">#</span><span class="n">define</span> <span class="n">__DELAYED_WORK_INITIALIZER</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">tflags</span><span class="p">)</span> <span class="p">{</span>                      \
+</span><span class='line'><span class="mi">165</span>         <span class="p">.</span><span class="n">work</span> <span class="o">=</span> <span class="n">__WORK_INITIALIZER</span><span class="p">((</span><span class="n">n</span><span class="p">).</span><span class="n">work</span><span class="p">,</span> <span class="p">(</span><span class="n">f</span><span class="p">)),</span>                      \
+</span><span class='line'><span class="mi">166</span>         <span class="p">.</span><span class="n">timer</span> <span class="o">=</span> <span class="n">__TIMER_INITIALIZER</span><span class="p">(</span><span class="n">delayed_work_timer_fn</span><span class="p">,</span>             \
+</span><span class='line'><span class="mi">167</span>                                      <span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">)</span><span class="o">&amp;</span><span class="p">(</span><span class="n">n</span><span class="p">),</span>            \
+</span><span class='line'><span class="mi">168</span>                                      <span class="p">(</span><span class="n">tflags</span><span class="p">)</span> <span class="o">|</span> <span class="n">TIMER_IRQSAFE</span><span class="p">),</span>         \
+</span><span class='line'><span class="mi">169</span>         <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">157</span> <span class="err">#</span><span class="n">define</span> <span class="n">__WORK_INITIALIZER</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span> <span class="p">{</span>                                      \
+</span><span class='line'><span class="mi">158</span>         <span class="p">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">WORK_DATA_STATIC_INIT</span><span class="p">(),</span>                                \
+</span><span class='line'><span class="mi">159</span>         <span class="p">.</span><span class="n">entry</span>  <span class="o">=</span> <span class="p">{</span> <span class="o">&amp;</span><span class="p">(</span><span class="n">n</span><span class="p">).</span><span class="n">entry</span><span class="p">,</span> <span class="o">&amp;</span><span class="p">(</span><span class="n">n</span><span class="p">).</span><span class="n">entry</span> <span class="p">},</span>                           \
+</span><span class='line'><span class="mi">160</span>         <span class="p">.</span><span class="n">func</span> <span class="o">=</span> <span class="p">(</span><span class="n">f</span><span class="p">),</span>                                                    \
+</span><span class='line'><span class="mi">161</span>         <span class="n">__WORK_INIT_LOCKDEP_MAP</span><span class="p">(</span><span class="err">#</span><span class="n">n</span><span class="p">,</span> <span class="o">&amp;</span><span class="p">(</span><span class="n">n</span><span class="p">))</span>                               \
+</span><span class='line'><span class="mi">162</span>         <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">109</span> <span class="err">#</span><span class="n">define</span> <span class="n">WORK_DATA_INIT</span><span class="p">()</span>        <span class="n">ATOMIC_LONG_INIT</span><span class="p">(</span><span class="n">WORK_STRUCT_NO_POOL</span><span class="p">)</span>
+</span><span class='line'><span class="mi">110</span> <span class="err">#</span><span class="n">define</span> <span class="n">WORK_DATA_STATIC_INIT</span><span class="p">()</span> \
+</span><span class='line'><span class="mi">111</span>         <span class="n">ATOMIC_LONG_INIT</span><span class="p">(</span><span class="n">WORK_STRUCT_NO_POOL</span> <span class="o">|</span> <span class="n">WORK_STRUCT_STATIC</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1444</span> <span class="kt">void</span> <span class="n">delayed_work_timer_fn</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">__data</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1445</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1446</span>         <span class="k">struct</span> <span class="n">delayed_work</span> <span class="o">*</span><span class="n">dwork</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">delayed_work</span> <span class="o">*</span><span class="p">)</span><span class="n">__data</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1447</span>
+</span><span class='line'><span class="mi">1448</span>         <span class="cm">/* should have been called from irqsafe timer with irq already off */</span>
+</span><span class='line'><span class="mi">1449</span>         <span class="n">__queue_work</span><span class="p">(</span><span class="n">dwork</span><span class="o">-&gt;</span><span class="n">cpu</span><span class="p">,</span> <span class="n">dwork</span><span class="o">-&gt;</span><span class="n">wq</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">dwork</span><span class="o">-&gt;</span><span class="n">work</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1450</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">1451</span> <span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">delayed_work_timer_fn</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>define a work or deferrable work.</h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">171</span> <span class="err">#</span><span class="n">define</span> <span class="n">DECLARE_WORK</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>                                              \
+</span><span class='line'><span class="mi">172</span>         <span class="k">struct</span> <span class="n">work_struct</span> <span class="n">n</span> <span class="o">=</span> <span class="n">__WORK_INITIALIZER</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+</span><span class='line'><span class="mi">177</span> <span class="err">#</span><span class="n">define</span> <span class="n">DECLARE_DEFERRABLE_WORK</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>                                   \
+</span><span class='line'><span class="mi">178</span>         <span class="k">struct</span> <span class="n">delayed_work</span> <span class="n">n</span> <span class="o">=</span> <span class="n">__DELAYED_WORK_INITIALIZER</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">TIMER_DEFERRABLE</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2014-02-12T18:19:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>12</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>6:19 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/irqs/'>irqs</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2014/02/11/dst-garbage/" title="Previous Post: dst garbage">&laquo; dst garbage</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2014/02/18/worker-and-worker-thread/" title="Next Post: worker and worker_thread">worker and worker_thread &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

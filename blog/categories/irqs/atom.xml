@@ -1,0 +1,851 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Irqs | My Octopress Blog]]></title>
+  <link href="http://martinbj2008.github.io/blog/categories/irqs/atom.xml" rel="self"/>
+  <link href="http://martinbj2008.github.io/"/>
+  <updated>2015-05-21T16:26:25+08:00</updated>
+  <id>http://martinbj2008.github.io/</id>
+  <author>
+    <name><![CDATA[Your Name]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Register Irq Handler]]></title>
+    <link href="http://martinbj2008.github.io/blog/2014/07/17/register-irq-handler/"/>
+    <updated>2014-07-17T11:41:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2014/07/17/register-irq-handler</id>
+    <content type="html"><![CDATA[<h3>call trace</h3>
+
+<p>以<code>handle_level_irq</code>为例说明.
+<code>
+===&gt; handle_level_irq
+==&gt; ==&gt; handle_irq_event
+==&gt; ==&gt; ==&gt; handle_irq_event_percpu
+==&gt; ==&gt; ==&gt; ==&gt;action-&gt;handler
+</code></p>
+
+<h4>where handler is registered</h4>
+
+<pre><code>127 static inline int __must_check
+128 request_irq(unsigned int irq, irq_handler_t handler, unsigned long flags,
+129             const char *name, void *dev)
+130 {
+131         return request_threaded_irq(irq, handler, NULL, flags, name, dev);
+132 }
+</code></pre>
+
+<!-- more -->
+
+
+<pre><code>1473 int request_threaded_irq(unsigned int irq, irq_handler_t handler,
+1474                          irq_handler_t thread_fn, unsigned long irqflags,
+1475                          const char *devname, void *dev_id)
+1476 {
+1477         struct irqaction *action;
+1478         struct irq_desc *desc;
+1479         int retval;
+1480
+1481         /*
+1482          * Sanity-check: shared interrupts must pass in a real dev-ID,
+1483          * otherwise we'll have trouble later trying to figure out
+1484          * which interrupt is which (messes up the interrupt freeing
+1485          * logic etc).
+1486          */
+1487         if ((irqflags &amp; IRQF_SHARED) &amp;&amp; !dev_id)
+1488                 return -EINVAL;
+1489
+1490         desc = irq_to_desc(irq);
+1491         if (!desc)
+1492                 return -EINVAL;
+1493
+1494         if (!irq_settings_can_request(desc) ||
+1495             WARN_ON(irq_settings_is_per_cpu_devid(desc)))
+1496                 return -EINVAL;
+1497
+1498         if (!handler) {
+1499                 if (!thread_fn)
+1500                         return -EINVAL;
+1501                 handler = irq_default_primary_handler;
+1502         }
+1503
+1504         action = kzalloc(sizeof(struct irqaction), GFP_KERNEL);
+1505         if (!action)
+1506                 return -ENOMEM;
+1507
+1508         action-&gt;handler = handler;
+1509         action-&gt;thread_fn = thread_fn;
+1510         action-&gt;flags = irqflags;
+1511         action-&gt;name = devname;
+1512         action-&gt;dev_id = dev_id;
+1513
+1514         chip_bus_lock(desc);
+1515         retval = __setup_irq(irq, desc, action);
+1516         chip_bus_sync_unlock(desc);
+1517
+1518         if (retval)
+1519                 kfree(action);
+1520
+1521 #ifdef CONFIG_DEBUG_SHIRQ_FIXME
+1522         if (!retval &amp;&amp; (irqflags &amp; IRQF_SHARED)) {
+1523                 /*
+1524                  * It's a shared IRQ -- the driver ought to be prepared for it
+1525                  * to happen immediately, so let's make sure....
+1526                  * We disable the irq to make sure that a 'real' IRQ doesn't
+1527                  * run in parallel with our fake.
+1528                  */
+1529                 unsigned long flags;
+1530
+1531                 disable_irq(irq);
+1532                 local_irq_save(flags);
+1533
+1534                 handler(irq, dev_id);
+1535
+1536                 local_irq_restore(flags);
+1537                 enable_irq(irq);
+1538         }
+1539 #endif
+1540         return retval;
+1541 }
+1542 EXPORT_SYMBOL(request_threaded_irq);
+</code></pre>
+
+<h4>how to call the handler function</h4>
+
+<pre><code>409 void
+410 handle_level_irq(unsigned int irq, struct irq_desc *desc)
+411 {
+412         raw_spin_lock(&amp;desc-&gt;lock);
+413         mask_ack_irq(desc);
+414
+415         if (unlikely(irqd_irq_inprogress(&amp;desc-&gt;irq_data)))
+416                 if (!irq_check_poll(desc))
+417                         goto out_unlock;
+418
+419         desc-&gt;istate &amp;= ~(IRQS_REPLAY | IRQS_WAITING);
+420         kstat_incr_irqs_this_cpu(irq, desc);
+421
+422         /*
+423          * If its disabled or no action available
+424          * keep it masked and get out of here
+425          */
+426         if (unlikely(!desc-&gt;action || irqd_irq_disabled(&amp;desc-&gt;irq_data))) {
+427                 desc-&gt;istate |= IRQS_PENDING;
+428                 goto out_unlock;
+429         }
+430
+431         handle_irq_event(desc);
+432
+433         cond_unmask_irq(desc);
+434
+435 out_unlock:
+436         raw_spin_unlock(&amp;desc-&gt;lock);
+437 }
+438 EXPORT_SYMBOL_GPL(handle_level_irq);
+</code></pre>
+
+<pre><code>183 irqreturn_t handle_irq_event(struct irq_desc *desc)
+184 {
+185         struct irqaction *action = desc-&gt;action;
+186         irqreturn_t ret;
+187
+188         desc-&gt;istate &amp;= ~IRQS_PENDING;
+189         irqd_set(&amp;desc-&gt;irq_data, IRQD_IRQ_INPROGRESS);
+190         raw_spin_unlock(&amp;desc-&gt;lock);
+191
+192         ret = handle_irq_event_percpu(desc, action);
+193
+194         raw_spin_lock(&amp;desc-&gt;lock);
+195         irqd_clear(&amp;desc-&gt;irq_data, IRQD_IRQ_INPROGRESS);
+196         return ret;
+197 }
+</code></pre>
+
+<pre><code>133 irqreturn_t
+134 handle_irq_event_percpu(struct irq_desc *desc, struct irqaction *action)
+135 {
+136         irqreturn_t retval = IRQ_NONE;
+137         unsigned int flags = 0, irq = desc-&gt;irq_data.irq;
+138
+139         do {
+140                 irqreturn_t res;
+141
+142                 trace_irq_handler_entry(irq, action);
+143                 res = action-&gt;handler(irq, action-&gt;dev_id);
+144                 trace_irq_handler_exit(irq, action, res);
+145
+146                 if (WARN_ONCE(!irqs_disabled(),"irq %u handler %pF enabled interrupts\n",
+147                               irq, action-&gt;handler))
+148                         local_irq_disable();
+149
+150                 switch (res) {
+151                 case IRQ_WAKE_THREAD:
+152                         /*
+153                          * Catch drivers which return WAKE_THREAD but
+154                          * did not set up a thread function
+155                          */
+156                         if (unlikely(!action-&gt;thread_fn)) {
+157                                 warn_no_thread(irq, action);
+158                                 break;
+159                         }
+160
+161                         __irq_wake_thread(desc, action);
+162
+163                         /* Fall through to add to randomness */
+164                 case IRQ_HANDLED:
+165                         flags |= action-&gt;flags;
+166                         break;
+167
+168                 default:
+169                         break;
+170                 }
+171
+172                 retval |= res;
+173                 action = action-&gt;next;
+174         } while (action);
+175
+176         add_interrupt_randomness(irq, flags);
+177
+178         if (!noirqdebug)
+179                 note_interrupt(irq, desc, retval);
+180         return retval;
+181 }
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Irq Vector]]></title>
+    <link href="http://martinbj2008.github.io/blog/2014/07/17/irq-study/"/>
+    <updated>2014-07-17T10:35:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2014/07/17/irq-study</id>
+    <content type="html"><![CDATA[<h3>中断处理过程：</h3>
+
+<p>reg value&ndash;>irq(int) &mdash;> struct irq_desc
+<code>
+==&gt; 中断时的有一个寄存器会保存中断源的vector值.
+==&gt; ==&gt; `arch/x86/kernel/entry_64.S`调用函数`do_IRQ`.
+==&gt; ==&gt; ==&gt; `do_IRQ`依据`vector_irq`和vector值, 找到对应的中断号,并调用`handle_irq`.
+==&gt; ==&gt; ==&gt; ==&gt; `handle_irq`通过函数irq_to_descdesc,可将中断号转化为`struct irq_desc`.
+==&gt; ==&gt; ==&gt; ==&gt; generic_handle_irq_desc(irq, desc);
+==&gt; ==&gt; ==&gt; ==&gt; ==&gt; `generic_handle_irq_desc`调用 desc-&gt;handle_irq(irq, desc);
+</code>
+注:这里的handle_irq不是真正的中断处理函数,而是几大类中断控制器处理函数.
+如82599, msi等.</p>
+
+<h4>`do_IRQ(struct pt_regs *regs)</h4>
+
+<p>File: arch/x86/kernel/irq.c</p>
+
+<p>arch/x86/kernel/entry_64.S
+will call do_IRQ</p>
+
+<!-- more -->
+
+
+<pre><code>187 __visible unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
+188 {
+189         struct pt_regs *old_regs = set_irq_regs(regs);
+190
+191         /* high bit used in ret_from_ code  */
+192         unsigned vector = ~regs-&gt;orig_ax;
+193         unsigned irq;
+194
+195         irq_enter();
+196         exit_idle();
+197
+198         irq = __this_cpu_read(vector_irq[vector]);
+199
+200         if (!handle_irq(irq, regs)) {
+201                 ack_APIC_irq();
+202
+203                 if (irq != VECTOR_RETRIGGERED) {
+204                         pr_emerg_ratelimited("%s: %d.%d No irq handler for vector (irq %d)\n",
+205                                              __func__, smp_processor_id(),
+206                                              vector, irq);
+207                 } else {
+208                         __this_cpu_write(vector_irq[vector], VECTOR_UNDEFINED);
+209                 }
+210         }
+211
+212         irq_exit();
+213
+214         set_irq_regs(old_regs);
+215         return 1;
+216 }
+</code></pre>
+
+<h4><code>bool handle_irq(unsigned irq, struct pt_regs *regs)</code></h4>
+
+<p>arch/x86/kernel/irq_64.c
+<code>
+ 77 bool handle_irq(unsigned irq, struct pt_regs *regs)
+ 78 {
+ 79         struct irq_desc *desc;
+ 80
+ 81         stack_overflow_check(regs);
+ 82
+ 83         desc = irq_to_desc(irq);
+ 84         if (unlikely(!desc))
+ 85                 return false;
+ 86
+ 87         generic_handle_irq_desc(irq, desc);
+ 88         return true;
+ 89 }
+</code></p>
+
+<h4><code>generic_handle_irq_desc</code></h4>
+
+<p>include/linux/irqdesc.h
+<code>
+114 static inline void generic_handle_irq_desc(unsigned int irq, struct irq_desc *desc)
+115 {
+116         desc-&gt;handle_irq(irq, desc);
+117 }
+</code></p>
+
+<h3>desc里的<code>handle_irq</code>对应哪些函数?</h3>
+
+<p><code>handle_level_irq</code>和<code>handle_edge_irq</code>等
+<code>
+arch/x86/kernel/i8259.c:    irq_set_chip_and_handler_name(irq, &amp;i8259A_chip, handle_level_irq,
+arch/x86/kernel/apic/io_apic.c: irq_set_chip_and_handler_name(irq, chip, hdl,
+arch/x86/kernel/apic/io_apic.c: irq_set_chip_and_handler_name(0, &amp;ioapic_chip, handle_edge_irq,
+arch/x86/kernel/apic/io_apic.c: irq_set_chip_and_handler_name(irq, &amp;lapic_chip, handle_edge_irq,
+arch/x86/kernel/apic/io_apic.c: irq_set_chip_and_handler_name(irq, chip, handle_edge_irq, "edge");
+arch/x86/kernel/apic/io_apic.c: irq_set_chip_and_handler_name(irq, &amp;dmar_msi_type, handle_edge_irq,
+arch/x86/kernel/apic/io_apic.c: irq_set_chip_and_handler_name(irq, chip, handle_edge_irq, "edge");
+arch/x86/kernel/apic/io_apic.c: irq_set_chip_and_handler_name(irq, &amp;ht_irq_chip,
+arch/x86/kernel/apic/io_apic.c: irq_set_chip_and_handler_name(0, &amp;ioapic_chip, handle_edge_irq,
+arch/x86/kernel/irqinit.c:  irq_set_chip_and_handler_name(i, chip, handle_level_irq, name);
+</code></p>
+
+<h4>for example:  8259A</h4>
+
+<pre><code>==&gt; make_8259A_irq
+==&gt; ==&gt; irq_set_chip_and_handler
+==&gt; ==&gt; ==&gt; irq_set_chip_and_handler_name
+==&gt; ==&gt; ==&gt; ==&gt; irq_set_chip
+==&gt; ==&gt; ==&gt; ==&gt; ==&gt; desc = irq_get_desc_buslock
+==&gt; ==&gt; ==&gt; ==&gt; __irq_set_handler
+==&gt; ==&gt; ==&gt; ==&gt; ==&gt; desc = irq_get_desc_buslock
+==&gt; ==&gt; ==&gt; ==&gt; ==&gt; desc-&gt;handle_irq = handle
+</code></pre>
+
+<h5><code>make_8259A_irq</code></h5>
+
+<p>arch/x86/kernel/i8259.c
+<code>
+107 void make_8259A_irq(unsigned int irq)
+108 {
+109         disable_irq_nosync(irq);
+110         irq_set_chip_and_handler(irq, &amp;i8259A_chip, handle_level_irq);
+111         enable_irq(irq);
+112 }
+</code></p>
+
+<h4><code>irq_set_chip_and_handler</code></h4>
+
+<p>include/linux/irq.h
+<code>
+452 static inline void irq_set_chip_and_handler(unsigned int irq, struct irq_chip *chip,
+453                                             irq_flow_handler_t handle)
+454 {
+455         irq_set_chip_and_handler_name(irq, chip, handle, NULL);
+456 }
+</code></p>
+
+<h4><code>irq_set_chip_and_handler_name</code></h4>
+
+<p>kernel/irq/chip.c
+<code>
+726 void
+727 irq_set_chip_and_handler_name(unsigned int irq, struct irq_chip *chip,
+728                               irq_flow_handler_t handle, const char *name)
+729 {
+730         irq_set_chip(irq, chip);
+731         __irq_set_handler(irq, handle, 0, name);
+732 }
+733 EXPORT_SYMBOL_GPL(irq_set_chip_and_handler_name);
+</code>
+<code>
+ 23 /**
+ 24  *      irq_set_chip - set the irq chip for an irq
+ 25  *      @irq:   irq number
+ 26  *      @chip:  pointer to irq chip description structure
+ 27  */
+ 28 int irq_set_chip(unsigned int irq, struct irq_chip *chip)
+ 29 {
+ 30         unsigned long flags;
+ 31         struct irq_desc *desc = irq_get_desc_lock(irq, &amp;flags, 0);
+ 32
+ 33         if (!desc)
+ 34                 return -EINVAL;
+ 35
+ 36         if (!chip)
+ 37                 chip = &amp;no_irq_chip;
+ 38
+ 39         desc-&gt;irq_data.chip = chip;
+ 40         irq_put_desc_unlock(desc, flags);
+ 41         /*
+ 42          * For !CONFIG_SPARSE_IRQ make the irq show up in
+ 43          * allocated_irqs.
+ 44          */
+ 45         irq_mark_irq(irq);
+ 46         return 0;
+ 47 }  
+ 48 EXPORT_SYMBOL(irq_set_chip);
+</code>
+<code>
+688 void
+689 __irq_set_handler(unsigned int irq, irq_flow_handler_t handle, int is_chained,
+690                   const char *name)
+691 {
+692         unsigned long flags;
+693         struct irq_desc *desc = irq_get_desc_buslock(irq, &amp;flags, 0);
+694
+695         if (!desc)
+696                 return;
+697
+698         if (!handle) {
+699                 handle = handle_bad_irq;
+700         } else {
+701                 if (WARN_ON(desc-&gt;irq_data.chip == &amp;no_irq_chip))
+702                         goto out;
+703         }
+704
+705         /* Uninstall? */
+706         if (handle == handle_bad_irq) {
+707                 if (desc-&gt;irq_data.chip != &amp;no_irq_chip)
+708                         mask_ack_irq(desc);
+709                 irq_state_set_disabled(desc);
+710                 desc-&gt;depth = 1;
+711         }
+712         desc-&gt;handle_irq = handle;
+713         desc-&gt;name = name;
+714
+715         if (handle != handle_bad_irq &amp;&amp; is_chained) {
+716                 irq_settings_set_noprobe(desc);
+717                 irq_settings_set_norequest(desc);
+718                 irq_settings_set_nothread(desc);
+719                 irq_startup(desc, true);
+720         }
+721 out:
+722         irq_put_desc_busunlock(desc, flags);
+723 }
+724 EXPORT_SYMBOL_GPL(__irq_set_handler);
+</code></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Irq Framework]]></title>
+    <link href="http://martinbj2008.github.io/blog/2014/07/17/irq-framework/"/>
+    <updated>2014-07-17T10:35:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2014/07/17/irq-framework</id>
+    <content type="html"><![CDATA[<h3>中断处理过程：</h3>
+
+<h4>硬件中断到中断控制器</h4>
+
+<p>reg value&ndash;>irq(int) &mdash;> struct irq_desc
+<code>
+==&gt; 中断时的有一个寄存器会保存中断源的vector值.
+==&gt; ==&gt; `arch/x86/kernel/entry_64.S`调用函数`do_IRQ`.
+==&gt; ==&gt; ==&gt; `do_IRQ`依据`vector_irq`和vector值, 找到对应的中断号,并调用`handle_irq`.
+==&gt; ==&gt; ==&gt; ==&gt; `handle_irq`通过函数irq_to_descdesc,可将中断号转化为`struct irq_desc`.
+==&gt; ==&gt; ==&gt; ==&gt; generic_handle_irq_desc(irq, desc);
+==&gt; ==&gt; ==&gt; ==&gt; ==&gt; `generic_handle_irq_desc`调用 desc-&gt;handle_irq(irq, desc);
+</code>
+注:这里的handle_irq不是真正的中断处理函数,而是几大类中断控制器处理函数.
+如82599, msi等.
+具体分析见:<a href="http://martinbj2008.github.io/blog/2014/07/17/irq-study">irq study1</a></p>
+
+<h4>中断控制器到具体的中断处理函数</h4>
+
+<pre><code>==&gt; handle_level_irq
+==&gt; ==&gt; irqreturn_t handle_irq_event(struct irq_desc *desc)
+==&gt; ==&gt; ==&gt; struct irqaction *action = desc-&gt;action
+==&gt; ==&gt; ==&gt; ret = handle_irq_event_percpu(desc, action);
+==&gt; ==&gt; ==&gt; ==&gt; action-&gt;handler(irq, action-&gt;dev_id);
+</code></pre>
+
+<p>这里的<code>action-&gt;handler</code>才是我们使用<code>request_irq</code>注册的中断处理函数.
+具体分析见:
+具体分析见:<a href="http://martinbj2008.github.io/blog/2014/07/17/register-irq-handler">irq study2</a></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Delayed Work: Dst_gc_work]]></title>
+    <link href="http://martinbj2008.github.io/blog/2014/02/18/dst-gc-work/"/>
+    <updated>2014-02-18T15:26:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2014/02/18/dst-gc-work</id>
+    <content type="html"><![CDATA[<h3>summary</h3>
+
+<p>A delayed work will first start a timer,
+and when timeout, the delayed work will be put a <code>worker_pool</code>&rsquo;s
+<code>worklist</code> or a <code>pool_workqueue</code>&rsquo;s <code>delayed_works</code></p>
+
+<h3>how to use delayed work</h3>
+
+<h4>data structure</h4>
+
+<pre><code class="c">113 struct delayed_work {
+114         struct work_struct work;
+115         struct timer_list timer;
+116
+117         /* target workqueue and CPU -&gt;timer uses to queue -&gt;work */
+118         struct workqueue_struct *wq;
+119         int cpu;
+120 };
+</code></pre>
+
+<!-- more -->
+
+
+<pre><code class="c">157 #define __WORK_INITIALIZER(n, f) {                                      \
+158         .data = WORK_DATA_STATIC_INIT(),                                \
+159         .entry  = { &amp;(n).entry, &amp;(n).entry },                           \
+160         .func = (f),                                                    \
+161         __WORK_INIT_LOCKDEP_MAP(#n, &amp;(n))                               \
+162         }
+163
+164 #define __DELAYED_WORK_INITIALIZER(n, f, tflags) {                      \
+165         .work = __WORK_INITIALIZER((n).work, (f)),                      \
+166         .timer = __TIMER_INITIALIZER(delayed_work_timer_fn,             \
+167                                      0, (unsigned long)&amp;(n),            \
+168                                      (tflags) | TIMER_IRQSAFE),         \
+169         }
+170
+171 #define DECLARE_WORK(n, f)                                              \
+172         struct work_struct n = __WORK_INITIALIZER(n, f)
+173
+174 #define DECLARE_DELAYED_WORK(n, f)                                      \
+175         struct delayed_work n = __DELAYED_WORK_INITIALIZER(n, f, 0)
+</code></pre>
+
+<h4>defination</h4>
+
+<pre><code class="c"> 52 static void dst_gc_task(struct work_struct *work);
+ 55 static DECLARE_DELAYED_WORK(dst_gc_work, dst_gc_task);
+</code></pre>
+
+<pre><code class="c "> 63 static void dst_gc_task(struct work_struct *work)
+ 64 {
+...
+</code></pre>
+
+<h4>api to schedule workqueue.</h4>
+
+<p><code>schedule_delayed_work</code> will put the work into a <code>struct work_pool</code>&rsquo;s <code>worklist</code>
+or a <code>pool_workqueue</code>&rsquo;s <code>delayed_works</code>.</p>
+
+<pre><code class="c">586 /**
+587  * schedule_delayed_work - put work task in global workqueue after delay
+588  * @dwork: job to be done
+589  * @delay: number of jiffies to wait or 0 for immediate execution
+590  *
+591  * After waiting for a given time this puts a job in the kernel-global
+592  * workqueue.
+593  */
+594 static inline bool schedule_delayed_work(struct delayed_work *dwork,
+595                                          unsigned long delay)
+596 {
+597         return queue_delayed_work(system_wq, dwork, delay);
+598 }
+</code></pre>
+
+<pre><code class="c">...
+138                 schedule_delayed_work(&amp;dst_gc_work, expires);
+...
+</code></pre>
+
+<h4>call trace</h4>
+
+<pre><code class="c">&gt; schedule_delayed_work
+&gt; &gt; queue_delayed_work
+&gt; &gt; &gt; queue_delayed_work_on
+&gt; &gt; &gt; &gt; __queue_delayed_work
+&gt; &gt; &gt; &gt; &gt; start a timer with timer function delayed_work_timer_fn
+&gt; &gt; &gt; &gt; &gt; &gt; delayed_work_timer_fn
+&gt; &gt; &gt; &gt; &gt; &gt; &gt; __queue_work
+</code></pre>
+
+<h4>core function <code>__queue_work</code></h4>
+
+<pre><code class="c">1314 static void __queue_work(int cpu, struct workqueue_struct *wq,
+1315                          struct work_struct *work)
+1316 {
+1317         struct pool_workqueue *pwq;
+1318         struct worker_pool *last_pool;
+1319         struct list_head *worklist;
+1320         unsigned int work_flags;
+1321         unsigned int req_cpu = cpu;
+1322
+1323         /*
+1324          * While a work item is PENDING &amp;&amp; off queue, a task trying to
+1325          * steal the PENDING will busy-loop waiting for it to either get
+1326          * queued or lose PENDING.  Grabbing PENDING and queueing should
+1327          * happen with IRQ disabled.
+1328          */
+1329         WARN_ON_ONCE(!irqs_disabled());
+1330
+1331         debug_work_activate(work);
+1332
+1333         /* if draining, only works from the same workqueue are allowed */
+1334         if (unlikely(wq-&gt;flags &amp; __WQ_DRAINING) &amp;&amp;
+1335             WARN_ON_ONCE(!is_chained_work(wq)))
+1336                 return;
+1337 retry:
+1338         if (req_cpu == WORK_CPU_UNBOUND)
+1339                 cpu = raw_smp_processor_id();
+1340
+1341         /* pwq which will be used unless @work is executing elsewhere */
+1342         if (!(wq-&gt;flags &amp; WQ_UNBOUND))
+1343                 pwq = per_cpu_ptr(wq-&gt;cpu_pwqs, cpu);
+1344         else
+1345                 pwq = unbound_pwq_by_node(wq, cpu_to_node(cpu));
+1346
+1347         /*
+1348          * If @work was previously on a different pool, it might still be
+1349          * running there, in which case the work needs to be queued on that
+1350          * pool to guarantee non-reentrancy.
+1351          */
+1352         last_pool = get_work_pool(work);
+1353         if (last_pool &amp;&amp; last_pool != pwq-&gt;pool) {
+1354                 struct worker *worker;
+1355
+1356                 spin_lock(&amp;last_pool-&gt;lock);
+1357
+1358                 worker = find_worker_executing_work(last_pool, work);
+1359
+1360                 if (worker &amp;&amp; worker-&gt;current_pwq-&gt;wq == wq) {
+1361                         pwq = worker-&gt;current_pwq;
+1362                 } else {
+1363                         /* meh... not running there, queue here */
+1364                         spin_unlock(&amp;last_pool-&gt;lock);
+1365                         spin_lock(&amp;pwq-&gt;pool-&gt;lock);
+1366                 }
+1367         } else {
+1368                 spin_lock(&amp;pwq-&gt;pool-&gt;lock);
+1369         }
+1370
+1371         /*
+1372          * pwq is determined and locked.  For unbound pools, we could have
+1373          * raced with pwq release and it could already be dead.  If its
+1374          * refcnt is zero, repeat pwq selection.  Note that pwqs never die
+1375          * without another pwq replacing it in the numa_pwq_tbl or while
+1376          * work items are executing on it, so the retrying is guaranteed to
+1377          * make forward-progress.
+1378          */
+1379         if (unlikely(!pwq-&gt;refcnt)) {
+1380                 if (wq-&gt;flags &amp; WQ_UNBOUND) {
+1381                         spin_unlock(&amp;pwq-&gt;pool-&gt;lock);
+1382                         cpu_relax();
+1383                         goto retry;
+1384                 }
+1385                 /* oops */
+1386                 WARN_ONCE(true, "workqueue: per-cpu pwq for %s on cpu%d has 0 refcnt",
+1387                           wq-&gt;name, cpu);
+1388         }
+1389
+1390         /* pwq determined, queue */
+1391         trace_workqueue_queue_work(req_cpu, pwq, work);
+1392
+1393         if (WARN_ON(!list_empty(&amp;work-&gt;entry))) {
+1394                 spin_unlock(&amp;pwq-&gt;pool-&gt;lock);
+1395                 return;
+1396         }
+1397
+1398         pwq-&gt;nr_in_flight[pwq-&gt;work_color]++;
+1399         work_flags = work_color_to_flags(pwq-&gt;work_color);
+1400
+1401         if (likely(pwq-&gt;nr_active &lt; pwq-&gt;max_active)) {
+1402                 trace_workqueue_activate_work(work);
+1403                 pwq-&gt;nr_active++;
+1404                 worklist = &amp;pwq-&gt;pool-&gt;worklist;
+1405         } else {
+1406                 work_flags |= WORK_STRUCT_DELAYED;
+1407                 worklist = &amp;pwq-&gt;delayed_works;
+1408         }
+1409
+1410         insert_work(pwq, work, worklist, work_flags);
+1411
+1412         spin_unlock(&amp;pwq-&gt;pool-&gt;lock);
+1413 }
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Struct Worker_pool->nr_running]]></title>
+    <link href="http://martinbj2008.github.io/blog/2014/02/18/struct-worker-pool-%3Enr-running/"/>
+    <updated>2014-02-18T15:15:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2014/02/18/struct-worker-pool->nr-running</id>
+    <content type="html"><![CDATA[<h3>Defination</h3>
+
+<pre><code class="c"> 141 /* struct worker is defined in workqueue_internal.h */
+ 142
+ 143 struct worker_pool {
+ ...
+ 173         /*
+ 174          * The current concurrency level.  As it's likely to be accessed
+ 175          * from other CPUs during try_to_wake_up(), put it in a separate
+ 176          * cacheline.
+ 177          */
+ 178         atomic_t                nr_running ____cacheline_aligned_in_smp;
+</code></pre>
+
+<h3>Increase</h3>
+
+<pre><code class="c"> 813 /**
+ 814  * wq_worker_waking_up - a worker is waking up
+ 815  * @task: task waking up
+ 816  * @cpu: CPU @task is waking up to
+ 817  *
+ 818  * This function is called during try_to_wake_up() when a worker is
+ 819  * being awoken.
+ 820  *
+ 821  * CONTEXT:
+ 822  * spin_lock_irq(rq-&gt;lock)
+ 823  */
+ 824 void wq_worker_waking_up(struct task_struct *task, int cpu)
+ 825 {
+ 826         struct worker *worker = kthread_data(task);
+ 827
+ 828         if (!(worker-&gt;flags &amp; WORKER_NOT_RUNNING)) {
+ 829                 WARN_ON_ONCE(worker-&gt;pool-&gt;cpu != cpu);
+ 830                 atomic_inc(&amp;worker-&gt;pool-&gt;nr_running);
+ 831         }
+ 832 }
+</code></pre>
+
+<pre><code class="c"> 923 /**
+ 924  * worker_clr_flags - clear worker flags and adjust nr_running accordingly
+ 925  * @worker: self
+ 926  * @flags: flags to clear
+ 927  *
+ 928  * Clear @flags in @worker-&gt;flags and adjust nr_running accordingly.
+ 929  *
+ 930  * CONTEXT:
+ 931  * spin_lock_irq(pool-&gt;lock)
+ 932  */
+ 933 static inline void worker_clr_flags(struct worker *worker, unsigned int flags)
+ 934 {
+ 935         struct worker_pool *pool = worker-&gt;pool;
+ 936         unsigned int oflags = worker-&gt;flags;
+ 937
+ 938         WARN_ON_ONCE(worker-&gt;task != current);
+ 939
+ 940         worker-&gt;flags &amp;= ~flags;
+ 941
+ 942         /*
+ 943          * If transitioning out of NOT_RUNNING, increment nr_running.  Note
+ 944          * that the nested NOT_RUNNING is not a noop.  NOT_RUNNING is mask
+ 945          * of multiple flags, not a single flag.
+ 946          */
+ 947         if ((flags &amp; WORKER_NOT_RUNNING) &amp;&amp; (oflags &amp; WORKER_NOT_RUNNING))
+ 948                 if (!(worker-&gt;flags &amp; WORKER_NOT_RUNNING))
+ 949                         atomic_inc(&amp;pool-&gt;nr_running);
+ 950 }
+</code></pre>
+
+<h3>Decrease</h3>
+
+<pre><code class="c"> 885 /**
+ 886  * worker_set_flags - set worker flags and adjust nr_running accordingly
+ 887  * @worker: self
+ 888  * @flags: flags to set
+ 889  * @wakeup: wakeup an idle worker if necessary
+ 890  *
+ 891  * Set @flags in @worker-&gt;flags and adjust nr_running accordingly.  If
+ 892  * nr_running becomes zero and @wakeup is %true, an idle worker is
+ 893  * woken up.
+ 894  *
+ 895  * CONTEXT:
+ 896  * spin_lock_irq(pool-&gt;lock)
+ 897  */
+ 898 static inline void worker_set_flags(struct worker *worker, unsigned int flags,
+ 899                                     bool wakeup)
+ 900 {
+ 901         struct worker_pool *pool = worker-&gt;pool;
+ 902
+ 903         WARN_ON_ONCE(worker-&gt;task != current);
+ 904
+ 905         /*
+ 906          * If transitioning into NOT_RUNNING, adjust nr_running and
+ 907          * wake up an idle worker as necessary if requested by
+ 908          * @wakeup.
+ 909          */
+ 910         if ((flags &amp; WORKER_NOT_RUNNING) &amp;&amp;
+ 911             !(worker-&gt;flags &amp; WORKER_NOT_RUNNING)) {
+ 912                 if (wakeup) {
+ 913                         if (atomic_dec_and_test(&amp;pool-&gt;nr_running) &amp;&amp;
+ 914                             !list_empty(&amp;pool-&gt;worklist))
+ 915                                 wake_up_worker(pool);
+ 916                 } else
+ 917                         atomic_dec(&amp;pool-&gt;nr_running);
+ 918         }
+ 919
+ 920         worker-&gt;flags |= flags;
+ 921 }
+</code></pre>
+
+<pre><code class="c"> 834 /**
+ 835  * wq_worker_sleeping - a worker is going to sleep
+ 836  * @task: task going to sleep
+ 837  * @cpu: CPU in question, must be the current CPU number
+ 838  *
+ 839  * This function is called during schedule() when a busy worker is
+ 840  * going to sleep.  Worker on the same cpu can be woken up by
+ 841  * returning pointer to its task.
+ 842  *
+ 843  * CONTEXT:
+ 844  * spin_lock_irq(rq-&gt;lock)
+ 845  *
+ 846  * Return:
+ 847  * Worker task on @cpu to wake up, %NULL if none.
+ 848  */
+ 849 struct task_struct *wq_worker_sleeping(struct task_struct *task, int cpu)
+ 850 {
+ 851         struct worker *worker = kthread_data(task), *to_wakeup = NULL;
+ 852         struct worker_pool *pool;
+ 853
+ 854         /*
+ 855          * Rescuers, which may not have all the fields set up like normal
+ 856          * workers, also reach here, let's not access anything before
+ 857          * checking NOT_RUNNING.
+ 858          */
+ 859         if (worker-&gt;flags &amp; WORKER_NOT_RUNNING)
+ 860                 return NULL;
+ 861
+ 862         pool = worker-&gt;pool;
+ 863
+ 864         /* this can only happen on the local cpu */
+ 865         if (WARN_ON_ONCE(cpu != raw_smp_processor_id()))
+ 866                 return NULL;
+ 867
+ 868         /*
+ 869          * The counterpart of the following dec_and_test, implied mb,
+ 870          * worklist not empty test sequence is in insert_work().
+ 871          * Please read comment there.
+ 872          *
+ 873          * NOT_RUNNING is clear.  This means that we're bound to and
+ 874          * running on the local cpu w/ rq lock held and preemption
+ 875          * disabled, which in turn means that none else could be
+ 876          * manipulating idle_list, so dereferencing idle_list without pool
+ 877          * lock is safe.
+ 878          */
+ 879         if (atomic_dec_and_test(&amp;pool-&gt;nr_running) &amp;&amp;
+ 880             !list_empty(&amp;pool-&gt;worklist))
+ 881                 to_wakeup = first_worker(pool);
+ 882         return to_wakeup ? to_wakeup-&gt;task : NULL;
+ 883 }
+</code></pre>
+]]></content>
+  </entry>
+  
+</feed>
