@@ -1,0 +1,1110 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>How to Create Dev Qdisc - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="Summary Part 1: Register multi queue net device. In this part, only the framework is prepared for qdisc,
+and the noop_qdisc is set as default. &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2014/01/28/how-to-create-dev-qdisc/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">How to Create Dev Qdisc</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-01-28T13:47:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>28</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>1:47 pm</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2>Summary</h2>
+
+<h3>Part 1: Register multi queue net device.</h3>
+
+<p>In this part, only the framework is prepared for qdisc,
+and the <code>noop_qdisc</code> is set as default.</p>
+
+<h4>prepare <code>netdev_queue</code>s.</h4>
+
+<p>for example: intel igb hardware has 8 hardware tx queue,
+and nic driver create 8 corresponding <code>struct netdev_queue</code>
+in the <code>_tx</code> of <code>struct net_device</code>.</p>
+
+<h4>prepare <code>mq_qdisc</code></h4>
+
+<p>The <code>mq_qdisc</code> is attached to the corresponding device.
+In <code>mq_qdisc</code> private field, a default qdisc will be
+create for <strong>each</strong> NIC&rsquo;s hardware queue.
+This is done in <code>mq_init</code>.
+The default qdisc is <code>pfifo_fast_ops</code>.</p>
+
+<h4>attach <code>mq_qdisc</code> to <code>netdev_queue</code>.</h4>
+
+<p>In <code>mq_attach</code>, these qdiscs are attatched to corresponding
+<code>struct netdev_queue</code>.</p>
+
+<h3>Part 2: Active a net device with right qdiscs</h3>
+
+<p>Here only trace with the case <code>mq_qdisc</code>.
+When dev is up, <code>dev_open</code> is called, which will call <code>dev_activate</code>.</p>
+
+<!-- more -->
+
+
+<h4>2.1</h4>
+
+<p>A qdisc with <code>mq_qdisc_ops</code> is alloced and assigned to <code>dev-&gt;qdisc</code>,
+The <code>mq qdisc</code> is not a simple qdisc, which includes sub-qdisc in its
+private fields. Each sub-qdisc is a default qdisc(pfif0).</p>
+
+<!-- ![mq qdisc](/images/mq/mq.blankflowchar.jpeg) -->
+
+
+<p><img src="https://www.lucidchart.com/publicSegments/view/52f496a8-5c18-4c12-9d2e-62830a0093bd/image.png" alt="mq qdisc" /></p>
+
+<h4>2.2</h4>
+
+<p>when <code>attach</code> a qdisc to a device by <code>qdisc-&gt;attach</code>(which equal <code>mq_attach</code>),
+in <code>mq_attach</code>, each qdisc alloc in 2.1, will be assigned to a
+netdevice queue(which is alloced in part1).</p>
+
+<p>by now, each netdevice queue has a qdisc, but the qdisc is assigned to
+<code>qdisc_sleeping</code> of <code>netdev_queue</code>.</p>
+
+<p>at last, <code>dev_activate</code> call <code>transition_one_qdisc</code> for each tx queue,
+to set <code>netdev_queue-&gt;qdisc</code> with <code>netdev_queue-&gt;qdisc_sleeping</code>.</p>
+
+<p><code>attach_default_qdiscs</code> will be called twice time,
+one is called to create with <code>mq_qdisc_ops</code>,
+one is called to create with <code>default_qdisc_ops</code>,</p>
+
+<h4>Data Structure</h4>
+
+<h5><code>struct net_device</code> and <code>netdev_queue</code></h5>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="k">struct</span> <span class="n">net_device</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">1350</span>         <span class="k">struct</span> <span class="n">netdev_queue</span>     <span class="o">*</span><span class="n">_tx</span> <span class="n">____cacheline_aligned_in_smp</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1351</span>
+</span><span class='line'><span class="mi">1352</span>         <span class="cm">/* Number of TX queues allocated at alloc_netdev_mq() time  */</span>
+</span><span class='line'><span class="mi">1353</span>         <span class="kt">unsigned</span> <span class="kt">int</span>            <span class="n">num_tx_queues</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">544</span> <span class="k">struct</span> <span class="n">netdev_queue</span> <span class="p">{</span>
+</span><span class='line'> <span class="p">...</span>
+</span><span class='line'> <span class="mi">548</span>         <span class="k">struct</span> <span class="n">net_device</span>       <span class="o">*</span><span class="n">dev</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">549</span>         <span class="k">struct</span> <span class="n">Qdisc</span>            <span class="o">*</span><span class="n">qdisc</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">550</span>         <span class="k">struct</span> <span class="n">Qdisc</span>            <span class="o">*</span><span class="n">qdisc_sleeping</span><span class="p">;</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'> <span class="mi">560</span>         <span class="kt">spinlock_t</span>              <span class="n">_xmit_lock</span> <span class="n">____cacheline_aligned_in_smp</span><span class="p">;</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'> <span class="mi">573</span>         <span class="kt">unsigned</span> <span class="kt">long</span>           <span class="n">state</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">21</span> <span class="k">struct</span> <span class="n">mq_sched</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">22</span>         <span class="k">struct</span> <span class="n">Qdisc</span>            <span class="o">**</span><span class="n">qdiscs</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">23</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>Call trace.</h4>
+
+<h5>Part 1</h5>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="o">&gt;</span> <span class="n">igb_probe</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">alloc_etherdev_mq</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">alloc_etherdev_mqs</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">alloc_netdev_mqs</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">ether_setup</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">netif_alloc_netdev_queues</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">netdev_for_each_tx_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">netdev_init_one_queue</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">netdev_init_one_queue</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">register_netdev</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">register_netdevice</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">dev_init_scheduler</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">netdev_for_each_tx_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">dev_init_scheduler_queue</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">noop_qdisc</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">dev_init_scheduler_queue</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>NOTE:
+if disable RPS(google patch), there is no soft queue to receive packet.
+because there is <code>igb_ring</code> in the driver.</p>
+
+<h6>Part 2</h6>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="o">&gt;</span> <span class="n">dev_open</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">__dev_open</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">dev_activate</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">attach_default_qdiscs</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">qdisc_create_dflt</span><span class="p">(</span><span class="n">txq</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">mq_qdisc_ops</span><span class="p">,</span> <span class="n">TC_H_ROOT</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">qdisc_alloc</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">ops</span><span class="o">-&gt;</span><span class="n">init</span><span class="p">(</span><span class="nl">equal</span><span class="p">:</span> <span class="n">mq_init</span><span class="p">)</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="k">for</span> <span class="p">(</span><span class="n">ntx</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">ntx</span> <span class="o">&lt;</span> <span class="n">dev</span><span class="o">-&gt;</span><span class="n">num_tx_queues</span><span class="p">;</span> <span class="n">ntx</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">qdisc_create_dflt</span><span class="p">(</span><span class="n">dev_queue</span><span class="p">,</span> <span class="n">default_qdisc_ops</span> <span class="p">...</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">qdisc_alloc</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">ops</span><span class="o">-&gt;</span><span class="n">init</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">qdisc</span><span class="o">-&gt;</span><span class="n">ops</span><span class="o">-&gt;</span><span class="n">attach</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">dev_graft_qdisc</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">netdev_for_each_tx_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">transition_one_qdisc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">need_watchdog</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">transition_one_qdisc</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>Functions in Part 1.</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2016</span> <span class="k">static</span> <span class="kt">int</span> <span class="nf">igb_probe</span><span class="p">(</span><span class="k">struct</span> <span class="n">pci_dev</span> <span class="o">*</span><span class="n">pdev</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">pci_device_id</span> <span class="o">*</span><span class="n">ent</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2017</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">2067</span>         <span class="n">netdev</span> <span class="o">=</span> <span class="n">alloc_etherdev_mq</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">igb_adapter</span><span class="p">),</span>
+</span><span class='line'><span class="mi">2068</span>                                    <span class="n">IGB_MAX_TX_QUEUES</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2069</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">netdev</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2070</span>                 <span class="k">goto</span> <span class="n">err_alloc_etherdev</span><span class="p">;</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">2317</span>         <span class="n">strcpy</span><span class="p">(</span><span class="n">netdev</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">,</span> <span class="s">&quot;eth%d&quot;</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2318</span>         <span class="n">err</span> <span class="o">=</span> <span class="n">register_netdev</span><span class="p">(</span><span class="n">netdev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2319</span>         <span class="k">if</span> <span class="p">(</span><span class="n">err</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2320</span>                 <span class="k">goto</span> <span class="n">err_register</span><span class="p">;</span>
+</span><span class='line'><span class="p">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">51</span> <span class="err">#</span><span class="n">define</span> <span class="n">alloc_etherdev_mq</span><span class="p">(</span><span class="n">sizeof_priv</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span> <span class="n">alloc_etherdev_mqs</span><span class="p">(</span><span class="n">sizeof_priv</span><span class="p">,</span> <span class="n">count</span><span class="p">,</span> <span class="n">count</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">372</span> <span class="cm">/**</span>
+</span><span class='line'><span class="cm">373  * alloc_etherdev_mqs - Allocates and sets up an Ethernet device</span>
+</span><span class='line'><span class="cm">374  * @sizeof_priv: Size of additional driver-private structure to be allocated</span>
+</span><span class='line'><span class="cm">375  *      for this Ethernet device</span>
+</span><span class='line'><span class="cm">376  * @txqs: The number of TX queues this device has.</span>
+</span><span class='line'><span class="cm">377  * @rxqs: The number of RX queues this device has.</span>
+</span><span class='line'><span class="cm">378  *</span>
+</span><span class='line'><span class="cm">379  * Fill in the fields of the device structure with Ethernet-generic</span>
+</span><span class='line'><span class="cm">380  * values. Basically does everything except registering the device.</span>
+</span><span class='line'><span class="cm">381  *</span>
+</span><span class='line'><span class="cm">382  * Constructs a new net device, complete with a private data area of</span>
+</span><span class='line'><span class="cm">383  * size (sizeof_priv).  A 32-byte (not bit) alignment is enforced for</span>
+</span><span class='line'><span class="cm">384  * this private data area.</span>
+</span><span class='line'><span class="cm">385  */</span>
+</span><span class='line'><span class="mi">386</span>
+</span><span class='line'><span class="mi">387</span> <span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">alloc_etherdev_mqs</span><span class="p">(</span><span class="kt">int</span> <span class="n">sizeof_priv</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">txqs</span><span class="p">,</span>
+</span><span class='line'><span class="mi">388</span>                                       <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">rxqs</span><span class="p">)</span>
+</span><span class='line'><span class="mi">389</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">390</span>         <span class="k">return</span> <span class="n">alloc_netdev_mqs</span><span class="p">(</span><span class="n">sizeof_priv</span><span class="p">,</span> <span class="s">&quot;eth%d&quot;</span><span class="p">,</span> <span class="n">ether_setup</span><span class="p">,</span> <span class="n">txqs</span><span class="p">,</span> <span class="n">rxqs</span><span class="p">);</span>
+</span><span class='line'><span class="mi">391</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">392</span> <span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">alloc_etherdev_mqs</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+<span class='line-number'>101</span>
+<span class='line-number'>102</span>
+<span class='line-number'>103</span>
+<span class='line-number'>104</span>
+<span class='line-number'>105</span>
+<span class='line-number'>106</span>
+<span class='line-number'>107</span>
+<span class='line-number'>108</span>
+<span class='line-number'>109</span>
+<span class='line-number'>110</span>
+<span class='line-number'>111</span>
+<span class='line-number'>112</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">6223</span> <span class="cm">/**</span>
+</span><span class='line'><span class="cm">6224  *      alloc_netdev_mqs - allocate network device</span>
+</span><span class='line'><span class="cm">6225  *      @sizeof_priv:   size of private data to allocate space for</span>
+</span><span class='line'><span class="cm">6226  *      @name:          device name format string</span>
+</span><span class='line'><span class="cm">6227  *      @setup:         callback to initialize device</span>
+</span><span class='line'><span class="cm">6228  *      @txqs:          the number of TX subqueues to allocate</span>
+</span><span class='line'><span class="cm">6229  *      @rxqs:          the number of RX subqueues to allocate</span>
+</span><span class='line'><span class="cm">6230  *</span>
+</span><span class='line'><span class="cm">6231  *      Allocates a struct net_device with private data area for driver use</span>
+</span><span class='line'><span class="cm">6232  *      and performs basic initialization.  Also allocates subquue structs</span>
+</span><span class='line'><span class="cm">6233  *      for each queue on the device.</span>
+</span><span class='line'><span class="cm">6234  */</span>
+</span><span class='line'><span class="mi">6235</span> <span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">alloc_netdev_mqs</span><span class="p">(</span><span class="kt">int</span> <span class="n">sizeof_priv</span><span class="p">,</span> <span class="k">const</span> <span class="kt">char</span> <span class="o">*</span><span class="n">name</span><span class="p">,</span>
+</span><span class='line'><span class="mi">6236</span>                 <span class="kt">void</span> <span class="p">(</span><span class="o">*</span><span class="n">setup</span><span class="p">)(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="p">),</span>
+</span><span class='line'><span class="mi">6237</span>                 <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">txqs</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">rxqs</span><span class="p">)</span>
+</span><span class='line'><span class="mi">6238</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">6239</span>         <span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6240</span>         <span class="kt">size_t</span> <span class="n">alloc_size</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6241</span>         <span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">p</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6242</span>
+</span><span class='line'><span class="mi">6243</span>         <span class="nf">BUG_ON</span><span class="p">(</span><span class="n">strlen</span><span class="p">(</span><span class="n">name</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">));</span>
+</span><span class='line'><span class="mi">6244</span>
+</span><span class='line'><span class="mi">6245</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">txqs</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">6246</span>                 <span class="n">pr_err</span><span class="p">(</span><span class="s">&quot;alloc_netdev: Unable to allocate device with zero queues</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6247</span>                 <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6248</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">6249</span>
+</span><span class='line'><span class="mi">6250</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_RPS</span>
+</span><span class='line'><span class="mi">6251</span>         <span class="k">if</span> <span class="p">(</span><span class="n">rxqs</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">6252</span>                 <span class="n">pr_err</span><span class="p">(</span><span class="s">&quot;alloc_netdev: Unable to allocate device with zero RX queues</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6253</span>                 <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6254</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">6255</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'><span class="mi">6256</span>
+</span><span class='line'><span class="mi">6257</span>         <span class="n">alloc_size</span> <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6258</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">sizeof_priv</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">6259</span>                 <span class="cm">/* ensure 32-byte alignment of private area */</span>
+</span><span class='line'><span class="mi">6260</span>                 <span class="n">alloc_size</span> <span class="o">=</span> <span class="n">ALIGN</span><span class="p">(</span><span class="n">alloc_size</span><span class="p">,</span> <span class="n">NETDEV_ALIGN</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6261</span>                 <span class="n">alloc_size</span> <span class="o">+=</span> <span class="n">sizeof_priv</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6262</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">6263</span>         <span class="cm">/* ensure 32-byte alignment of whole construct */</span>
+</span><span class='line'><span class="mi">6264</span>         <span class="n">alloc_size</span> <span class="o">+=</span> <span class="n">NETDEV_ALIGN</span> <span class="o">-</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6265</span>
+</span><span class='line'><span class="mi">6266</span>         <span class="n">p</span> <span class="o">=</span> <span class="n">kzalloc</span><span class="p">(</span><span class="n">alloc_size</span><span class="p">,</span> <span class="n">GFP_KERNEL</span> <span class="o">|</span> <span class="n">__GFP_NOWARN</span> <span class="o">|</span> <span class="n">__GFP_REPEAT</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6267</span>         <span class="nf">if</span> <span class="p">(</span><span class="o">!</span><span class="n">p</span><span class="p">)</span>
+</span><span class='line'><span class="mi">6268</span>                 <span class="n">p</span> <span class="o">=</span> <span class="n">vzalloc</span><span class="p">(</span><span class="n">alloc_size</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6269</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">p</span><span class="p">)</span>
+</span><span class='line'><span class="mi">6270</span>                 <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6271</span>
+</span><span class='line'><span class="mi">6272</span>         <span class="n">dev</span> <span class="o">=</span> <span class="n">PTR_ALIGN</span><span class="p">(</span><span class="n">p</span><span class="p">,</span> <span class="n">NETDEV_ALIGN</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6273</span>         <span class="n">dev</span><span class="o">-&gt;</span><span class="n">padded</span> <span class="o">=</span> <span class="p">(</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">dev</span> <span class="o">-</span> <span class="p">(</span><span class="kt">char</span> <span class="o">*</span><span class="p">)</span><span class="n">p</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6274</span>
+</span><span class='line'><span class="mi">6275</span>         <span class="n">dev</span><span class="o">-&gt;</span><span class="n">pcpu_refcnt</span> <span class="o">=</span> <span class="n">alloc_percpu</span><span class="p">(</span><span class="kt">int</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6276</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">pcpu_refcnt</span><span class="p">)</span>
+</span><span class='line'><span class="mi">6277</span>                 <span class="k">goto</span> <span class="n">free_dev</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6278</span>
+</span><span class='line'><span class="mi">6279</span>         <span class="k">if</span> <span class="p">(</span><span class="n">dev_addr_init</span><span class="p">(</span><span class="n">dev</span><span class="p">))</span>
+</span><span class='line'><span class="mi">6280</span>                 <span class="k">goto</span> <span class="n">free_pcpu</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6281</span>
+</span><span class='line'><span class="mi">6282</span>         <span class="nf">dev_mc_init</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6283</span>         <span class="nf">dev_uc_init</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6284</span>
+</span><span class='line'><span class="mi">6285</span>         <span class="nf">dev_net_set</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">init_net</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6286</span>
+</span><span class='line'><span class="mi">6287</span>         <span class="n">dev</span><span class="o">-&gt;</span><span class="n">gso_max_size</span> <span class="o">=</span> <span class="n">GSO_MAX_SIZE</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6288</span>         <span class="n">dev</span><span class="o">-&gt;</span><span class="n">gso_max_segs</span> <span class="o">=</span> <span class="n">GSO_MAX_SEGS</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6289</span>
+</span><span class='line'><span class="mi">6290</span>         <span class="nf">INIT_LIST_HEAD</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">napi_list</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6291</span>         <span class="nf">INIT_LIST_HEAD</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">unreg_list</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6292</span>         <span class="nf">INIT_LIST_HEAD</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">close_list</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6293</span>         <span class="nf">INIT_LIST_HEAD</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">link_watch_list</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6294</span>         <span class="nf">INIT_LIST_HEAD</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">adj_list</span><span class="p">.</span><span class="n">upper</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6295</span>         <span class="nf">INIT_LIST_HEAD</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">adj_list</span><span class="p">.</span><span class="n">lower</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6296</span>         <span class="nf">INIT_LIST_HEAD</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">all_adj_list</span><span class="p">.</span><span class="n">upper</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6297</span>         <span class="nf">INIT_LIST_HEAD</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">all_adj_list</span><span class="p">.</span><span class="n">lower</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6298</span>         <span class="n">dev</span><span class="o">-&gt;</span><span class="n">priv_flags</span> <span class="o">=</span> <span class="n">IFF_XMIT_DST_RELEASE</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6299</span>         <span class="nf">setup</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6300</span>
+</span><span class='line'><span class="mi">6301</span>         <span class="n">dev</span><span class="o">-&gt;</span><span class="n">num_tx_queues</span> <span class="o">=</span> <span class="n">txqs</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6302</span>         <span class="n">dev</span><span class="o">-&gt;</span><span class="n">real_num_tx_queues</span> <span class="o">=</span> <span class="n">txqs</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6303</span>         <span class="k">if</span> <span class="p">(</span><span class="n">netif_alloc_netdev_queues</span><span class="p">(</span><span class="n">dev</span><span class="p">))</span>
+</span><span class='line'><span class="mi">6304</span>                 <span class="k">goto</span> <span class="n">free_all</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6305</span>
+</span><span class='line'><span class="mi">6306</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_RPS</span>
+</span><span class='line'><span class="mi">6307</span>         <span class="n">dev</span><span class="o">-&gt;</span><span class="n">num_rx_queues</span> <span class="o">=</span> <span class="n">rxqs</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6308</span>         <span class="n">dev</span><span class="o">-&gt;</span><span class="n">real_num_rx_queues</span> <span class="o">=</span> <span class="n">rxqs</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6309</span>         <span class="k">if</span> <span class="p">(</span><span class="n">netif_alloc_rx_queues</span><span class="p">(</span><span class="n">dev</span><span class="p">))</span>
+</span><span class='line'><span class="mi">6310</span>                 <span class="k">goto</span> <span class="n">free_all</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6311</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'><span class="mi">6312</span>
+</span><span class='line'><span class="mi">6313</span>         <span class="n">strcpy</span><span class="p">(</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">,</span> <span class="n">name</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6314</span>         <span class="n">dev</span><span class="o">-&gt;</span><span class="n">group</span> <span class="o">=</span> <span class="n">INIT_NETDEV_GROUP</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6315</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">ethtool_ops</span><span class="p">)</span>
+</span><span class='line'><span class="mi">6316</span>                 <span class="n">dev</span><span class="o">-&gt;</span><span class="n">ethtool_ops</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">default_ethtool_ops</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6317</span>         <span class="k">return</span> <span class="n">dev</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6318</span>
+</span><span class='line'><span class="mi">6319</span> <span class="nl">free_all</span><span class="p">:</span>
+</span><span class='line'><span class="mi">6320</span>         <span class="n">free_netdev</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6321</span>         <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6322</span>
+</span><span class='line'><span class="mi">6323</span> <span class="nl">free_pcpu</span><span class="p">:</span>
+</span><span class='line'><span class="mi">6324</span>         <span class="n">free_percpu</span><span class="p">(</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">pcpu_refcnt</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6325</span>         <span class="nf">netif_free_tx_queues</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6326</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_RPS</span>
+</span><span class='line'><span class="mi">6327</span>         <span class="n">kfree</span><span class="p">(</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">_rx</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6328</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'><span class="mi">6329</span>
+</span><span class='line'><span class="mi">6330</span> <span class="nl">free_dev</span><span class="p">:</span>
+</span><span class='line'><span class="mi">6331</span>         <span class="n">netdev_freemem</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">6332</span>         <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">6333</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">6334</span> <span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">alloc_netdev_mqs</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">5742</span> <span class="k">static</span> <span class="kt">int</span> <span class="n">netif_alloc_netdev_queues</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">)</span>
+</span><span class='line'><span class="mi">5743</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">5744</span>         <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">count</span> <span class="o">=</span> <span class="n">dev</span><span class="o">-&gt;</span><span class="n">num_tx_queues</span><span class="p">;</span>
+</span><span class='line'><span class="mi">5745</span>         <span class="k">struct</span> <span class="n">netdev_queue</span> <span class="o">*</span><span class="n">tx</span><span class="p">;</span>
+</span><span class='line'><span class="mi">5746</span>         <span class="kt">size_t</span> <span class="n">sz</span> <span class="o">=</span> <span class="n">count</span> <span class="o">*</span> <span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">tx</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5747</span>
+</span><span class='line'><span class="mi">5748</span>         <span class="nf">BUG_ON</span><span class="p">(</span><span class="n">count</span> <span class="o">&lt;</span> <span class="mi">1</span> <span class="o">||</span> <span class="n">count</span> <span class="o">&gt;</span> <span class="mh">0xffff</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5749</span>
+</span><span class='line'><span class="mi">5750</span>         <span class="n">tx</span> <span class="o">=</span> <span class="n">kzalloc</span><span class="p">(</span><span class="n">sz</span><span class="p">,</span> <span class="n">GFP_KERNEL</span> <span class="o">|</span> <span class="n">__GFP_NOWARN</span> <span class="o">|</span> <span class="n">__GFP_REPEAT</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5751</span>         <span class="nf">if</span> <span class="p">(</span><span class="o">!</span><span class="n">tx</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">5752</span>                 <span class="n">tx</span> <span class="o">=</span> <span class="n">vzalloc</span><span class="p">(</span><span class="n">sz</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5753</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">tx</span><span class="p">)</span>
+</span><span class='line'><span class="mi">5754</span>                         <span class="k">return</span> <span class="o">-</span><span class="n">ENOMEM</span><span class="p">;</span>
+</span><span class='line'><span class="mi">5755</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">5756</span>         <span class="n">dev</span><span class="o">-&gt;</span><span class="n">_tx</span> <span class="o">=</span> <span class="n">tx</span><span class="p">;</span>
+</span><span class='line'><span class="mi">5757</span>
+</span><span class='line'><span class="mi">5758</span>         <span class="nf">netdev_for_each_tx_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">netdev_init_one_queue</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5759</span>         <span class="nf">spin_lock_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">tx_global_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5760</span>
+</span><span class='line'><span class="mi">5761</span>         <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">5762</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">5720</span> <span class="k">static</span> <span class="kt">void</span> <span class="nf">netdev_init_one_queue</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">,</span>
+</span><span class='line'><span class="mi">5721</span>                                   <span class="k">struct</span> <span class="n">netdev_queue</span> <span class="o">*</span><span class="n">queue</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">_unused</span><span class="p">)</span>
+</span><span class='line'><span class="mi">5722</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">5723</span>         <span class="cm">/* Initialize queue lock */</span>
+</span><span class='line'><span class="mi">5724</span>         <span class="n">spin_lock_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">queue</span><span class="o">-&gt;</span><span class="n">_xmit_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5725</span>         <span class="nf">netdev_set_xmit_lockdep_class</span><span class="p">(</span><span class="o">&amp;</span><span class="n">queue</span><span class="o">-&gt;</span><span class="n">_xmit_lock</span><span class="p">,</span> <span class="n">dev</span><span class="o">-&gt;</span><span class="n">type</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5726</span>         <span class="n">queue</span><span class="o">-&gt;</span><span class="n">xmit_lock_owner</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+</span><span class='line'><span class="mi">5727</span>         <span class="nf">netdev_queue_numa_node_write</span><span class="p">(</span><span class="n">queue</span><span class="p">,</span> <span class="n">NUMA_NO_NODE</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5728</span>         <span class="n">queue</span><span class="o">-&gt;</span><span class="n">dev</span> <span class="o">=</span> <span class="n">dev</span><span class="p">;</span>
+</span><span class='line'><span class="mi">5729</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_BQL</span>
+</span><span class='line'><span class="mi">5730</span>         <span class="n">dql_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">queue</span><span class="o">-&gt;</span><span class="n">dql</span><span class="p">,</span> <span class="n">HZ</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5731</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'><span class="mi">5732</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">5972</span> <span class="kt">int</span> <span class="n">register_netdev</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">)</span>
+</span><span class='line'><span class="mi">5973</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">5974</span>         <span class="kt">int</span> <span class="n">err</span><span class="p">;</span>
+</span><span class='line'><span class="mi">5975</span>
+</span><span class='line'><span class="mi">5976</span>         <span class="nf">rtnl_lock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">5977</span>         <span class="n">err</span> <span class="o">=</span> <span class="n">register_netdevice</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5978</span>         <span class="nf">rtnl_unlock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">5979</span>         <span class="k">return</span> <span class="n">err</span><span class="p">;</span>
+</span><span class='line'><span class="mi">5980</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">5981</span> <span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">register_netdev</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">5781</span> <span class="kt">int</span> <span class="nf">register_netdevice</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">)</span>
+</span><span class='line'><span class="mi">5782</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">5879</span>         <span class="n">linkwatch_init_dev</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5880</span>
+</span><span class='line'><span class="mi">5881</span>         <span class="nf">dev_init_scheduler</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5882</span>         <span class="nf">dev_hold</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5883</span>         <span class="nf">list_netdevice</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">5884</span>         <span class="nf">add_device_randomness</span><span class="p">(</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">dev_addr</span><span class="p">,</span> <span class="n">dev</span><span class="o">-&gt;</span><span class="n">addr_len</span><span class="p">);</span>
+</span><span class='line'><span class="p">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">876</span> <span class="kt">void</span> <span class="n">dev_init_scheduler</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">)</span>
+</span><span class='line'><span class="mi">877</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">878</span>         <span class="n">dev</span><span class="o">-&gt;</span><span class="n">qdisc</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">noop_qdisc</span><span class="p">;</span>
+</span><span class='line'><span class="mi">879</span>         <span class="nf">netdev_for_each_tx_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">dev_init_scheduler_queue</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">noop_qdisc</span><span class="p">);</span>
+</span><span class='line'><span class="mi">880</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">dev_ingress_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">))</span>
+</span><span class='line'><span class="mi">881</span>                 <span class="n">dev_init_scheduler_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">dev_ingress_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">noop_qdisc</span><span class="p">);</span>
+</span><span class='line'><span class="mi">882</span>
+</span><span class='line'><span class="mi">883</span>         <span class="nf">setup_timer</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">watchdog_timer</span><span class="p">,</span> <span class="n">dev_watchdog</span><span class="p">,</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">)</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">884</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">866</span> <span class="k">static</span> <span class="kt">void</span> <span class="n">dev_init_scheduler_queue</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">,</span>
+</span><span class='line'><span class="mi">867</span>                                      <span class="k">struct</span> <span class="n">netdev_queue</span> <span class="o">*</span><span class="n">dev_queue</span><span class="p">,</span>
+</span><span class='line'><span class="mi">868</span>                                      <span class="kt">void</span> <span class="o">*</span><span class="n">_qdisc</span><span class="p">)</span>
+</span><span class='line'><span class="mi">869</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">870</span>         <span class="k">struct</span> <span class="n">Qdisc</span> <span class="o">*</span><span class="n">qdisc</span> <span class="o">=</span> <span class="n">_qdisc</span><span class="p">;</span>
+</span><span class='line'><span class="mi">871</span>
+</span><span class='line'><span class="mi">872</span>         <span class="n">dev_queue</span><span class="o">-&gt;</span><span class="n">qdisc</span> <span class="o">=</span> <span class="n">qdisc</span><span class="p">;</span>
+</span><span class='line'><span class="mi">873</span>         <span class="n">dev_queue</span><span class="o">-&gt;</span><span class="n">qdisc_sleeping</span> <span class="o">=</span> <span class="n">qdisc</span><span class="p">;</span>
+</span><span class='line'><span class="mi">874</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">366</span> <span class="k">struct</span> <span class="n">Qdisc</span> <span class="n">noop_qdisc</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">367</span>         <span class="p">.</span><span class="n">enqueue</span>        <span class="o">=</span>       <span class="n">noop_enqueue</span><span class="p">,</span>
+</span><span class='line'><span class="mi">368</span>         <span class="p">.</span><span class="n">dequeue</span>        <span class="o">=</span>       <span class="n">noop_dequeue</span><span class="p">,</span>
+</span><span class='line'><span class="mi">369</span>         <span class="p">.</span><span class="n">flags</span>          <span class="o">=</span>       <span class="n">TCQ_F_BUILTIN</span><span class="p">,</span>
+</span><span class='line'><span class="mi">370</span>         <span class="p">.</span><span class="n">ops</span>            <span class="o">=</span>       <span class="o">&amp;</span><span class="n">noop_qdisc_ops</span><span class="p">,</span>
+</span><span class='line'><span class="mi">371</span>         <span class="p">.</span><span class="n">list</span>           <span class="o">=</span>       <span class="n">LIST_HEAD_INIT</span><span class="p">(</span><span class="n">noop_qdisc</span><span class="p">.</span><span class="n">list</span><span class="p">),</span>
+</span><span class='line'><span class="mi">372</span>         <span class="p">.</span><span class="n">q</span><span class="p">.</span><span class="n">lock</span>         <span class="o">=</span>       <span class="n">__SPIN_LOCK_UNLOCKED</span><span class="p">(</span><span class="n">noop_qdisc</span><span class="p">.</span><span class="n">q</span><span class="p">.</span><span class="n">lock</span><span class="p">),</span>
+</span><span class='line'><span class="mi">373</span>         <span class="p">.</span><span class="n">dev_queue</span>      <span class="o">=</span>       <span class="o">&amp;</span><span class="n">noop_netdev_queue</span><span class="p">,</span>
+</span><span class='line'><span class="mi">374</span>         <span class="p">.</span><span class="n">busylock</span>       <span class="o">=</span>       <span class="n">__SPIN_LOCK_UNLOCKED</span><span class="p">(</span><span class="n">noop_qdisc</span><span class="p">.</span><span class="n">busylock</span><span class="p">),</span>
+</span><span class='line'><span class="mi">375</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>functions for Part 2.</h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">745</span> <span class="kt">void</span> <span class="n">dev_activate</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">)</span>
+</span><span class='line'><span class="mi">746</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">747</span>         <span class="kt">int</span> <span class="n">need_watchdog</span><span class="p">;</span>
+</span><span class='line'><span class="mi">748</span>
+</span><span class='line'><span class="mi">749</span>         <span class="cm">/* No queueing discipline is attached to device;</span>
+</span><span class='line'><span class="cm">750          * create default one for devices, which need queueing</span>
+</span><span class='line'><span class="cm">751          * and noqueue_qdisc for virtual interfaces</span>
+</span><span class='line'><span class="cm">752          */</span>
+</span><span class='line'><span class="mi">753</span>
+</span><span class='line'><span class="mi">754</span>         <span class="k">if</span> <span class="p">(</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">qdisc</span> <span class="o">==</span> <span class="o">&amp;</span><span class="n">noop_qdisc</span><span class="p">)</span>
+</span><span class='line'><span class="mi">755</span>                 <span class="n">attach_default_qdiscs</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">756</span>
+</span><span class='line'><span class="mi">757</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">netif_carrier_ok</span><span class="p">(</span><span class="n">dev</span><span class="p">))</span>
+</span><span class='line'><span class="mi">758</span>                 <span class="cm">/* Delay activation until next carrier-on event */</span>
+</span><span class='line'><span class="mi">759</span>                 <span class="k">return</span><span class="p">;</span>
+</span><span class='line'><span class="mi">760</span>
+</span><span class='line'><span class="mi">761</span>         <span class="n">need_watchdog</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">762</span>         <span class="nf">netdev_for_each_tx_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">transition_one_qdisc</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">need_watchdog</span><span class="p">);</span>
+</span><span class='line'><span class="mi">763</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">dev_ingress_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">))</span>
+</span><span class='line'><span class="mi">764</span>                 <span class="n">transition_one_qdisc</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">dev_ingress_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">),</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'><span class="mi">765</span>
+</span><span class='line'><span class="mi">766</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">need_watchdog</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">767</span>                 <span class="n">dev</span><span class="o">-&gt;</span><span class="n">trans_start</span> <span class="o">=</span> <span class="n">jiffies</span><span class="p">;</span>
+</span><span class='line'><span class="mi">768</span>                 <span class="n">dev_watchdog_up</span><span class="p">(</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">769</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">770</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">771</span> <span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">dev_activate</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">708</span> <span class="k">static</span> <span class="kt">void</span> <span class="n">attach_default_qdiscs</span><span class="p">(</span><span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">)</span>
+</span><span class='line'><span class="mi">709</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">710</span>         <span class="k">struct</span> <span class="n">netdev_queue</span> <span class="o">*</span><span class="n">txq</span><span class="p">;</span>
+</span><span class='line'><span class="mi">711</span>         <span class="k">struct</span> <span class="n">Qdisc</span> <span class="o">*</span><span class="n">qdisc</span><span class="p">;</span>
+</span><span class='line'><span class="mi">712</span>
+</span><span class='line'><span class="mi">713</span>         <span class="n">txq</span> <span class="o">=</span> <span class="n">netdev_get_tx_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span><span class='line'><span class="mi">714</span>
+</span><span class='line'><span class="mi">715</span>         <span class="nf">if</span> <span class="p">(</span><span class="o">!</span><span class="n">netif_is_multiqueue</span><span class="p">(</span><span class="n">dev</span><span class="p">)</span> <span class="o">||</span> <span class="n">dev</span><span class="o">-&gt;</span><span class="n">tx_queue_len</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">716</span>                 <span class="n">netdev_for_each_tx_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">attach_one_default_qdisc</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'><span class="mi">717</span>                 <span class="n">dev</span><span class="o">-&gt;</span><span class="n">qdisc</span> <span class="o">=</span> <span class="n">txq</span><span class="o">-&gt;</span><span class="n">qdisc_sleeping</span><span class="p">;</span>
+</span><span class='line'><span class="mi">718</span>                 <span class="n">atomic_inc</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">qdisc</span><span class="o">-&gt;</span><span class="n">refcnt</span><span class="p">);</span>
+</span><span class='line'><span class="mi">719</span>         <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">720</span>                 <span class="n">qdisc</span> <span class="o">=</span> <span class="n">qdisc_create_dflt</span><span class="p">(</span><span class="n">txq</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">mq_qdisc_ops</span><span class="p">,</span> <span class="n">TC_H_ROOT</span><span class="p">);</span>
+</span><span class='line'><span class="mi">721</span>                 <span class="nf">if</span> <span class="p">(</span><span class="n">qdisc</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">722</span>                         <span class="n">qdisc</span><span class="o">-&gt;</span><span class="n">ops</span><span class="o">-&gt;</span><span class="n">attach</span><span class="p">(</span><span class="n">qdisc</span><span class="p">);</span>
+</span><span class='line'><span class="mi">723</span>                         <span class="n">dev</span><span class="o">-&gt;</span><span class="n">qdisc</span> <span class="o">=</span> <span class="n">qdisc</span><span class="p">;</span>
+</span><span class='line'><span class="mi">724</span>                 <span class="p">}</span>
+</span><span class='line'><span class="mi">725</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">726</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">223</span> <span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">Qdisc_class_ops</span> <span class="n">mq_class_ops</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">224</span>         <span class="p">.</span><span class="n">select_queue</span>   <span class="o">=</span> <span class="n">mq_select_queue</span><span class="p">,</span>
+</span><span class='line'><span class="mi">225</span>         <span class="p">.</span><span class="n">graft</span>          <span class="o">=</span> <span class="n">mq_graft</span><span class="p">,</span>
+</span><span class='line'><span class="mi">226</span>         <span class="p">.</span><span class="n">leaf</span>           <span class="o">=</span> <span class="n">mq_leaf</span><span class="p">,</span>
+</span><span class='line'><span class="mi">227</span>         <span class="p">.</span><span class="n">get</span>            <span class="o">=</span> <span class="n">mq_get</span><span class="p">,</span>
+</span><span class='line'><span class="mi">228</span>         <span class="p">.</span><span class="n">put</span>            <span class="o">=</span> <span class="n">mq_put</span><span class="p">,</span>
+</span><span class='line'><span class="mi">229</span>         <span class="p">.</span><span class="n">walk</span>           <span class="o">=</span> <span class="n">mq_walk</span><span class="p">,</span>
+</span><span class='line'><span class="mi">230</span>         <span class="p">.</span><span class="n">dump</span>           <span class="o">=</span> <span class="n">mq_dump_class</span><span class="p">,</span>
+</span><span class='line'><span class="mi">231</span>         <span class="p">.</span><span class="n">dump_stats</span>     <span class="o">=</span> <span class="n">mq_dump_class_stats</span><span class="p">,</span>
+</span><span class='line'><span class="mi">232</span> <span class="p">};</span>
+</span><span class='line'><span class="mi">233</span>
+</span><span class='line'><span class="mi">234</span> <span class="k">struct</span> <span class="n">Qdisc_ops</span> <span class="n">mq_qdisc_ops</span> <span class="n">__read_mostly</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">235</span>         <span class="p">.</span><span class="n">cl_ops</span>         <span class="o">=</span> <span class="o">&amp;</span><span class="n">mq_class_ops</span><span class="p">,</span>
+</span><span class='line'><span class="mi">236</span>         <span class="p">.</span><span class="n">id</span>             <span class="o">=</span> <span class="s">&quot;mq&quot;</span><span class="p">,</span>
+</span><span class='line'><span class="mi">237</span>         <span class="p">.</span><span class="n">priv_size</span>      <span class="o">=</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">mq_sched</span><span class="p">),</span>
+</span><span class='line'><span class="mi">238</span>         <span class="p">.</span><span class="n">init</span>           <span class="o">=</span> <span class="n">mq_init</span><span class="p">,</span>
+</span><span class='line'><span class="mi">239</span>         <span class="p">.</span><span class="n">destroy</span>        <span class="o">=</span> <span class="n">mq_destroy</span><span class="p">,</span>
+</span><span class='line'><span class="mi">240</span>         <span class="p">.</span><span class="n">attach</span>         <span class="o">=</span> <span class="n">mq_attach</span><span class="p">,</span>
+</span><span class='line'><span class="mi">241</span>         <span class="p">.</span><span class="n">dump</span>           <span class="o">=</span> <span class="n">mq_dump</span><span class="p">,</span>
+</span><span class='line'><span class="mi">242</span>         <span class="p">.</span><span class="n">owner</span>          <span class="o">=</span> <span class="n">THIS_MODULE</span><span class="p">,</span>
+</span><span class='line'><span class="mi">243</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">584</span> <span class="k">struct</span> <span class="n">Qdisc</span> <span class="o">*</span><span class="n">qdisc_create_dflt</span><span class="p">(</span><span class="k">struct</span> <span class="n">netdev_queue</span> <span class="o">*</span><span class="n">dev_queue</span><span class="p">,</span>
+</span><span class='line'><span class="mi">585</span>                                 <span class="k">const</span> <span class="k">struct</span> <span class="n">Qdisc_ops</span> <span class="o">*</span><span class="n">ops</span><span class="p">,</span>
+</span><span class='line'><span class="mi">586</span>                                 <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">parentid</span><span class="p">)</span>
+</span><span class='line'><span class="mi">587</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">588</span>         <span class="k">struct</span> <span class="n">Qdisc</span> <span class="o">*</span><span class="n">sch</span><span class="p">;</span>
+</span><span class='line'><span class="mi">589</span>
+</span><span class='line'><span class="mi">590</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">try_module_get</span><span class="p">(</span><span class="n">ops</span><span class="o">-&gt;</span><span class="n">owner</span><span class="p">))</span>
+</span><span class='line'><span class="mi">591</span>                 <span class="k">goto</span> <span class="n">errout</span><span class="p">;</span>
+</span><span class='line'><span class="mi">592</span>
+</span><span class='line'><span class="mi">593</span>         <span class="n">sch</span> <span class="o">=</span> <span class="n">qdisc_alloc</span><span class="p">(</span><span class="n">dev_queue</span><span class="p">,</span> <span class="n">ops</span><span class="p">);</span>
+</span><span class='line'><span class="mi">594</span>         <span class="k">if</span> <span class="p">(</span><span class="n">IS_ERR</span><span class="p">(</span><span class="n">sch</span><span class="p">))</span>
+</span><span class='line'><span class="mi">595</span>                 <span class="k">goto</span> <span class="n">errout</span><span class="p">;</span>
+</span><span class='line'><span class="mi">596</span>         <span class="n">sch</span><span class="o">-&gt;</span><span class="n">parent</span> <span class="o">=</span> <span class="n">parentid</span><span class="p">;</span>
+</span><span class='line'><span class="mi">597</span>
+</span><span class='line'><span class="mi">598</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">ops</span><span class="o">-&gt;</span><span class="n">init</span> <span class="o">||</span> <span class="n">ops</span><span class="o">-&gt;</span><span class="n">init</span><span class="p">(</span><span class="n">sch</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'><span class="mi">599</span>                 <span class="k">return</span> <span class="n">sch</span><span class="p">;</span>
+</span><span class='line'><span class="mi">600</span>
+</span><span class='line'><span class="mi">601</span>         <span class="nf">qdisc_destroy</span><span class="p">(</span><span class="n">sch</span><span class="p">);</span>
+</span><span class='line'><span class="mi">602</span> <span class="nl">errout</span><span class="p">:</span>
+</span><span class='line'><span class="mi">603</span>         <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">604</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2014-01-28T13:47:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>28</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>1:47 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/netcore/'>netcore</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2014/01/28/qdisc-study-part1-qdisc-base/" title="Previous Post: qdisc study part1: qdisc_base">&laquo; qdisc study part1: qdisc_base</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2014/02/08/how-to-xmit-a-packet-with-qdisc/" title="Next Post: how to xmit a packet with Qdisc">how to xmit a packet with Qdisc &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,404 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Pfn_to_page and Page_to_pfn - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="summary page_to_pfn and pfn_to_page are often used in kernel. for PP81, kernel uses CONFIG_DISCONTIGMEM + NUMA.
+Every node has node_mem_map and &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/09/06/pfn-to-page-and-page-to-pfn/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Pfn_to_page and Page_to_pfn</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-09-06T17:11:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>6</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>5:11 pm</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h3>summary</h3>
+
+<p><code>page_to_pfn</code> and <code>pfn_to_page</code> are often used in kernel.</p>
+
+<p>for PP81, kernel uses CONFIG_DISCONTIGMEM + NUMA.
+Every node has <code>node_mem_map</code> and <code>node_start_pfn</code>to help the page/pfn covertion.
+<code>node_start_pfn</code> is the first page&rsquo;s pfn of this node.
+<code>node_mem_map</code> stores all the <code>struct page</code> of this node.</p>
+
+<p>so thete is a map between them:</p>
+
+<pre><code>`node_start_pfn + i` &lt;===&gt; `node_mem_map[i]`
+</code></pre>
+
+<p>The key is how to get <strong>node id</strong> by pfn or page.
+the corresponding function is <code>pfn_to_nid</code> and <code>page_to_nid</code></p>
+
+<p><code>page_to_nid</code> is simpile.
+    the <code>node id</code> is store in <code>struct page -&gt;flags</code>
+while <code>pfn_to_nid</code>(for pp81), it convert to pageaddress and then turn to <code>pa_to_nid</code>.</p>
+
+<p>感觉这个实现有点罗嗦！
+直接在include/asm-generic/memory_model.h 把<code>pa_to_nid</code> 定义一个 <code>arch_pfn_to_nid</code>宏。
+省得pfn转为pa以后，又转为pfn。</p>
+
+<!-- more -->
+
+
+<h3><code>pfn_to_page</code></h3>
+
+<p>funtion defination:
+include/asm-generic/memory_model.h</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">73</span> <span class="err">#</span><span class="n">define</span> <span class="n">pfn_to_page</span> <span class="n">__pfn_to_page</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">33</span> <span class="err">#</span><span class="n">elif</span> <span class="n">defined</span><span class="p">(</span><span class="n">CONFIG_DISCONTIGMEM</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">34</span>
+</span><span class='line'> <span class="mi">35</span> <span class="err">#</span><span class="n">define</span> <span class="n">__pfn_to_page</span><span class="p">(</span><span class="n">pfn</span><span class="p">)</span>                      \
+</span><span class='line'> <span class="mi">36</span> <span class="p">({</span>      <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">__pfn</span> <span class="o">=</span> <span class="p">(</span><span class="n">pfn</span><span class="p">);</span>            \
+</span><span class='line'> <span class="mi">37</span>         <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">__nid</span> <span class="o">=</span> <span class="n">arch_pfn_to_nid</span><span class="p">(</span><span class="n">__pfn</span><span class="p">);</span>  \
+</span><span class='line'> <span class="mi">38</span>         <span class="nf">NODE_DATA</span><span class="p">(</span><span class="n">__nid</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">node_mem_map</span> <span class="o">+</span> <span class="n">arch_local_page_offset</span><span class="p">(</span><span class="n">__pfn</span><span class="p">,</span> <span class="n">__nid</span><span class="p">);</span>\
+</span><span class='line'> <span class="mi">39</span> <span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>arch_local_page_offset</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">18</span> <span class="err">#</span><span class="n">ifndef</span> <span class="n">arch_local_page_offset</span>
+</span><span class='line'> <span class="mi">19</span> <span class="err">#</span><span class="n">define</span> <span class="n">arch_local_page_offset</span><span class="p">(</span><span class="n">pfn</span><span class="p">,</span> <span class="n">nid</span><span class="p">)</span>        \
+</span><span class='line'> <span class="mi">20</span>         <span class="p">((</span><span class="n">pfn</span><span class="p">)</span> <span class="o">-</span> <span class="n">NODE_DATA</span><span class="p">(</span><span class="n">nid</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">node_start_pfn</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">21</span> <span class="err">#</span><span class="n">endif</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>arch_pfn_to_nid</code></h4>
+
+<p>call trace:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">arch_pfn_to_nid</span>
+</span><span class='line'>  <span class="o">--&gt;</span> <span class="n">pfn_to_nid</span>
+</span><span class='line'>    <span class="o">--&gt;</span><span class="n">pa_to_nid</span><span class="p">((</span><span class="n">pfn</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="n">PAGE_SHIFT</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">14</span> <span class="err">#</span><span class="n">ifndef</span> <span class="n">arch_pfn_to_nid</span>
+</span><span class='line'> <span class="mi">15</span> <span class="err">#</span><span class="n">define</span> <span class="n">arch_pfn_to_nid</span><span class="p">(</span><span class="n">pfn</span><span class="p">)</span>    <span class="n">pfn_to_nid</span><span class="p">(</span><span class="n">pfn</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">16</span> <span class="err">#</span><span class="n">endif</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>arch/mips/include/asm/mmzone.h</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">11</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_DISCONTIGMEM</span>
+</span><span class='line'> <span class="mi">12</span>
+</span><span class='line'> <span class="mi">13</span> <span class="err">#</span><span class="n">define</span> <span class="n">pfn_to_nid</span><span class="p">(</span><span class="n">pfn</span><span class="p">)</span>         <span class="n">pa_to_nid</span><span class="p">((</span><span class="n">pfn</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="n">PAGE_SHIFT</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>arch/mips/include/asm/mach-netlogic/mmzone.h</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">52</span> <span class="k">static</span> <span class="kr">inline</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">pa_to_nid</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">addr</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">53</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">54</span>         <span class="kt">unsigned</span> <span class="kt">int</span>  <span class="n">i</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">55</span>         <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">pfn</span> <span class="o">=</span> <span class="n">addr</span> <span class="o">&gt;&gt;</span> <span class="n">PAGE_SHIFT</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">56</span>
+</span><span class='line'> <span class="mi">57</span>         <span class="cm">/* TODO: Implement this using NODE_DATA */</span>
+</span><span class='line'> <span class="mi">58</span>         <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">NLM_MAX_CPU_NODE</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">59</span>
+</span><span class='line'> <span class="mi">60</span>                 <span class="k">if</span> <span class="p">((</span><span class="o">!</span><span class="n">node_online</span><span class="p">(</span><span class="n">i</span><span class="p">))</span> <span class="o">||</span> <span class="p">((</span><span class="n">NODE_MEM_DATA</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">low_pfn</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="n">NODE_MEM_DATA</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">high_pfn</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)))</span>
+</span><span class='line'> <span class="mi">61</span>                         <span class="k">continue</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">62</span>
+</span><span class='line'> <span class="mi">63</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">pfn</span> <span class="o">&gt;=</span> <span class="n">NODE_MEM_DATA</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">low_pfn</span> <span class="o">&amp;&amp;</span> <span class="n">pfn</span> <span class="o">&lt;=</span> <span class="n">NODE_MEM_DATA</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">high_pfn</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">64</span>                         <span class="k">return</span> <span class="n">i</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">65</span>         <span class="p">}</span>
+</span><span class='line'><span class="p">....</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>page_to_pfn</code></h3>
+
+<p>include/asm-generic/memory_model.h</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">72</span> <span class="err">#</span><span class="n">define</span> <span class="n">page_to_pfn</span> <span class="n">__page_to_pfn</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">41</span> <span class="err">#</span><span class="n">define</span> <span class="n">__page_to_pfn</span><span class="p">(</span><span class="n">pg</span><span class="p">)</span>                                               \
+</span><span class='line'> <span class="mi">42</span> <span class="p">({</span>      <span class="k">struct</span> <span class="n">page</span> <span class="o">*</span><span class="n">__pg</span> <span class="o">=</span> <span class="p">(</span><span class="n">pg</span><span class="p">);</span>                                       \
+</span><span class='line'> <span class="mi">43</span>         <span class="k">struct</span> <span class="n">pglist_data</span> <span class="o">*</span><span class="n">__pgdat</span> <span class="o">=</span> <span class="n">NODE_DATA</span><span class="p">(</span><span class="n">page_to_nid</span><span class="p">(</span><span class="n">__pg</span><span class="p">));</span>     \
+</span><span class='line'> <span class="mi">44</span>         <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">)(</span><span class="n">__pg</span> <span class="o">-</span> <span class="n">__pgdat</span><span class="o">-&gt;</span><span class="n">node_mem_map</span><span class="p">)</span> <span class="o">+</span>                 \
+</span><span class='line'> <span class="mi">45</span>          <span class="n">__pgdat</span><span class="o">-&gt;</span><span class="n">node_start_pfn</span><span class="p">;</span>                                       \
+</span><span class='line'> <span class="mi">46</span> <span class="p">})</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>page_to_nid</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">538</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">NODE_NOT_IN_PAGE_FLAGS</span>
+</span><span class='line'> <span class="mi">539</span> <span class="k">extern</span> <span class="kt">int</span> <span class="n">page_to_nid</span><span class="p">(</span><span class="k">struct</span> <span class="n">page</span> <span class="o">*</span><span class="n">page</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">540</span> <span class="err">#</span><span class="k">else</span>
+</span><span class='line'> <span class="mi">541</span> <span class="k">static</span> <span class="kr">inline</span> <span class="kt">int</span> <span class="n">page_to_nid</span><span class="p">(</span><span class="k">struct</span> <span class="n">page</span> <span class="o">*</span><span class="n">page</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">542</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">543</span>         <span class="k">return</span> <span class="p">(</span><span class="n">page</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">&gt;&gt;</span> <span class="n">NODES_PGSHIFT</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">NODES_MASK</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">544</span> <span class="p">}</span>
+</span><span class='line'> <span class="mi">545</span> <span class="err">#</span><span class="n">endif</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-09-06T17:11:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>6</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>5:11 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/memory/'>memory</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/08/26/how-does-xfrm-km-work/" title="Previous Post: How does xfrm km work">&laquo; How does xfrm km work</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/09/11/ipv4-route-fib-find-node/" title="Next Post: IPv4 route fib find node">IPv4 route fib find node &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

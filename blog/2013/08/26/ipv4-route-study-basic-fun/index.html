@@ -1,0 +1,467 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>IPv4 Route Study Part 1: Basic Fun - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="In order to understand kernel route LC-Trie,
+summary the basic functions here. NODE vs LEAF node and leaf have two same head elements unsigned long &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/08/26/ipv4-route-study-basic-fun/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">IPv4 Route Study Part 1: Basic Fun</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-08-26T11:05:00+08:00'><span class='date'><span class='date-month'>Aug</span> <span class='date-day'>26</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>11:05 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>In order to understand kernel route LC-Trie,
+summary the basic functions here.</p>
+
+<!-- more -->
+
+
+<h2>NODE vs LEAF</h2>
+
+<p><code>node</code> and <code>leaf</code> have two same head elements</p>
+
+<ol>
+<li><code>unsigned long parent</code></li>
+<li><code>t_key key</code></li>
+</ol>
+
+
+<p>We can treat <code>leaf</code> as <code>node</code>+<code>leaf extention</code></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">struct</span> <span class="n">leaf</span> <span class="p">{</span>
+</span><span class='line'>  <span class="k">struct</span> <span class="n">node</span><span class="p">;</span>
+</span><span class='line'><span class="p">....</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>node</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'>  <span class="mi">98</span> <span class="k">struct</span> <span class="n">node</span> <span class="p">{</span>
+</span><span class='line'>  <span class="mi">99</span>         <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">parent</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">100</span>         <span class="n">t_key</span> <span class="n">key</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">101</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>leaf</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">103</span> <span class="k">struct</span> <span class="n">leaf</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">104</span>         <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">parent</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">105</span>         <span class="n">t_key</span> <span class="n">key</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">106</span>         <span class="k">struct</span> <span class="n">hlist_head</span> <span class="n">list</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">107</span>         <span class="k">struct</span> <span class="n">rcu_head</span> <span class="n">rcu</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">108</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>PARENT</h2>
+
+<p>It is a common method, hide some bit flags into the low bits of a pointer.
+because the low bits always is zero(becauase of CACHE).</p>
+
+<h3>the lowest 1 bit of <code>parent</code> is used to different <code>node</code> or <code>leaf</code>.</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'>  <span class="mi">90</span> <span class="err">#</span><span class="n">define</span> <span class="n">T_TNODE</span> <span class="mi">0</span>
+</span><span class='line'>  <span class="mi">91</span> <span class="err">#</span><span class="n">define</span> <span class="n">T_LEAF</span>  <span class="mi">1</span>
+</span><span class='line'>  <span class="mi">92</span> <span class="err">#</span><span class="n">define</span> <span class="n">NODE_TYPE_MASK</span>  <span class="mh">0x1UL</span>
+</span><span class='line'>  <span class="mi">93</span> <span class="err">#</span><span class="n">define</span> <span class="n">NODE_TYPE</span><span class="p">(</span><span class="n">node</span><span class="p">)</span> <span class="p">((</span><span class="n">node</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">parent</span> <span class="o">&amp;</span> <span class="n">NODE_TYPE_MASK</span><span class="p">)</span>
+</span><span class='line'>  <span class="mi">94</span>
+</span><span class='line'>  <span class="mi">95</span> <span class="err">#</span><span class="n">define</span> <span class="n">IS_TNODE</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">n</span><span class="o">-&gt;</span><span class="n">parent</span> <span class="o">&amp;</span> <span class="n">T_LEAF</span><span class="p">))</span>
+</span><span class='line'>  <span class="mi">96</span> <span class="err">#</span><span class="n">define</span> <span class="n">IS_LEAF</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="p">(</span><span class="n">n</span><span class="o">-&gt;</span><span class="n">parent</span> <span class="o">&amp;</span> <span class="n">T_LEAF</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">180</span> <span class="k">static</span> <span class="kr">inline</span> <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="nf">node_parent</span><span class="p">(</span><span class="k">struct</span> <span class="n">node</span> <span class="o">*</span><span class="n">node</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">181</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">182</span>         <span class="k">return</span> <span class="p">(</span><span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="p">)(</span><span class="n">node</span><span class="o">-&gt;</span><span class="n">parent</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">NODE_TYPE_MASK</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">183</span> <span class="p">}</span>
+</span><span class='line'> <span class="mi">184</span>
+</span><span class='line'> <span class="mi">185</span> <span class="k">static</span> <span class="kr">inline</span> <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">node_parent_rcu</span><span class="p">(</span><span class="k">struct</span> <span class="n">node</span> <span class="o">*</span><span class="n">node</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">186</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">187</span>         <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">ret</span> <span class="o">=</span> <span class="n">node_parent</span><span class="p">(</span><span class="n">node</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">188</span>
+</span><span class='line'> <span class="mi">189</span>          <span class="nf">rcu_dereference_rtnl</span><span class="p">(</span><span class="n">ret</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">190</span> <span class="p">}</span>
+</span><span class='line'> <span class="mi">191</span>
+</span><span class='line'> <span class="mi">192</span> <span class="cm">/* Same as rcu_assign_pointer</span>
+</span><span class='line'><span class="cm"> 193  * but that macro() assumes that value is a pointer.</span>
+</span><span class='line'><span class="cm"> 194  */</span>
+</span><span class='line'> <span class="mi">195</span> <span class="k">static</span> <span class="kr">inline</span> <span class="kt">void</span> <span class="n">node_set_parent</span><span class="p">(</span><span class="k">struct</span> <span class="n">node</span> <span class="o">*</span><span class="n">node</span><span class="p">,</span> <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">ptr</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">196</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">197</span>         <span class="n">smp_wmb</span><span class="p">();</span>
+</span><span class='line'> <span class="mi">198</span>         <span class="n">node</span><span class="o">-&gt;</span><span class="n">parent</span> <span class="o">=</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">)</span><span class="n">ptr</span> <span class="o">|</span> <span class="n">NODE_TYPE</span><span class="p">(</span><span class="n">node</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">199</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>BIT OPS</h2>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">220</span> <span class="k">static</span> <span class="kr">inline</span> <span class="n">t_key</span> <span class="nf">mask_pfx</span><span class="p">(</span><span class="n">t_key</span> <span class="n">k</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">short</span> <span class="n">l</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">221</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">222</span>         <span class="k">return</span> <span class="p">(</span><span class="n">l</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="o">?</span> <span class="mi">0</span> <span class="o">:</span> <span class="n">k</span> <span class="o">&gt;&gt;</span> <span class="p">(</span><span class="n">KEYLENGTH</span><span class="o">-</span><span class="n">l</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="n">KEYLENGTH</span><span class="o">-</span><span class="n">l</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">223</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>tkey_extract_bits</code></h3>
+
+<p>Get value of key&rsquo;s bits from the <code>offset</code> bit.
+取 从第offset位开始的 bits位的值</p>
+
+<p><img src="/images/fib_trie/tkey_extract_bits.png" alt="tkey_extract_bits" /></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">225</span> <span class="k">static</span> <span class="kr">inline</span> <span class="n">t_key</span> <span class="nf">tkey_extract_bits</span><span class="p">(</span><span class="n">t_key</span> <span class="n">a</span><span class="p">,</span> <span class="kt">int</span> <span class="n">offset</span><span class="p">,</span> <span class="kt">int</span> <span class="n">bits</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">226</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">227</span>         <span class="k">if</span> <span class="p">(</span><span class="n">offset</span> <span class="o">&lt;</span> <span class="n">KEYLENGTH</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">228</span>                 <span class="k">return</span> <span class="p">((</span><span class="n">t_key</span><span class="p">)(</span><span class="n">a</span> <span class="o">&lt;&lt;</span> <span class="n">offset</span><span class="p">))</span> <span class="o">&gt;&gt;</span> <span class="p">(</span><span class="n">KEYLENGTH</span> <span class="o">-</span> <span class="n">bits</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">229</span>         <span class="k">else</span>
+</span><span class='line'> <span class="mi">230</span>                 <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">231</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>tkey_equals</code></h3>
+
+<p><code>tkey a</code> is equal with <code>tkey b</code></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">233</span> <span class="k">static</span> <span class="kr">inline</span> <span class="kt">int</span> <span class="n">tkey_equals</span><span class="p">(</span><span class="n">t_key</span> <span class="n">a</span><span class="p">,</span> <span class="n">t_key</span> <span class="n">b</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">234</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">235</span>         <span class="k">return</span> <span class="n">a</span> <span class="o">==</span> <span class="n">b</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">236</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>tkey_sub_equals</code></h3>
+
+<p>simlar with <code>tkey_equals</code>, while it only compare the <code>bits</code> bits from the
+<code>offset</code>st bit.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">238</span> <span class="k">static</span> <span class="kr">inline</span> <span class="kt">int</span> <span class="n">tkey_sub_equals</span><span class="p">(</span><span class="n">t_key</span> <span class="n">a</span><span class="p">,</span> <span class="kt">int</span> <span class="n">offset</span><span class="p">,</span> <span class="kt">int</span> <span class="n">bits</span><span class="p">,</span> <span class="n">t_key</span> <span class="n">b</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">239</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">240</span>         <span class="k">if</span> <span class="p">(</span><span class="n">bits</span> <span class="o">==</span> <span class="mi">0</span> <span class="o">||</span> <span class="n">offset</span> <span class="o">&gt;=</span> <span class="n">KEYLENGTH</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">241</span>                 <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">242</span>         <span class="n">bits</span> <span class="o">=</span> <span class="n">bits</span> <span class="o">&gt;</span> <span class="n">KEYLENGTH</span> <span class="o">?</span> <span class="nl">KEYLENGTH</span> <span class="p">:</span> <span class="n">bits</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">243</span>         <span class="k">return</span> <span class="p">((</span><span class="n">a</span> <span class="o">^</span> <span class="n">b</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="n">offset</span><span class="p">)</span> <span class="o">&gt;&gt;</span> <span class="p">(</span><span class="n">KEYLENGTH</span> <span class="o">-</span> <span class="n">bits</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">244</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>tkey_mismatch</code></h3>
+
+<p>find out the first different bit after the <code>offset</code>st bit
+between <code>tkey a</code> and <code>tkey b</code>.</p>
+
+<p>after the operation <code>a ^ b</code>, the first bit with `1' will
+be the first different bit.</p>
+
+<p><img src="/images/fib_trie/tkey_mismatch.png" alt="tkey_mismatch" /></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">246</span> <span class="k">static</span> <span class="kr">inline</span> <span class="kt">int</span> <span class="n">tkey_mismatch</span><span class="p">(</span><span class="n">t_key</span> <span class="n">a</span><span class="p">,</span> <span class="kt">int</span> <span class="n">offset</span><span class="p">,</span> <span class="n">t_key</span> <span class="n">b</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">247</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">248</span>         <span class="n">t_key</span> <span class="n">diff</span> <span class="o">=</span> <span class="n">a</span> <span class="o">^</span> <span class="n">b</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">249</span>         <span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="n">offset</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">250</span>
+</span><span class='line'> <span class="mi">251</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">diff</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">252</span>                 <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">253</span>         <span class="k">while</span> <span class="p">((</span><span class="n">diff</span> <span class="o">&lt;&lt;</span> <span class="n">i</span><span class="p">)</span> <span class="o">&gt;&gt;</span> <span class="p">(</span><span class="n">KEYLENGTH</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">254</span>                 <span class="n">i</span><span class="o">++</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">255</span>         <span class="k">return</span> <span class="n">i</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">256</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>mask_pfx</code></h3>
+
+<p>保留<code>key</code>的前<code>l</code>位，并将<code>l</code>位之后的所有位清零。<code>l</code>相当于掩码长度。</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">238</span> <span class="k">static</span> <span class="kr">inline</span> <span class="n">t_key</span> <span class="nf">mask_pfx</span><span class="p">(</span><span class="n">t_key</span> <span class="n">k</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">l</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">239</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">240</span>         <span class="k">return</span> <span class="p">(</span><span class="n">l</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="o">?</span> <span class="mi">0</span> <span class="o">:</span> <span class="n">k</span> <span class="o">&gt;&gt;</span> <span class="p">(</span><span class="n">KEYLENGTH</span><span class="o">-</span><span class="n">l</span><span class="p">)</span> <span class="o">&lt;&lt;</span> <span class="p">(</span><span class="n">KEYLENGTH</span><span class="o">-</span><span class="n">l</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">241</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-08-26T11:05:00+08:00'><span class='date'><span class='date-month'>Aug</span> <span class='date-day'>26</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>11:05 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/route/'>route</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/08/23/debug-kernel-with-jprobe/" title="Previous Post: debug kernel with jprobe">&laquo; debug kernel with jprobe</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/08/26/how-does-xfrm-km-work/" title="Next Post: How does xfrm km work">How does xfrm km work &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,492 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Draft: Isolcpus - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="Isolcpus kthread has wrong affinity when use isolcpus in bootline when boot kernel with isolcpus in grub command lines, only init thread has expected &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/07/10/isolcpus/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Draft: Isolcpus</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-07-10T00:00:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>12:00 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>Isolcpus</p>
+
+<h2>kthread has wrong affinity when use isolcpus in bootline</h2>
+
+<p>when boot kernel with isolcpus in grub command lines, only init thread has expected affinity, which exclude the isolated cpus.</p>
+
+<p>while the kthreads affinity still includes isolated cpus.</p>
+
+<!-- more -->
+
+
+<h3>Test snapshot</h3>
+
+<p>Test with x86_64 and boot parameter: <code>isolcpus=2,3</code></p>
+
+<h4>init thread affinity is right</h4>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>junwei@junwei:~&gt; taskset -p 1 pid 1’s current affinity mask: 3 &lt;== init thread(pid 1) has expected affinity.
+</span><span class='line'>junwei@junwei:~&gt;</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>kthread affinity is wrong !</h4>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>junwei@junwei:~&gt; taskset  -p 2
+</span><span class='line'>pid 2's current affinity mask: f  &lt;== !!! kthreadd thread(pid 1) has expected affinity.</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>kthread <code>vnb</code> affinity is also wrong !</h4>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>junwei@junwei:~&gt; ps axuw|grep ksocket
+</span><span class='line'>root      1521  0.0  0.0      0     0 ?        S    15:47   0:00 [ksocket-xmit]
+</span><span class='line'>root      1522  0.0  0.0      0     0 ?        S    15:47   0:00 [ksocket-recv]
+</span><span class='line'>root      1884  0.0  0.0   9152   684 ttyS0    S+   15:47   0:00 grep ksocket
+</span><span class='line'>junwei@junwei:~&gt;
+</span><span class='line'>junwei@junwei:~&gt; taskset  -p 1521
+</span><span class='line'>pid 1521's current affinity mask: f
+</span><span class='line'>junwei@junwei:~&gt; taskset  -p 1522
+</span><span class='line'>pid 1522's current affinity mask: f</span></code></pre></td></tr></table></div></figure>
+
+
+<p>NOTE: even we forcely set kthread with right affinity in /etc/rc, the vnb thread still has wrong affinity.</p>
+
+<p>I think it is a kernel bug.
+See discription about isolcpus in kernel Documentation/kernel-parameters.txt.</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>1257         isolcpus=       [KNL,SMP] Isolate CPUs from the general scheduler.
+</span><span class='line'>1258                         Format:
+</span><span class='line'>1259                         &lt;cpu number&gt;,...,&lt;cpu number&gt;
+</span><span class='line'>1260                         or
+</span><span class='line'>1261                         &lt;cpu number&gt;-&lt;cpu number&gt;
+</span><span class='line'>1262                         (must be a positive range in ascending order)
+</span><span class='line'>1263                         or a mixture
+</span><span class='line'>1264                         &lt;cpu number&gt;,...,&lt;cpu number&gt;-&lt;cpu number&gt;
+</span><span class='line'>1265
+</span><span class='line'>1266                         This option can be used to specify one or more CPUs
+</span><span class='line'>1267                         to isolate from the general SMP balancing and scheduling
+</span><span class='line'>1268                         algorithms. You can move a process onto or off an
+</span><span class='line'>1269                         "isolated" CPU via the CPU affinity syscalls or cpuset.
+</span><span class='line'>1270                         &lt;cpu number&gt; begins at 0 and the maximum value is
+</span><span class='line'>1271                         "number of CPUs in system - 1".
+</span><span class='line'>1272
+</span><span class='line'>1273                         This option is the preferred way to isolate CPUs. The
+</span><span class='line'>1274                         alternative -- manually setting the CPU mask of all
+</span><span class='line'>1275                         tasks in the system -- can cause problems and
+</span><span class='line'>1276                         suboptimal load balancer performance.</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Analysis:</h2>
+
+<p>this is a common problem, kernel 3.10 is used to analysis it.</p>
+
+<p>why kthread(pid) has wrong affinity.
+when kernel boot, pid0 create process init(pid1) and kthread process(pid2). pid1 and pid2 is created by <code>rest_init</code> in init/main.c</p>
+
+<p>All the kernel threads created by <code>kthread_create</code>/<code>kthread_run</code>, will be the children of the kthread process(pid2).</p>
+
+<p>In kernel source, kthread(pid2) is identitied by ‘kthread_task’, which is run with funciton ‘kthreadd’.</p>
+
+<p>mainly of function ‘kthread’ is a infinite loop, check if there is a new kernel thread need to be created, if yes, create them.</p>
+
+<p>before start the infinite loop, kernel chagne the cpumask/affinity of pid2, see line 453 file kernel/kthread.c.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">364</span> <span class="k">static</span> <span class="n">noinline</span> <span class="kt">void</span> <span class="n">__init_refok</span> <span class="n">rest_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="mi">365</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">366</span>         <span class="kt">int</span> <span class="n">pid</span><span class="p">;</span>
+</span><span class='line'><span class="mi">367</span>
+</span><span class='line'><span class="mi">368</span>         <span class="nf">rcu_scheduler_starting</span><span class="p">();</span>
+</span><span class='line'><span class="mi">369</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">370          * We need to spawn init first so that it obtains pid 1, however</span>
+</span><span class='line'><span class="cm">371          * the init task will end up wanting to create kthreads, which, if</span>
+</span><span class='line'><span class="cm">372          * we schedule it before we create kthreadd, will OOPS.</span>
+</span><span class='line'><span class="cm">373          */</span>
+</span><span class='line'><span class="mi">374</span>         <span class="n">kernel_thread</span><span class="p">(</span><span class="n">kernel_init</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="n">CLONE_FS</span> <span class="o">|</span> <span class="n">CLONE_SIGHAND</span><span class="p">);</span> <span class="o">&lt;==</span>  <span class="n">pid</span> <span class="mi">1</span>
+</span><span class='line'><span class="mi">375</span>         <span class="n">numa_default_policy</span><span class="p">();</span>
+</span><span class='line'><span class="mi">376</span>         <span class="n">pid</span> <span class="o">=</span> <span class="n">kernel_thread</span><span class="p">(</span><span class="n">kthreadd</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">,</span> <span class="n">CLONE_FS</span> <span class="o">|</span> <span class="n">CLONE_FILES</span><span class="p">);</span> <span class="o">&lt;==</span> <span class="n">pid</span> <span class="mi">2</span>
+</span><span class='line'><span class="mi">377</span>         <span class="n">rcu_read_lock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">378</span>         <span class="n">kthreadd_task</span> <span class="o">=</span> <span class="n">find_task_by_pid_ns</span><span class="p">(</span><span class="n">pid</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">init_pid_ns</span><span class="p">);</span>
+</span><span class='line'><span class="mi">379</span>         <span class="nf">rcu_read_unlock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">380</span>         <span class="nf">complete</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthreadd_done</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In function ‘kthreadd’, file kernel/kthread.c</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">446</span> <span class="kt">int</span> <span class="n">kthreadd</span><span class="p">(</span><span class="kt">void</span> <span class="o">*</span><span class="n">unused</span><span class="p">)</span>
+</span><span class='line'><span class="mi">447</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">448</span>         <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">tsk</span> <span class="o">=</span> <span class="n">current</span><span class="p">;</span>
+</span><span class='line'><span class="mi">449</span>
+</span><span class='line'><span class="mi">450</span>         <span class="cm">/* Setup a clean context for our children to inherit. */</span>
+</span><span class='line'><span class="mi">451</span>         <span class="n">set_task_comm</span><span class="p">(</span><span class="n">tsk</span><span class="p">,</span> <span class="s">&quot;kthreadd&quot;</span><span class="p">);</span>
+</span><span class='line'><span class="mi">452</span>         <span class="nf">ignore_signals</span><span class="p">(</span><span class="n">tsk</span><span class="p">);</span>
+</span><span class='line'><span class="mi">453</span>         <span class="nf">set_cpus_allowed_ptr</span><span class="p">(</span><span class="n">tsk</span><span class="p">,</span> <span class="n">cpu_all_mask</span><span class="p">);</span> <span class="o">&lt;========</span>
+</span><span class='line'><span class="mi">454</span>         <span class="n">set_mems_allowed</span><span class="p">(</span><span class="n">node_states</span><span class="p">[</span><span class="n">N_MEMORY</span><span class="p">]);</span>
+</span><span class='line'><span class="mi">455</span>
+</span><span class='line'><span class="mi">456</span>         <span class="n">current</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">|=</span> <span class="n">PF_NOFREEZE</span><span class="p">;</span>
+</span><span class='line'><span class="mi">457</span>
+</span><span class='line'><span class="mi">458</span>         <span class="k">for</span> <span class="p">(;;)</span> <span class="p">{</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>why kernel thread created by ‘kthread_create’ still has wrong affinity, even kthread(pid2) has been set with right affinity.
+kthead_create is just a marco to wrapper kthread_create_on_node. In kthread_create_on_node, new kernel thread affinity/cpumask will be set as cpu_all_mask(all cpus), just after it is created. See line 285</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">13</span> <span class="err">#</span><span class="n">define</span> <span class="n">kthread_create</span><span class="p">(</span><span class="n">threadfn</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">namefmt</span><span class="p">,</span> <span class="n">arg</span><span class="p">...)</span> \
+</span><span class='line'> <span class="mi">14</span>         <span class="n">kthread_create_on_node</span><span class="p">(</span><span class="n">threadfn</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">namefmt</span><span class="p">,</span> <span class="err">##</span><span class="n">arg</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">253</span> <span class="k">struct</span> <span class="n">task_struct</span> <span class="o">*</span><span class="n">kthread_create_on_node</span><span class="p">(</span><span class="kt">int</span> <span class="p">(</span><span class="o">*</span><span class="n">threadfn</span><span class="p">)(</span><span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">),</span>
+</span><span class='line'><span class="mi">254</span>                                            <span class="kt">void</span> <span class="o">*</span><span class="n">data</span><span class="p">,</span> <span class="kt">int</span> <span class="n">node</span><span class="p">,</span>
+</span><span class='line'><span class="mi">255</span>                                            <span class="k">const</span> <span class="kt">char</span> <span class="n">namefmt</span><span class="p">[],</span>
+</span><span class='line'><span class="mi">256</span>                                            <span class="p">...)</span>
+</span><span class='line'><span class="mi">257</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">258</span>         <span class="k">struct</span> <span class="n">kthread_create_info</span> <span class="n">create</span><span class="p">;</span>
+</span><span class='line'><span class="mi">259</span>
+</span><span class='line'><span class="mi">260</span>         <span class="n">create</span><span class="p">.</span><span class="n">threadfn</span> <span class="o">=</span> <span class="n">threadfn</span><span class="p">;</span>
+</span><span class='line'><span class="mi">261</span>         <span class="n">create</span><span class="p">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="p">;</span>
+</span><span class='line'><span class="mi">262</span>         <span class="n">create</span><span class="p">.</span><span class="n">node</span> <span class="o">=</span> <span class="n">node</span><span class="p">;</span>
+</span><span class='line'><span class="mi">263</span>         <span class="nf">init_completion</span><span class="p">(</span><span class="o">&amp;</span><span class="n">create</span><span class="p">.</span><span class="n">done</span><span class="p">);</span>
+</span><span class='line'><span class="mi">264</span>
+</span><span class='line'><span class="mi">265</span>         <span class="nf">spin_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthread_create_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">266</span>         <span class="nf">list_add_tail</span><span class="p">(</span><span class="o">&amp;</span><span class="n">create</span><span class="p">.</span><span class="n">list</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">kthread_create_list</span><span class="p">);</span>
+</span><span class='line'><span class="mi">267</span>         <span class="nf">spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">kthread_create_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">268</span>
+</span><span class='line'><span class="mi">269</span>         <span class="nf">wake_up_process</span><span class="p">(</span><span class="n">kthreadd_task</span><span class="p">);</span>
+</span><span class='line'><span class="mi">270</span>         <span class="nf">wait_for_completion</span><span class="p">(</span><span class="o">&amp;</span><span class="n">create</span><span class="p">.</span><span class="n">done</span><span class="p">);</span>
+</span><span class='line'><span class="mi">271</span>
+</span><span class='line'><span class="mi">272</span>         <span class="nf">if</span> <span class="p">(</span><span class="o">!</span><span class="n">IS_ERR</span><span class="p">(</span><span class="n">create</span><span class="p">.</span><span class="n">result</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">273</span>                 <span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">sched_param</span> <span class="n">param</span> <span class="o">=</span> <span class="p">{</span> <span class="p">.</span><span class="n">sched_priority</span> <span class="o">=</span> <span class="mi">0</span> <span class="p">};</span>
+</span><span class='line'><span class="mi">274</span>                 <span class="kt">va_list</span> <span class="n">args</span><span class="p">;</span>
+</span><span class='line'><span class="mi">275</span>
+</span><span class='line'><span class="mi">276</span>                 <span class="n">va_start</span><span class="p">(</span><span class="n">args</span><span class="p">,</span> <span class="n">namefmt</span><span class="p">);</span>
+</span><span class='line'><span class="mi">277</span>                 <span class="n">vsnprintf</span><span class="p">(</span><span class="n">create</span><span class="p">.</span><span class="n">result</span><span class="o">-&gt;</span><span class="n">comm</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="n">create</span><span class="p">.</span><span class="n">result</span><span class="o">-&gt;</span><span class="n">comm</span><span class="p">),</span>
+</span><span class='line'><span class="mi">278</span>                           <span class="n">namefmt</span><span class="p">,</span> <span class="n">args</span><span class="p">);</span>
+</span><span class='line'><span class="mi">279</span>                 <span class="n">va_end</span><span class="p">(</span><span class="n">args</span><span class="p">);</span>
+</span><span class='line'><span class="mi">280</span>                 <span class="cm">/*</span>
+</span><span class='line'><span class="cm">281                  * root may have changed our (kthreadd&#39;s) priority or CPU mask.</span>
+</span><span class='line'><span class="cm">282                  * The kernel thread should not inherit these properties.</span>
+</span><span class='line'><span class="cm">283                  */</span>
+</span><span class='line'><span class="mi">284</span>                 <span class="n">sched_setscheduler_nocheck</span><span class="p">(</span><span class="n">create</span><span class="p">.</span><span class="n">result</span><span class="p">,</span> <span class="n">SCHED_NORMAL</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">param</span><span class="p">);</span>
+</span><span class='line'><span class="mi">285</span>                 <span class="n">set_cpus_allowed_ptr</span><span class="p">(</span><span class="n">create</span><span class="p">.</span><span class="n">result</span><span class="p">,</span> <span class="n">cpu_all_mask</span><span class="p">);</span> <span class="o">&lt;====</span> <span class="n">chang</span> <span class="n">new</span> <span class="n">kernel</span> <span class="kr">thread</span> <span class="n">affinity</span>
+</span><span class='line'><span class="mi">286</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">287</span>         <span class="k">return</span> <span class="n">create</span><span class="p">.</span><span class="n">result</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>solution(doing):</p>
+
+<p>set right affinity for pid2 and other kernel threads when they are created.</p>
+
+<p>a bit trouble, cpusmask of isolcpus is stored as in kernel/sche/core.c and is a static variable name ‘cpu_isolated_map’.</p>
+
+<p>I rename it as ‘cpu_isolated_mask’ and export it. Just like other cpu masks(such as cpu_possible_mask, cpu_online_mask()</p>
+
+<p>Posted by Martin Zhang Jul 10th, 2013   gist, isocpus</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-07-10T00:00:00+08:00'><span class='date'><span class='date-month'>Jul</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/sched/'>sched</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/06/27/how-kernel-threada-is-created/" title="Previous Post: How Kernel Thread Is Created">&laquo; How Kernel Thread Is Created</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/07/26/schedule-study/" title="Next Post: draft: struct rq">draft: struct rq &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,243 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>嵌入式linux的远程控制-Mini Vnc - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="项目背景 公司有台测试设备是基于嵌入式linux的， 支持framebuff。该测试设备自带显卡，并且绝大多数的操作需要据需要本地键盘操作，所有运行结果均显示在本机屏幕。公司现基于同一管理的需要。所有的物理设备均需要放入机房。这给在该设备进行开发和测试的人员以很大的不方便。 &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2007/11/15/mini-vnc/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">嵌入式linux的远程控制-Mini Vnc</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2007-11-15T00:00:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>15</span><span class='date-suffix'>th</span>, <span class='date-year'>2007</span></span> <span class='time'>12:00 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2>项目背景</h2>
+
+<pre><code>公司有台测试设备是基于嵌入式linux的， 支持framebuff。该测试设备自带显卡，并且绝大多数的操作需要据需要本地键盘操作，所有运行结果均显示在本机屏幕。公司现基于同一管理的需要。所有的物理设备均需要放入机房。这给在该设备进行开发和测试的人员以很大的不方便。因此尝试开发一套基于嵌入式linux远程控制软件，并命名mini-vnc。
+</code></pre>
+
+<!-- more -->
+
+
+<h2>软件原理</h2>
+
+<pre><code>在普通linux系统上通常使用VNC作为远程控制工具。而嵌入式设备远程控制的工具很少，也许是我没有找到。最近实现了一个基于嵌入式linux的远程控制工具。嵌入式作为服务器端。 winxp作为客户端。
+服务器端可以分为设备层和网络传输层。设备层在设计中被分为完全独立的模块：图像截取和键盘模拟。图像截取模块负责从嵌入式设备里面读取当前屏幕的像素点信息。利用framebuffer直接对内存数据进行操作。该模块在用户空间进行操作，直接读取各个像素点的RGB值。如果需要调色板的话，需要另外读取掉色板信息。键盘模拟模块负责模拟给定的键盘消息。并发送给内核中input_device的缓冲区队列。该内核可加载模块模拟一个的物理设备实现对键盘消息的传递。
+网络传输层：负责发送屏幕图像信息，接受远程键盘消息，并与设备层交互数据。基于局域网内传输和对系统性能的考虑，传输层采用UDP协议。但没有限定Session个数，因此可以支持多个客户端。但在实际才是过程中，发现对系统性能消耗比较大。目前的系统cpu为mipsel、400MHZ，采用256色640×480的图片质量传输，同时采用zlib库对图像进行压缩。最终每幅图片大小在3-8k左右。对cpu的消耗接近10%。
+客户端是个简单的MFC程序。接受图像数据并根据调色板信息绘图。检测键盘按键消息并转化为linux键盘消息并发送。
+</code></pre>
+
+<h2>存在问题</h2>
+
+<ol>
+<li>cpu消耗过大。</li>
+<li>图像不连续。最多4帧每秒。</li>
+</ol>
+
+
+<h2>展望</h2>
+
+<pre><code>有机会把它做得更完善，客户端界面更友好。受本人能力所限，客户端界面不够漂亮。同时提示信息特少。
+</code></pre>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2007-11-15T00:00:00+08:00'><span class='date'><span class='date-month'>Nov</span> <span class='date-day'>15</span><span class='date-suffix'>th</span>, <span class='date-year'>2007</span></span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/others/'>others</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2007/11/01/manage-dev/" title="Previous Post: linux 安装帮助文档">&laquo; linux 安装帮助文档</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2007/11/30/pound-in-c/" title="Next Post: #在C中用法">#在C中用法 &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

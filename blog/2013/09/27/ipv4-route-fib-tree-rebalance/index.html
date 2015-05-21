@@ -1,0 +1,877 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>IPv4 Route Fib Tree Rebalance - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="call trace 以插入一条新的路由为例。 1
+2
+3
+4
+5
+6
+&gt; fib_insert_node
+&gt; &gt; trie_rebalance
+&gt; &gt; &gt; while loop
+&gt; &gt; &gt; &gt; resize
+&gt; &gt; &gt &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/09/27/ipv4-route-fib-tree-rebalance/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">IPv4 Route Fib Tree Rebalance</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-09-27T16:36:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>4:36 pm</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h3>call trace</h3>
+
+<p>以插入一条新的路由为例。</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="o">&gt;</span> <span class="n">fib_insert_node</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">trie_rebalance</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="k">while</span> <span class="n">loop</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">resize</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">tnode_put_child_reorg</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">tnode_free_flush</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>trie_rebalance</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">for_each_node</span><span class="p">(</span><span class="n">from</span> <span class="n">current</span> <span class="n">node</span> <span class="n">tn</span> <span class="n">to</span>  <span class="n">fib_trie</span> <span class="n">root</span><span class="p">)</span>
+</span><span class='line'>  <span class="n">call</span> <span class="n">resize</span><span class="p">()</span>
+</span><span class='line'>  <span class="n">tnode_put_child_reorg</span>
+</span><span class='line'>
+</span><span class='line'><span class="err">从当前节点开始一直到根节点，以当前节点作为一个子树，</span>
+</span><span class='line'><span class="err">反复调用</span><span class="n">resize</span><span class="p">,</span> <span class="err">并通过</span><span class="n">tnode_put_child_reorg</span>
+</span><span class='line'><span class="err">更新当前节点的父节点的统计信息。</span>
+</span><span class='line'>
+</span><span class='line'><span class="err">注：</span> <span class="n">resize</span><span class="err">可能会更改子树的根节点！</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<!-- more -->
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">986</span> <span class="k">static</span> <span class="kt">void</span> <span class="n">trie_rebalance</span><span class="p">(</span><span class="k">struct</span> <span class="n">trie</span> <span class="o">*</span><span class="n">t</span><span class="p">,</span> <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">tn</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">987</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">988</span>         <span class="kt">int</span> <span class="n">wasfull</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">989</span>         <span class="n">t_key</span> <span class="n">cindex</span><span class="p">,</span> <span class="n">key</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">990</span>         <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">tp</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">991</span>
+</span><span class='line'> <span class="mi">992</span>         <span class="n">key</span> <span class="o">=</span> <span class="n">tn</span><span class="o">-&gt;</span><span class="n">key</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">993</span>
+</span><span class='line'> <span class="mi">994</span>         <span class="nf">while</span> <span class="p">(</span><span class="n">tn</span> <span class="o">!=</span> <span class="nb">NULL</span> <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="n">tp</span> <span class="o">=</span> <span class="n">node_parent</span><span class="p">((</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span><span class="n">tn</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">995</span>                 <span class="n">cindex</span> <span class="o">=</span> <span class="n">tkey_extract_bits</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">tp</span><span class="o">-&gt;</span><span class="n">pos</span><span class="p">,</span> <span class="n">tp</span><span class="o">-&gt;</span><span class="n">bits</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">996</span>                 <span class="n">wasfull</span> <span class="o">=</span> <span class="n">tnode_full</span><span class="p">(</span><span class="n">tp</span><span class="p">,</span> <span class="n">tnode_get_child</span><span class="p">(</span><span class="n">tp</span><span class="p">,</span> <span class="n">cindex</span><span class="p">));</span>
+</span><span class='line'> <span class="mi">997</span>                 <span class="n">tn</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="p">)</span><span class="n">resize</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">tn</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">998</span>
+</span><span class='line'> <span class="mi">999</span>                 <span class="n">tnode_put_child_reorg</span><span class="p">(</span><span class="n">tp</span><span class="p">,</span> <span class="n">cindex</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1000</span>                                       <span class="p">(</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span><span class="n">tn</span><span class="p">,</span> <span class="n">wasfull</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1001</span>
+</span><span class='line'><span class="mi">1002</span>                 <span class="n">tp</span> <span class="o">=</span> <span class="n">node_parent</span><span class="p">((</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span> <span class="n">tn</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1003</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">tp</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1004</span>                         <span class="n">rcu_assign_pointer</span><span class="p">(</span><span class="n">t</span><span class="o">-&gt;</span><span class="n">trie</span><span class="p">,</span> <span class="p">(</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span><span class="n">tn</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1005</span>
+</span><span class='line'><span class="mi">1006</span>                 <span class="n">tnode_free_flush</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1007</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">tp</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1008</span>                         <span class="k">break</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1009</span>                 <span class="n">tn</span> <span class="o">=</span> <span class="n">tp</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1010</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1011</span>
+</span><span class='line'><span class="mi">1012</span>         <span class="cm">/* Handle last (top) tnode */</span>
+</span><span class='line'><span class="mi">1013</span>         <span class="k">if</span> <span class="p">(</span><span class="n">IS_TNODE</span><span class="p">(</span><span class="n">tn</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1014</span>                 <span class="n">tn</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="p">)</span><span class="n">resize</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">tn</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1015</span>
+</span><span class='line'><span class="mi">1016</span>         <span class="nf">rcu_assign_pointer</span><span class="p">(</span><span class="n">t</span><span class="o">-&gt;</span><span class="n">trie</span><span class="p">,</span> <span class="p">(</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span><span class="n">tn</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1017</span>         <span class="nf">tnode_free_flush</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1018</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>rebalance的核心<code>resize</code>函数</h3>
+
+<h4><code>inflate</code>和<code>halve</code></h4>
+
+<p>rebalancede核心是resize函数。在该函数里有两种操作<code>inflate</code>和<code>halve</code>，他们是两种相反的操作。</p>
+
+<ol>
+<li><p><code>inflate</code>是将当前节点的孩子指针数组的元素个数增加一倍， 同时将尽量将各个子孩子的孩子，直接挂接到新的孩子指针数组上。
+ 最终达到减少树的深度。所以要像执行<code>inflate</code>操作，孙子节点必须足够多。</p></li>
+<li><p><code>halve</code>将当前节点的孩子指针数组的元素个数减半。
+ 如果第2i和2i+1个孩子都为空，则压缩后的第i个孩子也为空，
+ 如果第2i和2i+1个孩子只有一个为空，则将不非空的孩子作为压缩后的第i个孩子。
+ 如果第2i和2i+1个孩子都不为空，则插入一个新的中间节点。并将第2i和2i+1个孩子分别作为新的中间节点的左右(第0和第1个)孩子。
+<img src="/images/fib_trie//halve.jpg" alt="case 1" /></p></li>
+</ol>
+
+
+<h4><code>inflate</code>和<code>halve</code>的执行条件</h4>
+
+<p>英文注释说的很清楚了。见下文的翻译。</p>
+
+<h4><code>resize</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+<span class='line-number'>101</span>
+<span class='line-number'>102</span>
+<span class='line-number'>103</span>
+<span class='line-number'>104</span>
+<span class='line-number'>105</span>
+<span class='line-number'>106</span>
+<span class='line-number'>107</span>
+<span class='line-number'>108</span>
+<span class='line-number'>109</span>
+<span class='line-number'>110</span>
+<span class='line-number'>111</span>
+<span class='line-number'>112</span>
+<span class='line-number'>113</span>
+<span class='line-number'>114</span>
+<span class='line-number'>115</span>
+<span class='line-number'>116</span>
+<span class='line-number'>117</span>
+<span class='line-number'>118</span>
+<span class='line-number'>119</span>
+<span class='line-number'>120</span>
+<span class='line-number'>121</span>
+<span class='line-number'>122</span>
+<span class='line-number'>123</span>
+<span class='line-number'>124</span>
+<span class='line-number'>125</span>
+<span class='line-number'>126</span>
+<span class='line-number'>127</span>
+<span class='line-number'>128</span>
+<span class='line-number'>129</span>
+<span class='line-number'>130</span>
+<span class='line-number'>131</span>
+<span class='line-number'>132</span>
+<span class='line-number'>133</span>
+<span class='line-number'>134</span>
+<span class='line-number'>135</span>
+<span class='line-number'>136</span>
+<span class='line-number'>137</span>
+<span class='line-number'>138</span>
+<span class='line-number'>139</span>
+<span class='line-number'>140</span>
+<span class='line-number'>141</span>
+<span class='line-number'>142</span>
+<span class='line-number'>143</span>
+<span class='line-number'>144</span>
+<span class='line-number'>145</span>
+<span class='line-number'>146</span>
+<span class='line-number'>147</span>
+<span class='line-number'>148</span>
+<span class='line-number'>149</span>
+<span class='line-number'>150</span>
+<span class='line-number'>151</span>
+<span class='line-number'>152</span>
+<span class='line-number'>153</span>
+<span class='line-number'>154</span>
+<span class='line-number'>155</span>
+<span class='line-number'>156</span>
+<span class='line-number'>157</span>
+<span class='line-number'>158</span>
+<span class='line-number'>159</span>
+<span class='line-number'>160</span>
+<span class='line-number'>161</span>
+<span class='line-number'>162</span>
+<span class='line-number'>163</span>
+<span class='line-number'>164</span>
+<span class='line-number'>165</span>
+<span class='line-number'>166</span>
+<span class='line-number'>167</span>
+<span class='line-number'>168</span>
+<span class='line-number'>169</span>
+<span class='line-number'>170</span>
+<span class='line-number'>171</span>
+<span class='line-number'>172</span>
+<span class='line-number'>173</span>
+<span class='line-number'>174</span>
+<span class='line-number'>175</span>
+<span class='line-number'>176</span>
+<span class='line-number'>177</span>
+<span class='line-number'>178</span>
+<span class='line-number'>179</span>
+<span class='line-number'>180</span>
+<span class='line-number'>181</span>
+<span class='line-number'>182</span>
+<span class='line-number'>183</span>
+<span class='line-number'>184</span>
+<span class='line-number'>185</span>
+<span class='line-number'>186</span>
+<span class='line-number'>187</span>
+<span class='line-number'>188</span>
+<span class='line-number'>189</span>
+<span class='line-number'>190</span>
+<span class='line-number'>191</span>
+<span class='line-number'>192</span>
+<span class='line-number'>193</span>
+<span class='line-number'>194</span>
+<span class='line-number'>195</span>
+<span class='line-number'>196</span>
+<span class='line-number'>197</span>
+<span class='line-number'>198</span>
+<span class='line-number'>199</span>
+<span class='line-number'>200</span>
+<span class='line-number'>201</span>
+<span class='line-number'>202</span>
+<span class='line-number'>203</span>
+<span class='line-number'>204</span>
+<span class='line-number'>205</span>
+<span class='line-number'>206</span>
+<span class='line-number'>207</span>
+<span class='line-number'>208</span>
+<span class='line-number'>209</span>
+<span class='line-number'>210</span>
+<span class='line-number'>211</span>
+<span class='line-number'>212</span>
+<span class='line-number'>213</span>
+<span class='line-number'>214</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">523</span> <span class="err">#</span><span class="n">define</span> <span class="n">MAX_WORK</span> <span class="mi">10</span>
+</span><span class='line'> <span class="mi">524</span> <span class="k">static</span> <span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="n">resize</span><span class="p">(</span><span class="k">struct</span> <span class="n">trie</span> <span class="o">*</span><span class="n">t</span><span class="p">,</span> <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">tn</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">525</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">526</span>         <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">527</span>         <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">old_tn</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">528</span>         <span class="kt">int</span> <span class="n">inflate_threshold_use</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">529</span>         <span class="kt">int</span> <span class="n">halve_threshold_use</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">530</span>         <span class="kt">int</span> <span class="n">max_work</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">531</span>
+</span><span class='line'> <span class="mi">532</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">tn</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">533</span>                 <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">534</span>
+</span><span class='line'> <span class="mi">535</span>         <span class="nf">pr_debug</span><span class="p">(</span><span class="s">&quot;In tnode_resize %p inflate_threshold=%d threshold=%d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">536</span>                  <span class="n">tn</span><span class="p">,</span> <span class="n">inflate_threshold</span><span class="p">,</span> <span class="n">halve_threshold</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">537</span>
+</span><span class='line'> <span class="mi">538</span>         <span class="cm">/* No children */</span>
+</span><span class='line'> <span class="mi">539</span>         <span class="k">if</span> <span class="p">(</span><span class="n">tn</span><span class="o">-&gt;</span><span class="n">empty_children</span> <span class="o">==</span> <span class="n">tnode_child_length</span><span class="p">(</span><span class="n">tn</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">540</span>                 <span class="n">tnode_free_safe</span><span class="p">(</span><span class="n">tn</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">541</span>                 <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">542</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">543</span>         <span class="cm">/* One child */</span>
+</span><span class='line'> <span class="mi">544</span>         <span class="k">if</span> <span class="p">(</span><span class="n">tn</span><span class="o">-&gt;</span><span class="n">empty_children</span> <span class="o">==</span> <span class="n">tnode_child_length</span><span class="p">(</span><span class="n">tn</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">545</span>                 <span class="k">goto</span> <span class="n">one_child</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">546</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm"> 547          * Double as long as the resulting node has a number of</span>
+</span><span class='line'><span class="cm"> 548          * nonempty nodes that are above the threshold.</span>
+</span><span class='line'><span class="cm"> 549          */</span>
+</span><span class='line'> <span class="mi">550</span>
+</span><span class='line'> <span class="mi">551</span>         <span class="cm">/*                         </span>
+</span><span class='line'><span class="cm"> 552          * From &quot;Implementing a dynamic compressed trie&quot; by Stefan Nilsson of</span>
+</span><span class='line'><span class="cm"> 553          * the Helsinki University of Technology and Matti Tikkanen of Nokia</span>
+</span><span class='line'><span class="cm"> 554          * Telecommunications, page 6:</span>
+</span><span class='line'><span class="cm"> 555          * &quot;A node is doubled if the ratio of non-empty children to all</span>
+</span><span class='line'><span class="cm"> 556          * children in the *doubled* node is at least &#39;high&#39;.&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm">     根据 &quot;Implementing a dynamic compressed trie&quot;的第6页</span>
+</span><span class='line'><span class="cm">     &quot;如果想要一个节点的， 其非空子孩子在所有孩子中的比例必须不少于 ‘high&#39;&quot;</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm"> 557          *</span>
+</span><span class='line'><span class="cm"> 558          * &#39;high&#39; in this instance is the variable &#39;inflate_threshold&#39;. It</span>
+</span><span class='line'><span class="cm"> 559          * is expressed as a percentage, so we multiply it with</span>
+</span><span class='line'><span class="cm"> 560          * tnode_child_length() and instead of multiplying by 2 (since the</span>
+</span><span class='line'><span class="cm"> 561          * child array will be doubled by inflate()) and multiplying</span>
+</span><span class='line'><span class="cm"> 562          * the left-hand side by 100 (to handle the percentage thing) we</span>
+</span><span class='line'><span class="cm"> 563          * multiply the left-hand side by 50.</span>
+</span><span class='line'><span class="cm"> 564          *</span>
+</span><span class='line'><span class="cm">     &#39;high&#39;在这里有变量&#39;inflate_threshold&#39;表示。它有一个百分比的形式。</span>
+</span><span class='line'><span class="cm">     100 *  tn_noempty_children/(tnode_child_length() *2) = &#39;inflate_threshold&#39;  </span>
+</span><span class='line'><span class="cm">     避免除法:</span>
+</span><span class='line'><span class="cm">     100 * tn_noempty_children = &#39;inflate_threshold&#39; * (tnode_child_length() *2)</span>
+</span><span class='line'><span class="cm">     100和2 抵消： </span>
+</span><span class='line'><span class="cm">     50 * tn_noempty_children = &#39;inflate_threshold&#39; * tnode_child_length()</span>
+</span><span class='line'><span class="cm">     展开tn_noempty_children</span>
+</span><span class='line'><span class="cm">     50 * (tnode_child_length(tn) - tn-&gt;empty_children) = &#39;inflate_threshold&#39; * tnode_child_length() </span>
+</span><span class='line'>
+</span><span class='line'><span class="cm"> 565          * The left-hand side may look a bit weird: tnode_child_length(tn)</span>
+</span><span class='line'><span class="cm"> 566          * - tn-&gt;empty_children is of course the number of non-null children</span>
+</span><span class='line'><span class="cm"> 567          * in the current node. tn-&gt;full_children is the number of &quot;full&quot;</span>
+</span><span class='line'><span class="cm"> 568          * children, that is non-null tnodes with a skip value of 0.</span>
+</span><span class='line'><span class="cm"> 569          * All of those will be doubled in the resulting inflated tnode, so</span>
+</span><span class='line'><span class="cm"> 570          * we just count them one extra time here.</span>
+</span><span class='line'><span class="cm"> 571          *</span>
+</span><span class='line'><span class="cm">     左边看起来有些怪异， </span>
+</span><span class='line'><span class="cm">     tnode_child_length(tn) - tn-&gt;empty_children 指的是当前节点的非空孩子节点个数。</span>
+</span><span class='line'><span class="cm">     tn-&gt;full_children 是 &#39;full&#39;孩子节点的个数。即那些非空节点并且节点的</span>
+</span><span class='line'><span class="cm">     skip值为0（即 节点的pos == 父节点的pos+父节点的bits）</span>
+</span><span class='line'><span class="cm">     在最终膨胀的节点里，这些节点将会膨胀原来的两倍。</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm"> 572          * A clearer way to write this would be:</span>
+</span><span class='line'><span class="cm"> 573          *</span>
+</span><span class='line'><span class="cm"> 574          * to_be_doubled = tn-&gt;full_children;</span>
+</span><span class='line'><span class="cm"> 575          * not_to_be_doubled = tnode_child_length(tn) - tn-&gt;empty_children -</span>
+</span><span class='line'><span class="cm"> 576          *     tn-&gt;full_children;</span>
+</span><span class='line'><span class="cm"> 577          *</span>
+</span><span class='line'><span class="cm"> 578          * new_child_length = tnode_child_length(tn) * 2;</span>
+</span><span class='line'><span class="cm"> 579          *</span>
+</span><span class='line'><span class="cm">     要膨胀加倍的节点 = tn-&gt;full_children;</span>
+</span><span class='line'><span class="cm">     不需要膨胀的非空节点 = tnode_child_length(tn) - tn-&gt;empty_children - tn-&gt;full_children;</span>
+</span><span class='line'><span class="cm">     新的孩子节点总数 =  tnode_child_length(tn) * 2;</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm"> 580          * new_fill_factor = 100 * (not_to_be_doubled + 2*to_be_doubled) /</span>
+</span><span class='line'><span class="cm"> 581          *      new_child_length;</span>
+</span><span class='line'><span class="cm"> 582          * if (new_fill_factor &gt;= inflate_threshold)</span>
+</span><span class='line'><span class="cm"> 583          *</span>
+</span><span class='line'><span class="cm"> 584          * ...and so on, tho it would mess up the while () loop.</span>
+</span><span class='line'><span class="cm"> 585          *</span>
+</span><span class='line'><span class="cm">     new_fill_factor = 100 * （不需要膨胀的非空节点 + 2 * 要膨胀加倍的节点) / 新的孩子节点总数</span>
+</span><span class='line'><span class="cm">     if (new_fill_factor &gt; inflate_threshold)</span>
+</span><span class='line'><span class="cm">         就变得麻烦了， 我们需要一个while loop来处理。</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm"> 586          * anyway,</span>
+</span><span class='line'><span class="cm"> 587          * 100 * (not_to_be_doubled + 2*to_be_doubled) / new_child_length &gt;=</span>
+</span><span class='line'><span class="cm"> 588          *      inflate_threshold</span>
+</span><span class='line'><span class="cm"> 589          *</span>
+</span><span class='line'><span class="cm">     总之，</span>
+</span><span class='line'><span class="cm">     100 * （不需要膨胀的非空节点 + 2 * 要膨胀加倍的节点) / 新的孩子节点总数 &gt;= inflate_threshold</span>
+</span><span class='line'><span class="cm"> </span>
+</span><span class='line'><span class="cm"> 590          * avoid a division:</span>
+</span><span class='line'><span class="cm"> 591          * 100 * (not_to_be_doubled + 2*to_be_doubled) &gt;=</span>
+</span><span class='line'><span class="cm"> 592          *      inflate_threshold * new_child_length</span>
+</span><span class='line'><span class="cm"> 593          *</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm">     避免除法</span>
+</span><span class='line'><span class="cm">     100 * （不需要膨胀的非空节点 + 2 * 要膨胀加倍的节点) &gt;= inflate_threshold * 新的孩子节点总数</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm"> 594          * expand not_to_be_doubled and to_be_doubled, and shorten:</span>
+</span><span class='line'><span class="cm"> 595          * 100 * (tnode_child_length(tn) - tn-&gt;empty_children +</span>
+</span><span class='line'><span class="cm"> 596          *    tn-&gt;full_children) &gt;= inflate_threshold * new_child_length</span>
+</span><span class='line'><span class="cm"> 597          *</span>
+</span><span class='line'><span class="cm">     展开 不需要膨胀的非空节点 与 要膨胀加倍的节点</span>
+</span><span class='line'><span class="cm">     100 *（tnode_child_length(tn) - tn-&gt;empty_children - tn-&gt;full_children + 2 * tn-&gt;full_children)</span>
+</span><span class='line'><span class="cm">         &gt;= inflate_threshold * 新的孩子节点总数</span>
+</span><span class='line'><span class="cm">     ===&gt;</span>
+</span><span class='line'><span class="cm">     100 * (tnode_child_length(tn) - tn-&gt;empty_children + tn-&gt;full_children) &gt;= inflate_threshold * 新的孩子节点总数</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm"> 598          * expand new_child_length:</span>
+</span><span class='line'><span class="cm"> 599          * 100 * (tnode_child_length(tn) - tn-&gt;empty_children +</span>
+</span><span class='line'><span class="cm"> 600          *    tn-&gt;full_children) &gt;=</span>
+</span><span class='line'><span class="cm"> 601          *      inflate_threshold * tnode_child_length(tn) * 2</span>
+</span><span class='line'><span class="cm"> 602          *</span>
+</span><span class='line'><span class="cm">     展开 新的孩子节点总数</span>
+</span><span class='line'><span class="cm">     100 * (tnode_child_length(tn) - tn-&gt;empty_children + tn-&gt;full_children) &gt;= inflate_threshold * tnode_child_length(tn) * 2;</span>
+</span><span class='line'>
+</span><span class='line'><span class="cm"> 603          * shorten again:</span>
+</span><span class='line'><span class="cm"> 604          * 50 * (tn-&gt;full_children + tnode_child_length(tn) -</span>
+</span><span class='line'><span class="cm"> 605          *    tn-&gt;empty_children) &gt;= inflate_threshold *</span>
+</span><span class='line'><span class="cm"> 606          *    tnode_child_length(tn)</span>
+</span><span class='line'><span class="cm"> 607          *</span>
+</span><span class='line'><span class="cm">     再化简(2 被100 抵消):</span>
+</span><span class='line'><span class="cm">                50 * (tnode_child_length(tn) - tn-&gt;empty_children + tn-&gt;full_children) &gt;= inflate_threshold * tnode_child_length(tn);</span>
+</span><span class='line'><span class="cm">     调整位置:</span>
+</span><span class='line'><span class="cm">     50 * (tn-&gt;full_children + tnode_child_length(tn) - tn-&gt;empty_children)</span>
+</span><span class='line'><span class="cm">         &gt;= inflate_threshold * tnode_child_length(tn);</span>
+</span><span class='line'><span class="cm"> 608          */</span>
+</span><span class='line'> <span class="mi">609</span>
+</span><span class='line'> <span class="mi">610</span>         <span class="n">check_tnode</span><span class="p">(</span><span class="n">tn</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">611</span>
+</span><span class='line'> <span class="mi">612</span>         <span class="cm">/* Keep root node larger  */</span>
+</span><span class='line'> <span class="mi">613</span>
+</span><span class='line'> <span class="mi">614</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">node_parent</span><span class="p">((</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span><span class="n">tn</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">615</span>                 <span class="n">inflate_threshold_use</span> <span class="o">=</span> <span class="n">inflate_threshold_root</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">616</span>                 <span class="n">halve_threshold_use</span> <span class="o">=</span> <span class="n">halve_threshold_root</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">617</span>         <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">618</span>                 <span class="n">inflate_threshold_use</span> <span class="o">=</span> <span class="n">inflate_threshold</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">619</span>                 <span class="n">halve_threshold_use</span> <span class="o">=</span> <span class="n">halve_threshold</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">620</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">621</span>
+</span><span class='line'> <span class="mi">622</span>         <span class="n">max_work</span> <span class="o">=</span> <span class="n">MAX_WORK</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">623</span>         <span class="nf">while</span> <span class="p">((</span><span class="n">tn</span><span class="o">-&gt;</span><span class="n">full_children</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="o">&amp;&amp;</span>  <span class="n">max_work</span><span class="o">--</span> <span class="o">&amp;&amp;</span>
+</span><span class='line'> <span class="mi">624</span>                 <span class="mi">50</span> <span class="o">*</span> <span class="p">(</span><span class="n">tn</span><span class="o">-&gt;</span><span class="n">full_children</span> <span class="o">+</span> <span class="n">tnode_child_length</span><span class="p">(</span><span class="n">tn</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">625</span>                       <span class="o">-</span> <span class="n">tn</span><span class="o">-&gt;</span><span class="n">empty_children</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">626</span>                 <span class="o">&gt;=</span> <span class="n">inflate_threshold_use</span> <span class="o">*</span> <span class="n">tnode_child_length</span><span class="p">(</span><span class="n">tn</span><span class="p">)))</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">627</span>
+</span><span class='line'> <span class="mi">628</span>                 <span class="n">old_tn</span> <span class="o">=</span> <span class="n">tn</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">629</span>                 <span class="n">tn</span> <span class="o">=</span> <span class="n">inflate</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">tn</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">630</span>
+</span><span class='line'> <span class="mi">631</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">IS_ERR</span><span class="p">(</span><span class="n">tn</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">632</span>                         <span class="n">tn</span> <span class="o">=</span> <span class="n">old_tn</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">633</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_IP_FIB_TRIE_STATS</span>
+</span><span class='line'> <span class="mi">634</span>                         <span class="n">t</span><span class="o">-&gt;</span><span class="n">stats</span><span class="p">.</span><span class="n">resize_node_skipped</span><span class="o">++</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">635</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'> <span class="mi">636</span>                         <span class="k">break</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">637</span>                 <span class="p">}</span>
+</span><span class='line'> <span class="mi">638</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">639</span>
+</span><span class='line'> <span class="mi">640</span>         <span class="nf">check_tnode</span><span class="p">(</span><span class="n">tn</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">641</span>
+</span><span class='line'> <span class="mi">642</span>         <span class="cm">/* Return if at least one inflate is run */</span>
+</span><span class='line'> <span class="mi">643</span>         <span class="k">if</span> <span class="p">(</span><span class="n">max_work</span> <span class="o">!=</span> <span class="n">MAX_WORK</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">644</span>                 <span class="k">return</span> <span class="p">(</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span> <span class="n">tn</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">645</span>
+</span><span class='line'> <span class="mi">646</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm"> 647          * Halve as long as the number of empty children in this</span>
+</span><span class='line'><span class="cm"> 648          * node is above threshold.</span>
+</span><span class='line'><span class="cm"> 649          */</span>
+</span><span class='line'> <span class="mi">650</span>
+</span><span class='line'> <span class="mi">651</span>         <span class="n">max_work</span> <span class="o">=</span> <span class="n">MAX_WORK</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">652</span>         <span class="nf">while</span> <span class="p">(</span><span class="n">tn</span><span class="o">-&gt;</span><span class="n">bits</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="o">&amp;&amp;</span>  <span class="n">max_work</span><span class="o">--</span> <span class="o">&amp;&amp;</span>
+</span><span class='line'> <span class="mi">653</span>                <span class="mi">100</span> <span class="o">*</span> <span class="p">(</span><span class="n">tnode_child_length</span><span class="p">(</span><span class="n">tn</span><span class="p">)</span> <span class="o">-</span> <span class="n">tn</span><span class="o">-&gt;</span><span class="n">empty_children</span><span class="p">)</span> <span class="o">&lt;</span>
+</span><span class='line'> <span class="mi">654</span>                <span class="n">halve_threshold_use</span> <span class="o">*</span> <span class="n">tnode_child_length</span><span class="p">(</span><span class="n">tn</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">654</span>                <span class="n">halve_threshold_use</span> <span class="o">*</span> <span class="n">tnode_child_length</span><span class="p">(</span><span class="n">tn</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">655</span>
+</span><span class='line'> <span class="mi">656</span>                 <span class="n">old_tn</span> <span class="o">=</span> <span class="n">tn</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">657</span>                 <span class="n">tn</span> <span class="o">=</span> <span class="n">halve</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">tn</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">658</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">IS_ERR</span><span class="p">(</span><span class="n">tn</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">659</span>                         <span class="n">tn</span> <span class="o">=</span> <span class="n">old_tn</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">660</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_IP_FIB_TRIE_STATS</span>
+</span><span class='line'> <span class="mi">661</span>                         <span class="n">t</span><span class="o">-&gt;</span><span class="n">stats</span><span class="p">.</span><span class="n">resize_node_skipped</span><span class="o">++</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">662</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'> <span class="mi">663</span>                         <span class="k">break</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">664</span>                 <span class="p">}</span>
+</span><span class='line'> <span class="mi">665</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">666</span>
+</span><span class='line'> <span class="mi">667</span>
+</span><span class='line'> <span class="mi">668</span>         <span class="cm">/* Only one child remains */</span>
+</span><span class='line'> <span class="mi">669</span>         <span class="k">if</span> <span class="p">(</span><span class="n">tn</span><span class="o">-&gt;</span><span class="n">empty_children</span> <span class="o">==</span> <span class="n">tnode_child_length</span><span class="p">(</span><span class="n">tn</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">670</span> <span class="nl">one_child</span><span class="p">:</span>
+</span><span class='line'> <span class="mi">671</span>                 <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">tnode_child_length</span><span class="p">(</span><span class="n">tn</span><span class="p">);</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">672</span>                         <span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="n">n</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">673</span>
+</span><span class='line'> <span class="mi">674</span>                         <span class="n">n</span> <span class="o">=</span> <span class="n">rtnl_dereference</span><span class="p">(</span><span class="n">tn</span><span class="o">-&gt;</span><span class="n">child</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+</span><span class='line'> <span class="mi">675</span>                         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">n</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">676</span>                                 <span class="k">continue</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">677</span>
+</span><span class='line'> <span class="mi">678</span>                         <span class="cm">/* compress one level */</span>
+</span><span class='line'> <span class="mi">679</span>
+</span><span class='line'> <span class="mi">680</span>                         <span class="n">node_set_parent</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">681</span>                         <span class="n">tnode_free_safe</span><span class="p">(</span><span class="n">tn</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">682</span>                         <span class="k">return</span> <span class="n">n</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">683</span>                 <span class="p">}</span>
+</span><span class='line'> <span class="mi">684</span>         <span class="p">}</span>
+</span><span class='line'> <span class="mi">685</span>         <span class="k">return</span> <span class="p">(</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span> <span class="n">tn</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">686</span> <span class="p">}</span>
+</span><span class='line'> <span class="mi">687</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>tnode_put_child_reorg</code></h3>
+
+<p>英文注释说的很清楚了，主要有两个工作：</p>
+
+<ol>
+<li>更新父节点<code>tn</code> 的<code>full_children</code> 和 <code>empty_children</code>的统计值。</li>
+<li>设置<code>tn</code>节点的第<code>i</code>个子孩子为<code>n</code>。</li>
+</ol>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="cm">/*</span>
+</span><span class='line'><span class="cm">  * Add a child at position i overwriting the old value.</span>
+</span><span class='line'><span class="cm">  * Update the value of full_children and empty_children.</span>
+</span><span class='line'><span class="cm">  */</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">static</span> <span class="kt">void</span> <span class="nf">tnode_put_child_reorg</span><span class="p">(</span><span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">tn</span><span class="p">,</span> <span class="kt">int</span> <span class="n">i</span><span class="p">,</span> <span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="n">n</span><span class="p">,</span>
+</span><span class='line'>                                  <span class="kt">int</span> <span class="n">wasfull</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>        <span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="n">chi</span> <span class="o">=</span> <span class="n">rtnl_dereference</span><span class="p">(</span><span class="n">tn</span><span class="o">-&gt;</span><span class="n">child</span><span class="p">[</span><span class="n">i</span><span class="p">]);</span>
+</span><span class='line'>        <span class="kt">int</span> <span class="n">isfull</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="n">BUG_ON</span><span class="p">(</span><span class="n">i</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="o">&lt;&lt;</span><span class="n">tn</span><span class="o">-&gt;</span><span class="n">bits</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="cm">/* update emptyChildren */</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">n</span> <span class="o">==</span> <span class="nb">NULL</span> <span class="o">&amp;&amp;</span> <span class="n">chi</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">)</span>
+</span><span class='line'>                <span class="n">tn</span><span class="o">-&gt;</span><span class="n">empty_children</span><span class="o">++</span><span class="p">;</span>
+</span><span class='line'>        <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">n</span> <span class="o">!=</span> <span class="nb">NULL</span> <span class="o">&amp;&amp;</span> <span class="n">chi</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+</span><span class='line'>                <span class="n">tn</span><span class="o">-&gt;</span><span class="n">empty_children</span><span class="o">--</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="cm">/* update fullChildren */</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">wasfull</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+</span><span class='line'>                <span class="n">wasfull</span> <span class="o">=</span> <span class="n">tnode_full</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span> <span class="n">chi</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="n">isfull</span> <span class="o">=</span> <span class="n">tnode_full</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">wasfull</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="n">isfull</span><span class="p">)</span>
+</span><span class='line'>                <span class="n">tn</span><span class="o">-&gt;</span><span class="n">full_children</span><span class="o">--</span><span class="p">;</span>
+</span><span class='line'>        <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">wasfull</span> <span class="o">&amp;&amp;</span> <span class="n">isfull</span><span class="p">)</span>
+</span><span class='line'>                <span class="n">tn</span><span class="o">-&gt;</span><span class="n">full_children</span><span class="o">++</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">n</span><span class="p">)</span>
+</span><span class='line'>                <span class="n">node_set_parent</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">tn</span><span class="p">);</span>
+</span><span class='line'>
+</span><span class='line'>        <span class="n">rcu_assign_pointer</span><span class="p">(</span><span class="n">tn</span><span class="o">-&gt;</span><span class="n">child</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-09-27T16:36:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>27</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>4:36 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/route/'>route</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/09/23/where-softirq-is-invoked/" title="Previous Post: where softirq is invoked">&laquo; where softirq is invoked</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/09/29/ipv4-route-fib-tree-inflate/" title="Next Post: IPv4 route fib trie inflate">IPv4 route fib trie inflate &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,605 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>IPv4 Route Fib Insert Node - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="steps step 1. 循环fib_trie, 直到当前节点为空或者是叶子节点时，停止。 1.a 比较当前节点的key跟待插入的key的前pos位, 如果不相等，循环结束。如果相等执行1.b （作为改进，加上父节点已经比较了前posx位， 那么只需比较 (posx，pos)这区间的位即可。 &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/09/12/ipv4-route-fib-insert-node/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">IPv4 Route Fib Insert Node</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-09-12T09:48:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>12</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>9:48 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2>steps</h2>
+
+<p>step 1. 循环<code>fib_trie</code>, 直到当前节点为空或者是叶子节点时，停止。
+    1.a
+    比较当前节点的<code>key</code>跟待插入的<code>key</code>的前pos位,
+    如果不相等，循环结束。如果相等执行1.b
+       （作为改进，加上父节点已经比较了前posx位， 那么只需比较
+    (posx，pos)这区间的位即可。 注意posx有可能与pos相等。
+    1.b
+    记录已经比较的位数(tn->pos + tn->bits)
+    取当前节点的一个孩子节点，
+    <code>tkey_extract_bits(key, tn-&gt;pos, tn-&gt;bits)</code>
+    继续执行。</p>
+
+<p>step 2. 循环结束，当前节点<code>n</code>有可能为空，也有可能是个叶子节点,或者中间节点(1.a).</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">if</span> <span class="p">(</span><span class="n">n</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">fib_trie</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span>
+</span><span class='line'>      <span class="n">shit</span><span class="o">!</span> <span class="err">树的第一个节点。</span>
+</span><span class='line'>  <span class="k">else</span>
+</span><span class='line'>      <span class="err">当前节点是父节点的一个空孩子节点。</span>
+</span><span class='line'>      <span class="err">以为树不是空的，所以父节点肯定存在。</span>
+</span><span class='line'>      <span class="err">见</span> <span class="n">case2</span>
+</span><span class='line'><span class="k">else</span> <span class="n">n</span> <span class="n">is</span> <span class="n">a</span> <span class="n">leaf</span>
+</span><span class='line'>  <span class="k">if</span> <span class="p">(</span><span class="n">tkey_equals</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">n</span><span class="o">-&gt;</span><span class="n">key</span><span class="p">))</span> <span class="c1">//&#39;key&#39;值相同</span>
+</span><span class='line'>      <span class="k">case</span> <span class="mi">1</span><span class="o">:</span>
+</span><span class='line'>      <span class="err">路由前缀相同（可能掩码不一样</span><span class="p">)</span>
+</span><span class='line'>  <span class="k">else</span>
+</span><span class='line'>      <span class="k">case</span> <span class="mi">3</span><span class="n">b</span><span class="p">.</span>
+</span><span class='line'><span class="k">else</span>
+</span><span class='line'>  <span class="c1">//assert n is a internal node</span>
+</span><span class='line'>  <span class="err">并且，当前节点的</span><span class="n">key</span><span class="err">的</span><span class="n">pos</span><span class="err">位跟待插入的</span><span class="n">key</span><span class="err">的前</span><span class="n">pos</span><span class="err">位不相等。</span>
+</span><span class='line'>  <span class="err">见</span><span class="n">case3a</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<!-- more -->
+
+
+<p>When insert a route to the <code>fib_trie</code>, it
+can be divided into 3 cases.</p>
+
+<h3>case 1</h3>
+
+<p>We are lucky enough, there are matched leaf.
+for example, insert a subnet route to a exist route.</p>
+
+<p><img src="/images/fib_trie/insert_node_case1.jpg" alt="case 1" /></p>
+
+<h3>case 2</h3>
+
+<p>There is a empty child slot in the matched node,
+we just need insert a leaf to the <code>fib_trie</code>.</p>
+
+<p><img src="/images/fib_trie/insert_node_case2.jpg" alt="case 2" /></p>
+
+<h3>case 3</h3>
+
+<p>There is a umatched node, we need insert a internal node
+to the <code>fib_trie</code>, and insert a leaf as one of the internal
+node.</p>
+
+<h4>case 3a</h4>
+
+<p>The unmatched node is a node(<code>sub-fib-trie</code>).</p>
+
+<p><img src="/images/fib_trie/insert_node_case3a.jpg" alt="case 3a" /></p>
+
+<h4>case 3b</h4>
+
+<p>The unmatched node is a leaf.
+<img src="/images/fib_trie/insert_node_case3b.jpg" alt="case 3b" /></p>
+
+<h3>source <code>fib_insert_node</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+<span class='line-number'>101</span>
+<span class='line-number'>102</span>
+<span class='line-number'>103</span>
+<span class='line-number'>104</span>
+<span class='line-number'>105</span>
+<span class='line-number'>106</span>
+<span class='line-number'>107</span>
+<span class='line-number'>108</span>
+<span class='line-number'>109</span>
+<span class='line-number'>110</span>
+<span class='line-number'>111</span>
+<span class='line-number'>112</span>
+<span class='line-number'>113</span>
+<span class='line-number'>114</span>
+<span class='line-number'>115</span>
+<span class='line-number'>116</span>
+<span class='line-number'>117</span>
+<span class='line-number'>118</span>
+<span class='line-number'>119</span>
+<span class='line-number'>120</span>
+<span class='line-number'>121</span>
+<span class='line-number'>122</span>
+<span class='line-number'>123</span>
+<span class='line-number'>124</span>
+<span class='line-number'>125</span>
+<span class='line-number'>126</span>
+<span class='line-number'>127</span>
+<span class='line-number'>128</span>
+<span class='line-number'>129</span>
+<span class='line-number'>130</span>
+<span class='line-number'>131</span>
+<span class='line-number'>132</span>
+<span class='line-number'>133</span>
+<span class='line-number'>134</span>
+<span class='line-number'>135</span>
+<span class='line-number'>136</span>
+<span class='line-number'>137</span>
+<span class='line-number'>138</span>
+<span class='line-number'>139</span>
+<span class='line-number'>140</span>
+<span class='line-number'>141</span>
+<span class='line-number'>142</span>
+<span class='line-number'>143</span>
+<span class='line-number'>144</span>
+<span class='line-number'>145</span>
+<span class='line-number'>146</span>
+<span class='line-number'>147</span>
+<span class='line-number'>148</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1021</span> <span class="cm">/* only used from updater-side */</span>
+</span><span class='line'><span class="mi">1022</span>
+</span><span class='line'><span class="mi">1023</span> <span class="k">static</span> <span class="k">struct</span> <span class="n">list_head</span> <span class="o">*</span><span class="n">fib_insert_node</span><span class="p">(</span><span class="k">struct</span> <span class="n">trie</span> <span class="o">*</span><span class="n">t</span><span class="p">,</span> <span class="n">u32</span> <span class="n">key</span><span class="p">,</span> <span class="kt">int</span> <span class="n">plen</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1024</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1025</span>         <span class="kt">int</span> <span class="n">pos</span><span class="p">,</span> <span class="n">newpos</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1026</span>         <span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="n">tp</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">,</span> <span class="o">*</span><span class="n">tn</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1027</span>         <span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="n">n</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1028</span>         <span class="k">struct</span> <span class="n">leaf</span> <span class="o">*</span><span class="n">l</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1029</span>         <span class="kt">int</span> <span class="n">missbit</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1030</span>         <span class="k">struct</span> <span class="n">list_head</span> <span class="o">*</span><span class="n">fa_head</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1031</span>         <span class="k">struct</span> <span class="n">leaf_info</span> <span class="o">*</span><span class="n">li</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1032</span>         <span class="n">t_key</span> <span class="n">cindex</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1033</span>
+</span><span class='line'><span class="mi">1034</span>         <span class="n">pos</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1035</span>         <span class="n">n</span> <span class="o">=</span> <span class="n">rtnl_dereference</span><span class="p">(</span><span class="n">t</span><span class="o">-&gt;</span><span class="n">trie</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1036</span>
+</span><span class='line'><span class="mi">1037</span>         <span class="cm">/* If we point to NULL, stop. Either the tree is empty and we should</span>
+</span><span class='line'><span class="cm">1038          * just put a new leaf in if, or we have reached an empty child slot,</span>
+</span><span class='line'><span class="cm">1039          * and we should just put our new leaf in that.</span>
+</span><span class='line'><span class="cm">1040          * If we point to a T_TNODE, check if it matches our key. Note that</span>
+</span><span class='line'><span class="cm">1041          * a T_TNODE might be skipping any number of bits - its &#39;pos&#39; need</span>
+</span><span class='line'><span class="cm">1042          * not be the parent&#39;s &#39;pos&#39;+&#39;bits&#39;!</span>
+</span><span class='line'><span class="cm">1043          *</span>
+</span><span class='line'><span class="cm">1044          * If it does match the current key, get pos/bits from it, extract</span>
+</span><span class='line'><span class="cm">1045          * the index from our key, push the T_TNODE and walk the tree.</span>
+</span><span class='line'><span class="cm">1046          *</span>
+</span><span class='line'><span class="cm">1047          * If it doesn&#39;t, we have to replace it with a new T_TNODE.</span>
+</span><span class='line'><span class="cm">1048          *</span>
+</span><span class='line'><span class="cm">1049          * If we point to a T_LEAF, it might or might not have the same key</span>
+</span><span class='line'><span class="cm">1050          * as we do. If it does, just change the value, update the T_LEAF&#39;s</span>
+</span><span class='line'><span class="cm">1051          * value, and return it.</span>
+</span><span class='line'><span class="cm">1052          * If it doesn&#39;t, we need to replace it with a T_TNODE.</span>
+</span><span class='line'><span class="cm">1053          */</span>
+</span><span class='line'><span class="mi">1054</span>
+</span><span class='line'><span class="mi">1055</span>         <span class="k">while</span> <span class="p">(</span><span class="n">n</span> <span class="o">!=</span> <span class="nb">NULL</span> <span class="o">&amp;&amp;</span>  <span class="n">NODE_TYPE</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">==</span> <span class="n">T_TNODE</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1056</span>                 <span class="n">tn</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">tnode</span> <span class="o">*</span><span class="p">)</span> <span class="n">n</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1057</span>
+</span><span class='line'><span class="mi">1058</span>                 <span class="nf">check_tnode</span><span class="p">(</span><span class="n">tn</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1059</span>
+</span><span class='line'><span class="mi">1060</span>                 <span class="nf">if</span> <span class="p">(</span><span class="n">tkey_sub_equals</span><span class="p">(</span><span class="n">tn</span><span class="o">-&gt;</span><span class="n">key</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">tn</span><span class="o">-&gt;</span><span class="n">pos</span><span class="o">-</span><span class="n">pos</span><span class="p">,</span> <span class="n">key</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1061</span>                         <span class="n">tp</span> <span class="o">=</span> <span class="n">tn</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1062</span>                         <span class="n">pos</span> <span class="o">=</span> <span class="n">tn</span><span class="o">-&gt;</span><span class="n">pos</span> <span class="o">+</span> <span class="n">tn</span><span class="o">-&gt;</span><span class="n">bits</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1063</span>                         <span class="n">n</span> <span class="o">=</span> <span class="n">tnode_get_child</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1064</span>                                             <span class="n">tkey_extract_bits</span><span class="p">(</span><span class="n">key</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1065</span>                                                               <span class="n">tn</span><span class="o">-&gt;</span><span class="n">pos</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1066</span>                                                               <span class="n">tn</span><span class="o">-&gt;</span><span class="n">bits</span><span class="p">));</span>
+</span><span class='line'><span class="mi">1067</span>
+</span><span class='line'><span class="mi">1068</span>                         <span class="n">BUG_ON</span><span class="p">(</span><span class="n">n</span> <span class="o">&amp;&amp;</span> <span class="n">node_parent</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">!=</span> <span class="n">tn</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1069</span>                 <span class="p">}</span> <span class="k">else</span>
+</span><span class='line'><span class="mi">1070</span>                         <span class="k">break</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1071</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1072</span>
+</span><span class='line'><span class="mi">1073</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">1074          * n  ----&gt; NULL, LEAF or TNODE</span>
+</span><span class='line'><span class="cm">1075          *</span>
+</span><span class='line'><span class="cm">1076          * tp is n&#39;s (parent) ----&gt; NULL or TNODE</span>
+</span><span class='line'><span class="cm">1077          */</span>
+</span><span class='line'><span class="mi">1078</span>
+</span><span class='line'><span class="mi">1079</span>         <span class="n">BUG_ON</span><span class="p">(</span><span class="n">tp</span> <span class="o">&amp;&amp;</span> <span class="n">IS_LEAF</span><span class="p">(</span><span class="n">tp</span><span class="p">));</span>
+</span><span class='line'><span class="mi">1080</span>
+</span><span class='line'><span class="mi">1081</span>         <span class="cm">/* Case 1: n is a leaf. Compare prefixes */</span>
+</span><span class='line'><span class="mi">1082</span>
+</span><span class='line'><span class="mi">1083</span>         <span class="k">if</span> <span class="p">(</span><span class="n">n</span> <span class="o">!=</span> <span class="nb">NULL</span> <span class="o">&amp;&amp;</span> <span class="n">IS_LEAF</span><span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="n">tkey_equals</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">n</span><span class="o">-&gt;</span><span class="n">key</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1084</span>                 <span class="n">l</span> <span class="o">=</span> <span class="p">(</span><span class="k">struct</span> <span class="n">leaf</span> <span class="o">*</span><span class="p">)</span> <span class="n">n</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1085</span>                 <span class="n">li</span> <span class="o">=</span> <span class="n">leaf_info_new</span><span class="p">(</span><span class="n">plen</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1086</span>
+</span><span class='line'><span class="mi">1087</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">li</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1088</span>                         <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1089</span>
+</span><span class='line'><span class="mi">1090</span>                 <span class="n">fa_head</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">li</span><span class="o">-&gt;</span><span class="n">falh</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1091</span>                 <span class="nf">insert_leaf_info</span><span class="p">(</span><span class="o">&amp;</span><span class="n">l</span><span class="o">-&gt;</span><span class="n">list</span><span class="p">,</span> <span class="n">li</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1092</span>                 <span class="k">goto</span> <span class="n">done</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1093</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1094</span>         <span class="n">l</span> <span class="o">=</span> <span class="n">leaf_new</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1095</span>
+</span><span class='line'><span class="mi">1096</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">l</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1097</span>                 <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1098</span>
+</span><span class='line'><span class="mi">1099</span>         <span class="n">l</span><span class="o">-&gt;</span><span class="n">key</span> <span class="o">=</span> <span class="n">key</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1100</span>         <span class="n">li</span> <span class="o">=</span> <span class="n">leaf_info_new</span><span class="p">(</span><span class="n">plen</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1101</span>
+</span><span class='line'><span class="mi">1102</span>         <span class="nf">if</span> <span class="p">(</span><span class="o">!</span><span class="n">li</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1103</span>                 <span class="n">free_leaf</span><span class="p">(</span><span class="n">l</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1104</span>                 <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1105</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1106</span>
+</span><span class='line'><span class="mi">1107</span>         <span class="n">fa_head</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">li</span><span class="o">-&gt;</span><span class="n">falh</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1108</span>         <span class="nf">insert_leaf_info</span><span class="p">(</span><span class="o">&amp;</span><span class="n">l</span><span class="o">-&gt;</span><span class="n">list</span><span class="p">,</span> <span class="n">li</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1109</span>
+</span><span class='line'><span class="mi">1110</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">t</span><span class="o">-&gt;</span><span class="n">trie</span> <span class="o">&amp;&amp;</span> <span class="n">n</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1111</span>                 <span class="cm">/* Case 2: n is NULL, and will just insert a new leaf */</span>
+</span><span class='line'><span class="mi">1112</span>
+</span><span class='line'><span class="mi">1113</span>                 <span class="n">node_set_parent</span><span class="p">((</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span><span class="n">l</span><span class="p">,</span> <span class="n">tp</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1114</span>
+</span><span class='line'><span class="mi">1115</span>                 <span class="n">cindex</span> <span class="o">=</span> <span class="n">tkey_extract_bits</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">tp</span><span class="o">-&gt;</span><span class="n">pos</span><span class="p">,</span> <span class="n">tp</span><span class="o">-&gt;</span><span class="n">bits</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1116</span>                 <span class="n">put_child</span><span class="p">(</span><span class="n">tp</span><span class="p">,</span> <span class="n">cindex</span><span class="p">,</span> <span class="p">(</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span><span class="n">l</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1117</span>         <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1118</span>                 <span class="cm">/* Case 3: n is a LEAF or a TNODE and the key doesn&#39;t match. */</span>
+</span><span class='line'><span class="mi">1119</span>                 <span class="cm">/*</span>
+</span><span class='line'><span class="cm">1120                  *  Add a new tnode here</span>
+</span><span class='line'><span class="cm">1121                  *  first tnode need some special handling</span>
+</span><span class='line'><span class="cm">1122                  */</span>
+</span><span class='line'><span class="mi">1123</span>
+</span><span class='line'><span class="mi">1124</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">tp</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1125</span>                         <span class="n">pos</span> <span class="o">=</span> <span class="n">tp</span><span class="o">-&gt;</span><span class="n">pos</span><span class="o">+</span><span class="n">tp</span><span class="o">-&gt;</span><span class="n">bits</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1126</span>                 <span class="k">else</span>
+</span><span class='line'><span class="mi">1127</span>                         <span class="n">pos</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1128</span>
+</span><span class='line'><span class="mi">1129</span>                 <span class="nf">if</span> <span class="p">(</span><span class="n">n</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1130</span>                         <span class="n">newpos</span> <span class="o">=</span> <span class="n">tkey_mismatch</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">n</span><span class="o">-&gt;</span><span class="n">key</span><span class="p">);</span> <span class="cm">/* newpos &lt; pos, 因为1083行，见注释1 */</span>
+</span><span class='line'><span class="mi">1131</span>                         <span class="n">tn</span> <span class="o">=</span> <span class="n">tnode_new</span><span class="p">(</span><span class="n">n</span><span class="o">-&gt;</span><span class="n">key</span><span class="p">,</span> <span class="n">newpos</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1132</span>                 <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1133</span>                         <span class="n">newpos</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1134</span>                         <span class="n">tn</span> <span class="o">=</span> <span class="n">tnode_new</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">newpos</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span> <span class="cm">/* First tnode */</span>
+</span><span class='line'><span class="mi">1135</span>                 <span class="p">}</span>
+</span><span class='line'><span class="mi">1136</span>
+</span><span class='line'><span class="mi">1137</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">tn</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1138</span>                         <span class="n">free_leaf_info</span><span class="p">(</span><span class="n">li</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1139</span>                         <span class="nf">free_leaf</span><span class="p">(</span><span class="n">l</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1140</span>                         <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1141</span>                 <span class="p">}</span>
+</span><span class='line'><span class="mi">1142</span>
+</span><span class='line'><span class="mi">1143</span>                 <span class="n">node_set_parent</span><span class="p">((</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span><span class="n">tn</span><span class="p">,</span> <span class="n">tp</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1144</span>
+</span><span class='line'><span class="mi">1145</span>                 <span class="n">missbit</span> <span class="o">=</span> <span class="n">tkey_extract_bits</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">newpos</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1146</span>                 <span class="nf">put_child</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span> <span class="n">missbit</span><span class="p">,</span> <span class="p">(</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span><span class="n">l</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1147</span>                 <span class="nf">put_child</span><span class="p">(</span><span class="n">tn</span><span class="p">,</span> <span class="mi">1</span><span class="o">-</span><span class="n">missbit</span><span class="p">,</span> <span class="n">n</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1148</span>
+</span><span class='line'><span class="mi">1149</span>                 <span class="nf">if</span> <span class="p">(</span><span class="n">tp</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1150</span>                         <span class="n">cindex</span> <span class="o">=</span> <span class="n">tkey_extract_bits</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">tp</span><span class="o">-&gt;</span><span class="n">pos</span><span class="p">,</span> <span class="n">tp</span><span class="o">-&gt;</span><span class="n">bits</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1151</span>                         <span class="n">put_child</span><span class="p">(</span><span class="n">tp</span><span class="p">,</span> <span class="n">cindex</span><span class="p">,</span> <span class="p">(</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span><span class="n">tn</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1152</span>                 <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1153</span>                         <span class="n">rcu_assign_pointer</span><span class="p">(</span><span class="n">t</span><span class="o">-&gt;</span><span class="n">trie</span><span class="p">,</span> <span class="p">(</span><span class="k">struct</span> <span class="n">rt_trie_node</span> <span class="o">*</span><span class="p">)</span><span class="n">tn</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1154</span>                         <span class="n">tp</span> <span class="o">=</span> <span class="n">tn</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1155</span>                 <span class="p">}</span>
+</span><span class='line'><span class="mi">1156</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1157</span>
+</span><span class='line'><span class="mi">1158</span>         <span class="k">if</span> <span class="p">(</span><span class="n">tp</span> <span class="o">&amp;&amp;</span> <span class="n">tp</span><span class="o">-&gt;</span><span class="n">pos</span> <span class="o">+</span> <span class="n">tp</span><span class="o">-&gt;</span><span class="n">bits</span> <span class="o">&gt;</span> <span class="mi">32</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1159</span>                 <span class="n">pr_warn</span><span class="p">(</span><span class="s">&quot;fib_trie tp=%p pos=%d, bits=%d, key=%0x plen=%d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1160</span>                         <span class="n">tp</span><span class="p">,</span> <span class="n">tp</span><span class="o">-&gt;</span><span class="n">pos</span><span class="p">,</span> <span class="n">tp</span><span class="o">-&gt;</span><span class="n">bits</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">plen</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1161</span>
+</span><span class='line'><span class="mi">1162</span>         <span class="cm">/* Rebalance the trie */</span>
+</span><span class='line'><span class="mi">1163</span>
+</span><span class='line'><span class="mi">1164</span>         <span class="n">trie_rebalance</span><span class="p">(</span><span class="n">t</span><span class="p">,</span> <span class="n">tp</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1165</span> <span class="nl">done</span><span class="p">:</span>
+</span><span class='line'><span class="mi">1166</span>         <span class="k">return</span> <span class="n">fa_head</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1167</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">1168</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-09-12T09:48:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>12</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>9:48 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/route/'>route</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/09/11/ipv4-route-fib-create-info/" title="Previous Post: IPv4-route-fib-create-info">&laquo; IPv4-route-fib-create-info</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/09/23/where-softirq-is-invoked/" title="Next Post: where softirq is invoked">where softirq is invoked &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

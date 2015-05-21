@@ -1,0 +1,787 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>How to Xmit a Packet With Qdisc - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="summary We think it as a ideal and simple case: Call Trace: 1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+&gt; dev_queue_xmit
+&gt; &gt; __dev_queue_xmit(skb, &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2014/02/08/how-to-xmit-a-packet-with-qdisc/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">How to Xmit a Packet With Qdisc</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-02-08T11:26:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>8</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>11:26 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h3>summary</h3>
+
+<p>We think it as a ideal and simple case:</p>
+
+<h3>Call Trace:</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="o">&gt;</span> <span class="n">dev_queue_xmit</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span>  <span class="n">__dev_queue_xmit</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">rcu_read_lock_bh</span><span class="p">();</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">txq</span> <span class="o">=</span> <span class="n">netdev_pick_tx</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">skb</span><span class="p">,</span> <span class="n">accel_priv</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">q</span> <span class="o">=</span> <span class="n">rcu_dereference_bh</span><span class="p">(</span><span class="n">txq</span><span class="o">-&gt;</span><span class="n">qdisc</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">rc</span> <span class="o">=</span> <span class="n">__dev_xmit_skb</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">dev</span><span class="p">,</span> <span class="n">txq</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">skb_dst_force</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">q</span><span class="o">-&gt;</span><span class="n">enqueue</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">q</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">qdisc_run_begin</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span>  <span class="n">__qdisc_run</span><span class="p">(</span><span class="n">q</span><span class="p">);</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="k">while</span> <span class="p">(</span><span class="n">qdisc_restart</span><span class="p">(</span><span class="n">q</span><span class="p">))</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">__netif_schedule</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">qdisc_run_end</span><span class="p">(</span><span class="n">q</span><span class="p">)</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">rcu_read_unlock_bh</span><span class="p">();</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="k">return</span> <span class="n">rc</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<!-- more -->
+
+
+<h3>functions</h3>
+
+<h4><code>__dev_queue_xmit</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2806</span> <span class="kt">int</span> <span class="n">__dev_queue_xmit</span><span class="p">(</span><span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">accel_priv</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2807</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2808</span>         <span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span> <span class="o">=</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">dev</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2809</span>         <span class="k">struct</span> <span class="n">netdev_queue</span> <span class="o">*</span><span class="n">txq</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2810</span>         <span class="k">struct</span> <span class="n">Qdisc</span> <span class="o">*</span><span class="n">q</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2811</span>         <span class="kt">int</span> <span class="n">rc</span> <span class="o">=</span> <span class="o">-</span><span class="n">ENOMEM</span><span class="p">;</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">2818</span>         <span class="n">rcu_read_lock_bh</span><span class="p">();</span>
+</span><span class='line'><span class="mi">2819</span>
+</span><span class='line'><span class="mi">2820</span>         <span class="nf">skb_update_prio</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2821</span>
+</span><span class='line'><span class="mi">2822</span>         <span class="n">txq</span> <span class="o">=</span> <span class="n">netdev_pick_tx</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">skb</span><span class="p">,</span> <span class="n">accel_priv</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2823</span>         <span class="n">q</span> <span class="o">=</span> <span class="n">rcu_dereference_bh</span><span class="p">(</span><span class="n">txq</span><span class="o">-&gt;</span><span class="n">qdisc</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2824</span>
+</span><span class='line'><span class="mi">2825</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_NET_CLS_ACT</span>
+</span><span class='line'><span class="mi">2826</span>         <span class="n">skb</span><span class="o">-&gt;</span><span class="n">tc_verd</span> <span class="o">=</span> <span class="n">SET_TC_AT</span><span class="p">(</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">tc_verd</span><span class="p">,</span> <span class="n">AT_EGRESS</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2827</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'><span class="mi">2828</span>         <span class="n">trace_net_dev_queue</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2829</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">q</span><span class="o">-&gt;</span><span class="n">enqueue</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2830</span>                 <span class="n">rc</span> <span class="o">=</span> <span class="n">__dev_xmit_skb</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">dev</span><span class="p">,</span> <span class="n">txq</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2831</span>                 <span class="k">goto</span> <span class="n">out</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2832</span>         <span class="p">}</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">2883</span> <span class="nl">out</span><span class="p">:</span>
+</span><span class='line'><span class="mi">2884</span>         <span class="n">rcu_read_unlock_bh</span><span class="p">();</span>
+</span><span class='line'><span class="mi">2885</span>         <span class="k">return</span> <span class="n">rc</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2886</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>How to schedlule Qdisc</h3>
+
+<h4>case 1: empty qdisc and qdisc could be bypass</h4>
+
+<p>If the qdisc could be bypass, such as fifo qdisc,
+and it is a empty qdisc,
+and the qdisc is not running,</p>
+
+<p>set the qdisc as running,
+then send the packet directly by <code>sch_direct_xmit</code>.
+If send success, clear the running flag by <code>qdisc_run_end</code>,
+or(send failed), put the skb to qdisc queue by <code>dev_requeue_skb</code>.</p>
+
+<h4>case 2: enqueue and then send</h4>
+
+<p>In this case, skb must firstly enqueue.
+Check and confirm qdisc is running,
+if it is not running before check,
+call <code>__qdisc_run</code>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'>  <span class="mi">94</span> <span class="cm">/* qdisc -&gt;enqueue() return codes. */</span>
+</span><span class='line'>  <span class="mi">95</span> <span class="err">#</span><span class="n">define</span> <span class="n">NET_XMIT_SUCCESS</span>        <span class="mh">0x00</span>
+</span><span class='line'>  <span class="mi">96</span> <span class="err">#</span><span class="n">define</span> <span class="n">NET_XMIT_DROP</span>           <span class="mh">0x01</span>    <span class="cm">/* skb dropped                  */</span>
+</span><span class='line'>  <span class="mi">97</span> <span class="err">#</span><span class="n">define</span> <span class="n">NET_XMIT_CN</span>             <span class="mh">0x02</span>    <span class="cm">/* congestion notification      */</span>
+</span><span class='line'>  <span class="mi">98</span> <span class="err">#</span><span class="n">define</span> <span class="n">NET_XMIT_POLICED</span>        <span class="mh">0x03</span>    <span class="cm">/* skb is shot by police        */</span>
+</span><span class='line'>  <span class="mi">99</span> <span class="err">#</span><span class="n">define</span> <span class="n">NET_XMIT_MASK</span>           <span class="mh">0x0f</span>    <span class="cm">/* qdisc flags in net/sch_generic.h */</span>
+</span><span class='line'> <span class="mi">100</span>
+</span><span class='line'> <span class="mi">101</span> <span class="cm">/* NET_XMIT_CN is special. It does not guarantee that this packet is lost. It</span>
+</span><span class='line'><span class="cm"> 102  * indicates that the device will soon be dropping packets, or already drops</span>
+</span><span class='line'><span class="cm"> 103  * some packets of the same priority; prompting us to send less aggressively. */</span>
+</span><span class='line'> <span class="mi">104</span> <span class="err">#</span><span class="n">define</span> <span class="n">net_xmit_eval</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>        <span class="p">((</span><span class="n">e</span><span class="p">)</span> <span class="o">==</span> <span class="n">NET_XMIT_CN</span> <span class="o">?</span> <span class="mi">0</span> <span class="o">:</span> <span class="p">(</span><span class="n">e</span><span class="p">))</span>
+</span><span class='line'> <span class="mi">105</span> <span class="err">#</span><span class="n">define</span> <span class="n">net_xmit_errno</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>       <span class="p">((</span><span class="n">e</span><span class="p">)</span> <span class="o">!=</span> <span class="n">NET_XMIT_CN</span> <span class="o">?</span> <span class="o">-</span><span class="nl">ENOBUFS</span> <span class="p">:</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">106</span>
+</span><span class='line'> <span class="mi">107</span> <span class="cm">/* Driver transmit return codes */</span>
+</span><span class='line'> <span class="mi">108</span> <span class="err">#</span><span class="n">define</span> <span class="n">NETDEV_TX_MASK</span>          <span class="mh">0xf0</span>
+</span><span class='line'> <span class="mi">109</span>
+</span><span class='line'> <span class="mi">110</span> <span class="k">enum</span> <span class="n">netdev_tx</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">111</span>         <span class="n">__NETDEV_TX_MIN</span>  <span class="o">=</span> <span class="n">INT_MIN</span><span class="p">,</span>     <span class="cm">/* make sure enum is signed */</span>
+</span><span class='line'> <span class="mi">112</span>         <span class="n">NETDEV_TX_OK</span>     <span class="o">=</span> <span class="mh">0x00</span><span class="p">,</span>        <span class="cm">/* driver took care of packet */</span>
+</span><span class='line'> <span class="mi">113</span>         <span class="n">NETDEV_TX_BUSY</span>   <span class="o">=</span> <span class="mh">0x10</span><span class="p">,</span>        <span class="cm">/* driver tx path was busy*/</span>
+</span><span class='line'> <span class="mi">114</span>         <span class="n">NETDEV_TX_LOCKED</span> <span class="o">=</span> <span class="mh">0x20</span><span class="p">,</span>        <span class="cm">/* driver tx lock was already taken */</span>
+</span><span class='line'> <span class="mi">115</span> <span class="p">};</span>
+</span><span class='line'> <span class="mi">116</span> <span class="k">typedef</span> <span class="k">enum</span> <span class="n">netdev_tx</span> <span class="kt">netdev_tx_t</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>How <code>__qdisc_run</code> works</h4>
+
+<p><code>__qdisc_run</code> must be embraced by <code>qdisc_run_begin</code> and <code>qdisc_run_end</code>.
+Before  <code>__qdisc_run</code>, set flag <code>__QDISC___STATE_RUNNING</code>. after run, remove it.
+The flag and two functions ensure a qdisc will run only on a CPU at the smae time.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">194</span> <span class="kt">void</span> <span class="n">__qdisc_run</span><span class="p">(</span><span class="k">struct</span> <span class="n">Qdisc</span> <span class="o">*</span><span class="n">q</span><span class="p">)</span>
+</span><span class='line'><span class="mi">195</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">196</span>         <span class="kt">int</span> <span class="n">quota</span> <span class="o">=</span> <span class="n">weight_p</span><span class="p">;</span>
+</span><span class='line'><span class="mi">197</span>
+</span><span class='line'><span class="mi">198</span>         <span class="nf">while</span> <span class="p">(</span><span class="n">qdisc_restart</span><span class="p">(</span><span class="n">q</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">199</span>                 <span class="cm">/*</span>
+</span><span class='line'><span class="cm">200                  * Ordered by possible occurrence: Postpone processing if</span>
+</span><span class='line'><span class="cm">201                  * 1. we&#39;ve exceeded packet quota</span>
+</span><span class='line'><span class="cm">202                  * 2. another process needs the CPU;</span>
+</span><span class='line'><span class="cm">203                  */</span>
+</span><span class='line'><span class="mi">204</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">--</span><span class="n">quota</span> <span class="o">&lt;=</span> <span class="mi">0</span> <span class="o">||</span> <span class="n">need_resched</span><span class="p">())</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">205</span>                         <span class="n">__netif_schedule</span><span class="p">(</span><span class="n">q</span><span class="p">);</span>
+</span><span class='line'><span class="mi">206</span>                         <span class="k">break</span><span class="p">;</span>
+</span><span class='line'><span class="mi">207</span>                 <span class="p">}</span>
+</span><span class='line'><span class="mi">208</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">209</span>
+</span><span class='line'><span class="mi">210</span>         <span class="nf">qdisc_run_end</span><span class="p">(</span><span class="n">q</span><span class="p">);</span>
+</span><span class='line'><span class="mi">211</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p><code>weight_p</code> is the max count of packets sent in <strong>a</strong> qdisc during a TX softirq.</p>
+
+<p>If the qdisc has little packets, and they will be sent out in the while loop.
+Else, the qdisc will be set state as <code>__QDISC_STATE_SCHED</code>,
+and the qdisc will linked to <code>output_queue</code> of current cpu&rsquo;s <code>__get_cpu_var(softnet_data)</code>,
+the TX softirq will be triggered to sent remain packet in the qdisc.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">156</span> <span class="cm">/*</span>
+</span><span class='line'><span class="cm">157  * NOTE: Called under qdisc_lock(q) with locally disabled BH.</span>
+</span><span class='line'><span class="cm">158  *</span>
+</span><span class='line'><span class="cm">159  * __QDISC_STATE_RUNNING guarantees only one CPU can process</span>
+</span><span class='line'><span class="cm">160  * this qdisc at a time. qdisc_lock(q) serializes queue accesses for</span>
+</span><span class='line'><span class="cm">161  * this queue.</span>
+</span><span class='line'><span class="cm">162  *</span>
+</span><span class='line'><span class="cm">163  *  netif_tx_lock serializes accesses to device driver.</span>
+</span><span class='line'><span class="cm">164  *</span>
+</span><span class='line'><span class="cm">165  *  qdisc_lock(q) and netif_tx_lock are mutually exclusive,</span>
+</span><span class='line'><span class="cm">166  *  if one is grabbed, another must be free.</span>
+</span><span class='line'><span class="cm">167  *</span>
+</span><span class='line'><span class="cm">168  * Note, that this procedure can be called by a watchdog timer</span>
+</span><span class='line'><span class="cm">169  *</span>
+</span><span class='line'><span class="cm">170  * Returns to the caller:</span>
+</span><span class='line'><span class="cm">171  *                              0  - queue is empty or throttled.</span>
+</span><span class='line'><span class="cm">172  *                              &gt;0 - queue is not empty.</span>
+</span><span class='line'><span class="cm">173  *</span>
+</span><span class='line'><span class="cm">174  */</span>
+</span><span class='line'><span class="mi">175</span> <span class="k">static</span> <span class="kr">inline</span> <span class="kt">int</span> <span class="n">qdisc_restart</span><span class="p">(</span><span class="k">struct</span> <span class="n">Qdisc</span> <span class="o">*</span><span class="n">q</span><span class="p">)</span>
+</span><span class='line'><span class="mi">176</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">177</span>         <span class="k">struct</span> <span class="n">netdev_queue</span> <span class="o">*</span><span class="n">txq</span><span class="p">;</span>
+</span><span class='line'><span class="mi">178</span>         <span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">;</span>
+</span><span class='line'><span class="mi">179</span>         <span class="kt">spinlock_t</span> <span class="o">*</span><span class="n">root_lock</span><span class="p">;</span>
+</span><span class='line'><span class="mi">180</span>         <span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">;</span>
+</span><span class='line'><span class="mi">181</span>
+</span><span class='line'><span class="mi">182</span>         <span class="cm">/* Dequeue packet */</span>
+</span><span class='line'><span class="mi">183</span>         <span class="n">skb</span> <span class="o">=</span> <span class="n">dequeue_skb</span><span class="p">(</span><span class="n">q</span><span class="p">);</span>
+</span><span class='line'><span class="mi">184</span>         <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="o">!</span><span class="n">skb</span><span class="p">))</span>
+</span><span class='line'><span class="mi">185</span>                 <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">186</span>         <span class="nf">WARN_ON_ONCE</span><span class="p">(</span><span class="n">skb_dst_is_noref</span><span class="p">(</span><span class="n">skb</span><span class="p">));</span>
+</span><span class='line'><span class="mi">187</span>         <span class="n">root_lock</span> <span class="o">=</span> <span class="n">qdisc_lock</span><span class="p">(</span><span class="n">q</span><span class="p">);</span>
+</span><span class='line'><span class="mi">188</span>         <span class="n">dev</span> <span class="o">=</span> <span class="n">qdisc_dev</span><span class="p">(</span><span class="n">q</span><span class="p">);</span>
+</span><span class='line'><span class="mi">189</span>         <span class="n">txq</span> <span class="o">=</span> <span class="n">netdev_get_tx_queue</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">skb_get_queue_mapping</span><span class="p">(</span><span class="n">skb</span><span class="p">));</span>
+</span><span class='line'><span class="mi">190</span>
+</span><span class='line'><span class="mi">191</span>         <span class="k">return</span> <span class="nf">sch_direct_xmit</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">q</span><span class="p">,</span> <span class="n">dev</span><span class="p">,</span> <span class="n">txq</span><span class="p">,</span> <span class="n">root_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">192</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">109</span> <span class="cm">/*</span>
+</span><span class='line'><span class="cm">110  * Transmit one skb, and handle the return status as required. Holding the</span>
+</span><span class='line'><span class="cm">111  * __QDISC_STATE_RUNNING bit guarantees that only one CPU can execute this</span>
+</span><span class='line'><span class="cm">112  * function.</span>
+</span><span class='line'><span class="cm">113  *</span>
+</span><span class='line'><span class="cm">114  * Returns to the caller:</span>
+</span><span class='line'><span class="cm">115  *                              0  - queue is empty or throttled.</span>
+</span><span class='line'><span class="cm">116  *                              &gt;0 - queue is not empty.</span>
+</span><span class='line'><span class="cm">117  */</span>
+</span><span class='line'><span class="mi">118</span> <span class="kt">int</span> <span class="n">sch_direct_xmit</span><span class="p">(</span><span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">,</span> <span class="k">struct</span> <span class="n">Qdisc</span> <span class="o">*</span><span class="n">q</span><span class="p">,</span>
+</span><span class='line'><span class="mi">119</span>                     <span class="k">struct</span> <span class="n">net_device</span> <span class="o">*</span><span class="n">dev</span><span class="p">,</span> <span class="k">struct</span> <span class="n">netdev_queue</span> <span class="o">*</span><span class="n">txq</span><span class="p">,</span>
+</span><span class='line'><span class="mi">120</span>                     <span class="kt">spinlock_t</span> <span class="o">*</span><span class="n">root_lock</span><span class="p">)</span>
+</span><span class='line'><span class="mi">121</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">122</span>         <span class="kt">int</span> <span class="n">ret</span> <span class="o">=</span> <span class="n">NETDEV_TX_BUSY</span><span class="p">;</span>
+</span><span class='line'><span class="mi">123</span>
+</span><span class='line'><span class="mi">124</span>         <span class="cm">/* And release qdisc */</span>
+</span><span class='line'><span class="mi">125</span>         <span class="n">spin_unlock</span><span class="p">(</span><span class="n">root_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">126</span>
+</span><span class='line'><span class="mi">127</span>         <span class="nf">HARD_TX_LOCK</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">txq</span><span class="p">,</span> <span class="n">smp_processor_id</span><span class="p">());</span>
+</span><span class='line'><span class="mi">128</span>         <span class="nf">if</span> <span class="p">(</span><span class="o">!</span><span class="n">netif_xmit_frozen_or_stopped</span><span class="p">(</span><span class="n">txq</span><span class="p">))</span>
+</span><span class='line'><span class="mi">129</span>                 <span class="n">ret</span> <span class="o">=</span> <span class="n">dev_hard_start_xmit</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">dev</span><span class="p">,</span> <span class="n">txq</span><span class="p">);</span>
+</span><span class='line'><span class="mi">130</span>
+</span><span class='line'><span class="mi">131</span>         <span class="nf">HARD_TX_UNLOCK</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">txq</span><span class="p">);</span>
+</span><span class='line'><span class="mi">132</span>
+</span><span class='line'><span class="mi">133</span>         <span class="nf">spin_lock</span><span class="p">(</span><span class="n">root_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">134</span>
+</span><span class='line'><span class="mi">135</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">dev_xmit_complete</span><span class="p">(</span><span class="n">ret</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">136</span>                 <span class="cm">/* Driver sent out skb successfully or skb was consumed */</span>
+</span><span class='line'><span class="mi">137</span>                 <span class="n">ret</span> <span class="o">=</span> <span class="n">qdisc_qlen</span><span class="p">(</span><span class="n">q</span><span class="p">);</span>
+</span><span class='line'><span class="mi">138</span>         <span class="p">}</span> <span class="k">else</span> <span class="nf">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">==</span> <span class="n">NETDEV_TX_LOCKED</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">139</span>                 <span class="cm">/* Driver try lock failed */</span>
+</span><span class='line'><span class="mi">140</span>                 <span class="n">ret</span> <span class="o">=</span> <span class="n">handle_dev_cpu_collision</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">txq</span><span class="p">,</span> <span class="n">q</span><span class="p">);</span>
+</span><span class='line'><span class="mi">141</span>         <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">142</span>                 <span class="cm">/* Driver returned NETDEV_TX_BUSY - requeue skb */</span>
+</span><span class='line'><span class="mi">143</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="n">ret</span> <span class="o">!=</span> <span class="n">NETDEV_TX_BUSY</span><span class="p">))</span>
+</span><span class='line'><span class="mi">144</span>                         <span class="n">net_warn_ratelimited</span><span class="p">(</span><span class="s">&quot;BUG %s code %d qlen %d</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+</span><span class='line'><span class="mi">145</span>                                              <span class="n">dev</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">,</span> <span class="n">ret</span><span class="p">,</span> <span class="n">q</span><span class="o">-&gt;</span><span class="n">q</span><span class="p">.</span><span class="n">qlen</span><span class="p">);</span>
+</span><span class='line'><span class="mi">146</span>
+</span><span class='line'><span class="mi">147</span>                 <span class="n">ret</span> <span class="o">=</span> <span class="n">dev_requeue_skb</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">q</span><span class="p">);</span>
+</span><span class='line'><span class="mi">148</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">149</span>
+</span><span class='line'><span class="mi">150</span>         <span class="k">if</span> <span class="p">(</span><span class="n">ret</span> <span class="o">&amp;&amp;</span> <span class="n">netif_xmit_frozen_or_stopped</span><span class="p">(</span><span class="n">txq</span><span class="p">))</span>
+</span><span class='line'><span class="mi">151</span>                 <span class="n">ret</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">152</span>
+</span><span class='line'><span class="mi">153</span>         <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+</span><span class='line'><span class="mi">154</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>skb-&gt;queue_mapping</code></h4>
+
+<p>In multi-queue nic driver, it is used to indicate which queue is used to xmit packet.
+It is set by <code>skb_set_queue_mapping</code> in <code>netdev_pick_tx</code>, <code>__dev_queue_xmit</code>.</p>
+
+<h4>busylock of <code>struct Qdisc</code></h4>
+
+<p>As we said, Qdisc uses <code>__QDISC___STATE_RUNNING</code> to ensure,
+for a same qdisc, <strong>ONLY ONE</strong> cpu xmit packet at the same time.
+How to manage the other cpus?</p>
+
+<p><code>busylock</code> of <code>struct Qdisc</code> is used for this.
+For a same qdisc,
+the first CPU, set the <code>__QDISC___STATE_RUNNING</code>.
+the second CPU, grab the spinlock <code>busylock</code> of <code>struct Qdisc</code>
+for the third or more CPU, wait on spinlock <code>busylock</code> of <code>struct Qdisc</code>.</p>
+
+<h4><code>qdisc_lock</code></h4>
+
+<p>Where is <code>qdisc_lock</code> stored in the Qdisc.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">255</span> <span class="k">static</span> <span class="kr">inline</span> <span class="kt">spinlock_t</span> <span class="o">*</span><span class="n">qdisc_lock</span><span class="p">(</span><span class="k">struct</span> <span class="n">Qdisc</span> <span class="o">*</span><span class="n">qdisc</span><span class="p">)</span>
+</span><span class='line'><span class="mi">256</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">257</span>         <span class="k">return</span> <span class="o">&amp;</span><span class="n">qdisc</span><span class="o">-&gt;</span><span class="n">q</span><span class="p">.</span><span class="n">lock</span><span class="p">;</span>
+</span><span class='line'><span class="mi">258</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">45</span> <span class="k">struct</span> <span class="n">Qdisc</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">85</span>         <span class="k">struct</span> <span class="n">sk_buff_head</span>     <span class="n">q</span><span class="p">;</span>
+</span><span class='line'><span class="p">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">148</span> <span class="k">struct</span> <span class="n">sk_buff_head</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">149</span>         <span class="cm">/* These two members must be first. */</span>
+</span><span class='line'> <span class="mi">150</span>         <span class="k">struct</span> <span class="n">sk_buff</span>  <span class="o">*</span><span class="n">next</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">151</span>         <span class="k">struct</span> <span class="n">sk_buff</span>  <span class="o">*</span><span class="n">prev</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">152</span>
+</span><span class='line'> <span class="mi">153</span>         <span class="n">__u32</span>           <span class="n">qlen</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">154</span>         <span class="kt">spinlock_t</span>      <span class="n">lock</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">155</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>NETIF_F_LLTX</code></h4>
+
+<p><code>HARD_TX_LOCK</code> and <code>HARD_TX_UNLOCK</code> will embrance the driver&rsquo;s <code>ndo_start_xmit</code>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2805</span> <span class="err">#</span><span class="n">define</span> <span class="n">HARD_TX_LOCK</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">txq</span><span class="p">,</span> <span class="n">cpu</span><span class="p">)</span> <span class="p">{</span>                   \
+</span><span class='line'><span class="mi">2806</span>         <span class="k">if</span> <span class="p">((</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">features</span> <span class="o">&amp;</span> <span class="n">NETIF_F_LLTX</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>      \
+</span><span class='line'><span class="mi">2807</span>                 <span class="n">__netif_tx_lock</span><span class="p">(</span><span class="n">txq</span><span class="p">,</span> <span class="n">cpu</span><span class="p">);</span>              \
+</span><span class='line'><span class="mi">2808</span>         <span class="p">}</span>                                               \
+</span><span class='line'><span class="mi">2809</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">2810</span>
+</span><span class='line'><span class="mi">2811</span> <span class="err">#</span><span class="n">define</span> <span class="n">HARD_TX_UNLOCK</span><span class="p">(</span><span class="n">dev</span><span class="p">,</span> <span class="n">txq</span><span class="p">)</span> <span class="p">{</span>                      \
+</span><span class='line'><span class="mi">2812</span>         <span class="k">if</span> <span class="p">((</span><span class="n">dev</span><span class="o">-&gt;</span><span class="n">features</span> <span class="o">&amp;</span> <span class="n">NETIF_F_LLTX</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="p">{</span>      \
+</span><span class='line'><span class="mi">2813</span>                 <span class="n">__netif_tx_unlock</span><span class="p">(</span><span class="n">txq</span><span class="p">);</span>                 \
+</span><span class='line'><span class="mi">2814</span>         <span class="p">}</span>                                               \
+</span><span class='line'><span class="mi">2815</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>For physical nic driver, it does nothing.
+but for virutal nic device driver, it is used to ensure the packet sent in order.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">junwei</span><span class="err">@</span><span class="nl">localhost</span><span class="p">:</span><span class="o">~/</span><span class="n">git</span><span class="o">/</span><span class="n">linux</span><span class="err">$</span> <span class="n">grep</span> <span class="n">NETIF_F_LLTX</span> <span class="n">net</span><span class="o">/</span> <span class="o">-</span><span class="n">Rw</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ipv4</span><span class="o">/</span><span class="n">ipip</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>        <span class="n">dev</span><span class="o">-&gt;</span><span class="n">features</span>           <span class="o">|=</span> <span class="n">NETIF_F_LLTX</span><span class="p">;</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ipv4</span><span class="o">/</span><span class="n">ip_gre</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>              <span class="n">dev</span><span class="o">-&gt;</span><span class="n">features</span> <span class="o">|=</span> <span class="n">NETIF_F_LLTX</span><span class="p">;</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ipv4</span><span class="o">/</span><span class="n">ip_vti</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>      <span class="n">dev</span><span class="o">-&gt;</span><span class="n">features</span>           <span class="o">|=</span> <span class="n">NETIF_F_LLTX</span><span class="p">;</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="mi">8021</span><span class="n">q</span><span class="o">/</span><span class="n">vlan_dev</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>   <span class="n">dev</span><span class="o">-&gt;</span><span class="n">features</span> <span class="o">|=</span> <span class="n">real_dev</span><span class="o">-&gt;</span><span class="n">vlan_features</span> <span class="o">|</span> <span class="n">NETIF_F_LLTX</span><span class="p">;</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="mi">8021</span><span class="n">q</span><span class="o">/</span><span class="n">vlan_dev</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>   <span class="n">features</span> <span class="o">|=</span> <span class="n">NETIF_F_LLTX</span><span class="p">;</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">bridge</span><span class="o">/</span><span class="n">br_device</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span> <span class="n">dev</span><span class="o">-&gt;</span><span class="n">features</span> <span class="o">=</span> <span class="n">COMMON_FEATURES</span> <span class="o">|</span> <span class="n">NETIF_F_LLTX</span> <span class="o">|</span> <span class="n">NETIF_F_NETNS_LOCAL</span> <span class="o">|</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">l2tp</span><span class="o">/</span><span class="n">l2tp_eth</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>    <span class="n">dev</span><span class="o">-&gt;</span><span class="n">features</span>           <span class="o">|=</span> <span class="n">NETIF_F_LLTX</span><span class="p">;</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ipv6</span><span class="o">/</span><span class="n">ip6_gre</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>             <span class="n">dev</span><span class="o">-&gt;</span><span class="n">features</span> <span class="o">|=</span> <span class="n">NETIF_F_LLTX</span><span class="p">;</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ipv6</span><span class="o">/</span><span class="n">ip6_gre</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>             <span class="n">dev</span><span class="o">-&gt;</span><span class="n">features</span> <span class="o">|=</span> <span class="n">NETIF_F_LLTX</span><span class="p">;</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ipv6</span><span class="o">/</span><span class="n">sit</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span> <span class="n">dev</span><span class="o">-&gt;</span><span class="n">features</span>           <span class="o">|=</span> <span class="n">NETIF_F_LLTX</span><span class="p">;</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">hsr</span><span class="o">/</span><span class="n">hsr_device</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>   <span class="n">hsr_dev</span><span class="o">-&gt;</span><span class="n">features</span> <span class="o">|=</span> <span class="n">NETIF_F_LLTX</span><span class="p">;</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">openvswitch</span><span class="o">/</span><span class="n">vport</span><span class="o">-</span><span class="n">internal_dev</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>   <span class="n">netdev</span><span class="o">-&gt;</span><span class="n">features</span> <span class="o">=</span> <span class="n">NETIF_F_LLTX</span> <span class="o">|</span> <span class="n">NETIF_F_SG</span> <span class="o">|</span> <span class="n">NETIF_F_FRAGLIST</span> <span class="o">|</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">openvswitch</span><span class="o">/</span><span class="n">vport</span><span class="o">-</span><span class="n">internal_dev</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span>   <span class="n">netdev</span><span class="o">-&gt;</span><span class="n">hw_features</span> <span class="o">=</span> <span class="n">netdev</span><span class="o">-&gt;</span><span class="n">features</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">NETIF_F_LLTX</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2710</span> <span class="k">static</span> <span class="kr">inline</span> <span class="kt">void</span> <span class="nf">__netif_tx_lock</span><span class="p">(</span><span class="k">struct</span> <span class="n">netdev_queue</span> <span class="o">*</span><span class="n">txq</span><span class="p">,</span> <span class="kt">int</span> <span class="n">cpu</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2711</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2712</span>         <span class="n">spin_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">txq</span><span class="o">-&gt;</span><span class="n">_xmit_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2713</span>         <span class="n">txq</span><span class="o">-&gt;</span><span class="n">xmit_lock_owner</span> <span class="o">=</span> <span class="n">cpu</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2714</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2730</span> <span class="k">static</span> <span class="kr">inline</span> <span class="kt">void</span> <span class="n">__netif_tx_unlock</span><span class="p">(</span><span class="k">struct</span> <span class="n">netdev_queue</span> <span class="o">*</span><span class="n">txq</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2731</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2732</span>         <span class="n">txq</span><span class="o">-&gt;</span><span class="n">xmit_lock_owner</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2733</span>         <span class="nf">spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">txq</span><span class="o">-&gt;</span><span class="n">_xmit_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2734</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2014-02-08T11:26:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>8</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>11:26 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/netcore/'>netcore</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2014/01/28/how-to-create-dev-qdisc/" title="Previous Post: how to create dev qdisc">&laquo; how to create dev qdisc</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2014/02/08/qdisc-running-flag/" title="Next Post: Qdisc running flag">Qdisc running flag &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

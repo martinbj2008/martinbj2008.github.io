@@ -1,0 +1,968 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Socket Basic Framework - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="socket type socket is a widely used in kernel/net. There are many kind of sockets with different ‘family/proto’. They can be divided by family, and &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/02/16/socket-framework/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Socket Basic Framework</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-02-16T00:00:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>16</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>12:00 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2>socket type</h2>
+
+<p>socket is a widely used in kernel/net. There are many kind of sockets with different ‘family/proto’. They can be divided by family, and under each family, there are many kinds of proto. such as inet(ipv4)/stream, netlink/(xfrm, rt).</p>
+
+<!-- more -->
+
+
+<h2>Data struct &amp;&amp; method</h2>
+
+<h3>net_proto_family</h3>
+
+<p>The net_proto_family is used to register a socket family.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">216</span> <span class="k">struct</span> <span class="n">net_proto_family</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">217</span>         <span class="kt">int</span>             <span class="n">family</span><span class="p">;</span>
+</span><span class='line'><span class="mi">218</span>         <span class="nf">int</span>             <span class="p">(</span><span class="o">*</span><span class="n">create</span><span class="p">)(</span><span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span><span class="p">,</span> <span class="k">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock</span><span class="p">,</span>
+</span><span class='line'><span class="mi">219</span>                                   <span class="kt">int</span> <span class="n">protocol</span><span class="p">,</span> <span class="kt">int</span> <span class="n">kern</span><span class="p">);</span>
+</span><span class='line'><span class="mi">220</span>         <span class="k">struct</span> <span class="n">module</span>   <span class="o">*</span><span class="n">owner</span><span class="p">;</span>
+</span><span class='line'><span class="mi">221</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>such as inet(ipv4), netlink, unix_socket, pf_packet(tcpdump socket) …
+EX: netlink family</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2082</span> <span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">net_proto_family</span> <span class="n">netlink_family_ops</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2083</span>         <span class="p">.</span><span class="n">family</span> <span class="o">=</span> <span class="n">PF_NETLINK</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2084</span>         <span class="p">.</span><span class="n">create</span> <span class="o">=</span> <span class="n">netlink_create</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2085</span>         <span class="p">.</span><span class="n">owner</span>  <span class="o">=</span> <span class="n">THIS_MODULE</span><span class="p">,</span>  <span class="cm">/* for consistency 8) */</span>
+</span><span class='line'><span class="mi">2086</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>All the socket families are registered to net_families by int sock_register(const struct net_proto_family *ops)</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">158</span> <span class="k">static</span> <span class="nf">DEFINE_SPINLOCK</span><span class="p">(</span><span class="n">net_family_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">159</span> <span class="k">static</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">net_proto_family</span> <span class="n">__rcu</span> <span class="o">*</span><span class="n">net_families</span><span class="p">[</span><span class="n">NPROTO</span><span class="p">]</span> <span class="n">__read_mostly</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>See later section for detail.</p>
+
+<h3><code>struct proto_ops</code></h3>
+
+<p>proto_ops is used to define the detail operation, such as bind/connect/accept and so on. every socket has a specificed proto_ops.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">162</span> <span class="k">struct</span> <span class="n">proto_ops</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">163</span>         <span class="kt">int</span>             <span class="n">family</span><span class="p">;</span>
+</span><span class='line'><span class="mi">164</span>         <span class="k">struct</span> <span class="n">module</span>   <span class="o">*</span><span class="n">owner</span><span class="p">;</span>
+</span><span class='line'><span class="mi">165</span>         <span class="nf">int</span>             <span class="p">(</span><span class="o">*</span><span class="n">release</span><span class="p">)</span>   <span class="p">(</span><span class="k">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">166</span>         <span class="nf">int</span>             <span class="p">(</span><span class="o">*</span><span class="n">bind</span><span class="p">)</span>      <span class="p">(</span><span class="k">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock</span><span class="p">,</span>
+</span><span class='line'><span class="mi">167</span>                                       <span class="k">struct</span> <span class="n">sockaddr</span> <span class="o">*</span><span class="n">myaddr</span><span class="p">,</span>
+</span><span class='line'><span class="mi">168</span>                                       <span class="kt">int</span> <span class="n">sockaddr_len</span><span class="p">);</span>
+</span><span class='line'><span class="mi">169</span>         <span class="nf">int</span>             <span class="p">(</span><span class="o">*</span><span class="n">connect</span><span class="p">)</span>   <span class="p">(</span><span class="k">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock</span><span class="p">,</span>
+</span><span class='line'><span class="mi">170</span>                                       <span class="k">struct</span> <span class="n">sockaddr</span> <span class="o">*</span><span class="n">vaddr</span><span class="p">,</span>
+</span><span class='line'><span class="mi">171</span>                                       <span class="kt">int</span> <span class="n">sockaddr_len</span><span class="p">,</span> <span class="kt">int</span> <span class="n">flags</span><span class="p">);</span>
+</span><span class='line'><span class="mi">172</span>         <span class="nf">int</span>             <span class="p">(</span><span class="o">*</span><span class="n">socketpair</span><span class="p">)(</span><span class="k">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock1</span><span class="p">,</span>
+</span><span class='line'><span class="mi">173</span>                                       <span class="k">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock2</span><span class="p">);</span>
+</span><span class='line'><span class="mi">174</span>         <span class="nf">int</span>             <span class="p">(</span><span class="o">*</span><span class="n">accept</span><span class="p">)</span>    <span class="p">(</span><span class="k">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock</span><span class="p">,</span>
+</span><span class='line'><span class="mi">175</span>                                       <span class="k">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">newsock</span><span class="p">,</span> <span class="kt">int</span> <span class="n">flags</span><span class="p">);</span>
+</span><span class='line'><span class="mi">176</span>         <span class="nf">int</span>             <span class="p">(</span><span class="o">*</span><span class="n">getname</span><span class="p">)</span>   <span class="p">(</span><span class="k">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock</span><span class="p">,</span>
+</span><span class='line'><span class="mi">177</span>                                       <span class="k">struct</span> <span class="n">sockaddr</span> <span class="o">*</span><span class="n">addr</span><span class="p">,</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">199</span>         <span class="kt">int</span>             <span class="p">(</span><span class="o">*</span><span class="n">sendmsg</span><span class="p">)</span>   <span class="p">(</span><span class="k">struct</span> <span class="n">kiocb</span> <span class="o">*</span><span class="n">iocb</span><span class="p">,</span> <span class="k">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock</span><span class="p">,</span>
+</span><span class='line'><span class="mi">200</span>                                       <span class="k">struct</span> <span class="n">msghdr</span> <span class="o">*</span><span class="n">m</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">total_len</span><span class="p">);</span>
+</span><span class='line'><span class="mi">201</span>         <span class="nf">int</span>             <span class="p">(</span><span class="o">*</span><span class="n">recvmsg</span><span class="p">)</span>   <span class="p">(</span><span class="k">struct</span> <span class="n">kiocb</span> <span class="o">*</span><span class="n">iocb</span><span class="p">,</span> <span class="k">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock</span><span class="p">,</span>
+</span><span class='line'><span class="mi">202</span>                                       <span class="k">struct</span> <span class="n">msghdr</span> <span class="o">*</span><span class="n">m</span><span class="p">,</span> <span class="kt">size_t</span> <span class="n">total_len</span><span class="p">,</span>
+</span><span class='line'><span class="mi">203</span>                                       <span class="kt">int</span> <span class="n">flags</span><span class="p">);</span>
+</span><span class='line'><span class="p">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>struct proto</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">800</span> <span class="k">struct</span> <span class="n">proto</span> <span class="p">{</span>
+</span><span class='line'> <span class="p">...</span>
+</span><span class='line'> <span class="mi">812</span>         <span class="kt">int</span>                     <span class="p">(</span><span class="o">*</span><span class="n">init</span><span class="p">)(</span><span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">813</span>         <span class="nf">void</span>                    <span class="p">(</span><span class="o">*</span><span class="n">destroy</span><span class="p">)(</span><span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">814</span>         <span class="nf">void</span>                    <span class="p">(</span><span class="o">*</span><span class="n">shutdown</span><span class="p">)(</span><span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="kt">int</span> <span class="n">how</span><span class="p">);</span>
+</span><span class='line'> <span class="p">..</span>
+</span><span class='line'> <span class="mi">847</span>         <span class="cm">/* Keeping track of sk&#39;s, looking them up, and port selection methods. */</span>
+</span><span class='line'> <span class="mi">848</span>         <span class="kt">void</span>                    <span class="p">(</span><span class="o">*</span><span class="n">hash</span><span class="p">)(</span><span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">849</span>         <span class="nf">void</span>                    <span class="p">(</span><span class="o">*</span><span class="n">unhash</span><span class="p">)(</span><span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'> <span class="p">...</span>
+</span><span class='line'> <span class="mi">876</span>         <span class="k">struct</span> <span class="n">kmem_cache</span>       <span class="o">*</span><span class="n">slab</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">877</span>         <span class="kt">unsigned</span> <span class="kt">int</span>            <span class="n">obj_size</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">878</span>         <span class="kt">int</span>                     <span class="n">slab_flags</span><span class="p">;</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'> <span class="mi">911</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>Currently, I only found the obj_size/slab is useful.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">876</span> <span class="k">struct</span> <span class="n">kmem_cache</span> <span class="o">*</span><span class="n">slab</span><span class="p">;</span>
+</span><span class='line'><span class="mi">877</span> <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">obj_size</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>When create a socket in socket_create, we alloc a struct sock, in fact, we alloc a memory whose size is obj_size from the slab.</p>
+
+<p>ex:netlink_sock, its first element is struct sock sk;, thus we can use nlk_sk to get a struct netlink_sock from a struct sock.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">67</span> <span class="k">struct</span> <span class="n">netlink_sock</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">68</span>         <span class="cm">/* struct sock has to be the first member of netlink_sock */</span>
+</span><span class='line'><span class="mi">69</span>         <span class="k">struct</span> <span class="n">sock</span>             <span class="n">sk</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">96</span> <span class="k">static</span> <span class="kr">inline</span> <span class="k">struct</span> <span class="n">netlink_sock</span> <span class="o">*</span><span class="nf">nlk_sk</span><span class="p">(</span><span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">)</span>
+</span><span class='line'><span class="mi">97</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">98</span>         <span class="k">return</span> <span class="n">container_of</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="k">struct</span> <span class="n">netlink_sock</span><span class="p">,</span> <span class="n">sk</span><span class="p">);</span>
+</span><span class='line'><span class="mi">99</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>sometimes struct proto_ops will call the struct proto
+ex: .getsockopt (todo)</p>
+
+<h3>socket vs sock</h3>
+
+<p>What is sock used for? sock is the internel representation “network layer representation of sockets” Which is used in kernel internel.</p>
+
+<p>What is socket used for? “struct socket – general BSD socket” It is a very high layer abtractation, has very little and common information, such as: state, file(socket is a file for user space), flag, ops(proto ops). each of them has a pointer in its struct which points to peer.</p>
+
+<p>PIC for sock and socket</p>
+
+<h3><code>socket-&gt;sk</code></h3>
+
+<p>struct socket - general BSD socket</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">139</span> <span class="k">struct</span> <span class="n">socket</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">140</span>         <span class="n">socket_state</span>            <span class="n">state</span><span class="p">;</span>
+</span><span class='line'><span class="mi">141</span>
+</span><span class='line'><span class="mi">142</span>         <span class="nf">kmemcheck_bitfield_begin</span><span class="p">(</span><span class="n">type</span><span class="p">);</span>
+</span><span class='line'><span class="mi">143</span>         <span class="kt">short</span>                   <span class="n">type</span><span class="p">;</span>
+</span><span class='line'><span class="mi">144</span>         <span class="nf">kmemcheck_bitfield_end</span><span class="p">(</span><span class="n">type</span><span class="p">);</span>
+</span><span class='line'><span class="mi">145</span>
+</span><span class='line'><span class="mi">146</span>         <span class="kt">unsigned</span> <span class="kt">long</span>           <span class="n">flags</span><span class="p">;</span>
+</span><span class='line'><span class="mi">147</span>
+</span><span class='line'><span class="mi">148</span>         <span class="k">struct</span> <span class="n">socket_wq</span> <span class="n">__rcu</span>  <span class="o">*</span><span class="n">wq</span><span class="p">;</span>
+</span><span class='line'><span class="mi">149</span>
+</span><span class='line'><span class="mi">150</span>         <span class="k">struct</span> <span class="n">file</span>             <span class="o">*</span><span class="n">file</span><span class="p">;</span>
+</span><span class='line'><span class="mi">151</span>         <span class="k">struct</span> <span class="n">sock</span>             <span class="o">*</span><span class="n">sk</span><span class="p">;</span>
+</span><span class='line'><span class="mi">152</span>         <span class="k">const</span> <span class="k">struct</span> <span class="n">proto_ops</span>  <span class="o">*</span><span class="n">ops</span><span class="p">;</span>
+</span><span class='line'><span class="mi">153</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>c</p>
+
+<h3><code>sock-&gt;sk_socket</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">264</span> <span class="k">struct</span> <span class="n">sock</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'> <span class="mi">269</span>         <span class="k">struct</span> <span class="n">sock_common</span>      <span class="n">__sk_common</span><span class="p">;</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'> <span class="mi">285</span>         <span class="kt">socket_lock_t</span>           <span class="n">sk_lock</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">286</span>         <span class="k">struct</span> <span class="n">sk_buff_head</span>     <span class="n">sk_receive_queue</span><span class="p">;</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'> <span class="mi">295</span>         <span class="k">struct</span> <span class="p">{</span>
+</span><span class='line'> <span class="mi">296</span>                 <span class="kt">atomic_t</span>        <span class="n">rmem_alloc</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">297</span>                 <span class="kt">int</span>             <span class="n">len</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">298</span>                 <span class="k">struct</span> <span class="n">sk_buff</span>  <span class="o">*</span><span class="n">head</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">299</span>                 <span class="k">struct</span> <span class="n">sk_buff</span>  <span class="o">*</span><span class="n">tail</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">300</span>         <span class="p">}</span> <span class="n">sk_backlog</span><span class="p">;</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'> <span class="mi">360</span>         <span class="k">struct</span> <span class="n">socket</span>           <span class="o">*</span><span class="n">sk_socket</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">380</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>void sock_init_data(struct socket *sock, struct sock *sk)</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2077</span> <span class="kt">void</span> <span class="nf">sock_init_data</span><span class="p">(</span><span class="k">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2078</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2079</span>         <span class="n">skb_queue_head_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_receive_queue</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2080</span>         <span class="nf">skb_queue_head_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_write_queue</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2081</span>         <span class="nf">skb_queue_head_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_error_queue</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2082</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_NET_DMA</span>
+</span><span class='line'><span class="mi">2083</span>         <span class="n">skb_queue_head_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_async_wait_queue</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2084</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'><span class="mi">2085</span>
+</span><span class='line'><span class="mi">2086</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_send_head</span>        <span class="o">=</span>       <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2087</span>
+</span><span class='line'><span class="mi">2088</span>         <span class="nf">init_timer</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_timer</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2089</span>
+</span><span class='line'><span class="mi">2090</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_allocation</span>       <span class="o">=</span>       <span class="n">GFP_KERNEL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2091</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_rcvbuf</span>           <span class="o">=</span>       <span class="n">sysctl_rmem_default</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2092</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_sndbuf</span>           <span class="o">=</span>       <span class="n">sysctl_wmem_default</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2093</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state</span>            <span class="o">=</span>       <span class="n">TCP_CLOSE</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2094</span>         <span class="nf">sk_set_socket</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">sock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2095</span>
+</span><span class='line'><span class="mi">2096</span>         <span class="nf">sock_set_flag</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">SOCK_ZAPPED</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2097</span>
+</span><span class='line'><span class="mi">2098</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">sock</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2099</span>                 <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_type</span>     <span class="o">=</span>       <span class="n">sock</span><span class="o">-&gt;</span><span class="n">type</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2100</span>                 <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_wq</span>       <span class="o">=</span>       <span class="n">sock</span><span class="o">-&gt;</span><span class="n">wq</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2101</span>                 <span class="n">sock</span><span class="o">-&gt;</span><span class="n">sk</span>        <span class="o">=</span>       <span class="n">sk</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2102</span>         <span class="p">}</span> <span class="k">else</span>
+</span><span class='line'><span class="mi">2103</span>                 <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_wq</span>       <span class="o">=</span>       <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2104</span>
+</span><span class='line'><span class="mi">2105</span>         <span class="nf">spin_lock_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_dst_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2106</span>         <span class="nf">rwlock_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_callback_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2107</span>         <span class="nf">lockdep_set_class_and_name</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_callback_lock</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2108</span>                         <span class="n">af_callback_keys</span> <span class="o">+</span> <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_family</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2109</span>                         <span class="n">af_family_clock_key_strings</span><span class="p">[</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_family</span><span class="p">]);</span>
+</span><span class='line'><span class="mi">2110</span>
+</span><span class='line'><span class="mi">2111</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state_change</span>     <span class="o">=</span>       <span class="n">sock_def_wakeup</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2112</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_data_ready</span>       <span class="o">=</span>       <span class="n">sock_def_readable</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2113</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_write_space</span>      <span class="o">=</span>       <span class="n">sock_def_write_space</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2114</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_error_report</span>     <span class="o">=</span>       <span class="n">sock_def_error_report</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2115</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_destruct</span>         <span class="o">=</span>       <span class="n">sock_def_destruct</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2116</span>
+</span><span class='line'><span class="mi">2117</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_sndmsg_page</span>      <span class="o">=</span>       <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2118</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_sndmsg_off</span>       <span class="o">=</span>       <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2119</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_peek_off</span>         <span class="o">=</span>       <span class="o">-</span><span class="mi">1</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2120</span>
+</span><span class='line'><span class="mi">2121</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_peer_pid</span>         <span class="o">=</span>       <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2122</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_peer_cred</span>        <span class="o">=</span>       <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2123</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_write_pending</span>    <span class="o">=</span>       <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2124</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_rcvlowat</span>         <span class="o">=</span>       <span class="mi">1</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2125</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_rcvtimeo</span>         <span class="o">=</span>       <span class="n">MAX_SCHEDULE_TIMEOUT</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2126</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_sndtimeo</span>         <span class="o">=</span>       <span class="n">MAX_SCHEDULE_TIMEOUT</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2127</span>
+</span><span class='line'><span class="mi">2128</span>         <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_stamp</span> <span class="o">=</span> <span class="n">ktime_set</span><span class="p">(</span><span class="o">-</span><span class="mi">1L</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2129</span>
+</span><span class='line'><span class="mi">2130</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">2131          * Before updating sk_refcnt, we must commit prior changes to memory</span>
+</span><span class='line'><span class="cm">2132          * (Documentation/RCU/rculist_nulls.txt for details)</span>
+</span><span class='line'><span class="cm">2133          */</span>
+</span><span class='line'><span class="mi">2134</span>         <span class="n">smp_wmb</span><span class="p">();</span>
+</span><span class='line'><span class="mi">2135</span>         <span class="nf">atomic_set</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_refcnt</span><span class="p">,</span> <span class="mi">1</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2136</span>         <span class="nf">atomic_set</span><span class="p">(</span><span class="o">&amp;</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_drops</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2137</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">2138</span> <span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">sock_init_data</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>Socket Related Initialization</h2>
+
+<h3><code>net_families</code> and <code>socket_register</code></h3>
+
+<p>each of the socket family initialization, sock_register is called to register a handler.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="p">[</span><span class="n">junwei</span><span class="err">@</span><span class="n">junwei</span><span class="p">]</span><span class="err">$</span> <span class="n">grep</span> <span class="n">sock_register</span> <span class="n">net</span><span class="o">/</span> <span class="o">-</span><span class="n">Rwn</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">caif</span><span class="o">/</span><span class="n">caif_socket</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">1100</span><span class="o">:</span>   <span class="kt">int</span> <span class="n">err</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">caif_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">econet</span><span class="o">/</span><span class="n">af_econet</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">1156</span><span class="o">:</span>   <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">econet_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">can</span><span class="o">/</span><span class="n">af_can</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">846</span><span class="o">:</span>  <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">can_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">unix</span><span class="o">/</span><span class="n">af_unix</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">2422</span><span class="o">:</span>   <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">unix_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">tipc</span><span class="o">/</span><span class="n">socket</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">1874</span><span class="o">:</span>    <span class="n">res</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tipc_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">bluetooth</span><span class="o">/</span><span class="n">af_bluetooth</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">561</span><span class="o">:</span>  <span class="n">err</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">bt_sock_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">key</span><span class="o">/</span><span class="n">af_key</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">3797</span><span class="o">:</span> <span class="n">err</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pfkey_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ipv4</span><span class="o">/</span><span class="n">af_inet</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">1668</span><span class="o">:</span>   <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inet_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">rose</span><span class="o">/</span><span class="n">af_rose</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">1565</span><span class="o">:</span>   <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rose_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">netrom</span><span class="o">/</span><span class="n">af_netrom</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">1439</span><span class="o">:</span>   <span class="k">if</span> <span class="p">(</span><span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">nr_family_ops</span><span class="p">))</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">rxrpc</span><span class="o">/</span><span class="n">af_rxrpc</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">823</span><span class="o">:</span>  <span class="n">ret</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rxrpc_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">atm</span><span class="o">/</span><span class="n">svc</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">686</span><span class="o">:</span> <span class="k">return</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">svc_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">atm</span><span class="o">/</span><span class="n">pvc</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">156</span><span class="o">:</span> <span class="k">return</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pvc_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">packet</span><span class="o">/</span><span class="n">af_packet</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">3961</span><span class="o">:</span>   <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">packet_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">decnet</span><span class="o">/</span><span class="n">af_decnet</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">2381</span><span class="o">:</span>   <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dn_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">iucv</span><span class="o">/</span><span class="n">af_iucv</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">2423</span><span class="o">:</span>   <span class="n">err</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">iucv_sock_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">x25</span><span class="o">/</span><span class="n">af_x25</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">1806</span><span class="o">:</span> <span class="n">rc</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">x25_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">netlink</span><span class="o">/</span><span class="n">af_netlink</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">2174</span><span class="o">:</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">netlink_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ax25</span><span class="o">/</span><span class="n">af_ax25</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">1990</span><span class="o">:</span>   <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ax25_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">nfc</span><span class="o">/</span><span class="n">af_nfc</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">93</span><span class="o">:</span>   <span class="k">return</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">nfc_sock_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">phonet</span><span class="o">/</span><span class="n">af_phonet</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">511</span><span class="o">:</span>    <span class="n">err</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">phonet_proto_family</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">socket</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">2467</span><span class="o">:</span> <span class="o">*</span>  <span class="n">sock_register</span> <span class="o">-</span> <span class="n">add</span> <span class="n">a</span> <span class="n">socket</span> <span class="n">protocol</span> <span class="n">handler</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">socket</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">2475</span><span class="o">:</span><span class="kt">int</span> <span class="n">sock_register</span><span class="p">(</span><span class="k">const</span> <span class="k">struct</span> <span class="n">net_proto_family</span> <span class="o">*</span><span class="n">ops</span><span class="p">)</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">socket</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">2498</span><span class="o">:</span><span class="n">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">sock_register</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">appletalk</span><span class="o">/</span><span class="n">ddp</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">1931</span><span class="o">:</span>  <span class="p">(</span><span class="kt">void</span><span class="p">)</span><span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">atalk_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ipx</span><span class="o">/</span><span class="n">af_ipx</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">2025</span><span class="o">:</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ipx_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">irda</span><span class="o">/</span><span class="n">af_irda</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">2731</span><span class="o">:</span>       <span class="n">rc</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">irda_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">llc</span><span class="o">/</span><span class="n">af_llc</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">1217</span><span class="o">:</span> <span class="n">rc</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">llc_ui_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">rds</span><span class="o">/</span><span class="n">af_rds</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">565</span><span class="o">:</span>  <span class="n">ret</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">rds_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ipv6</span><span class="o">/</span><span class="n">af_inet6</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">1110</span><span class="o">:</span>  <span class="n">err</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">inet6_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="n">net</span><span class="o">/</span><span class="n">ieee802154</span><span class="o">/</span><span class="n">af_ieee802154</span><span class="p">.</span><span class="nl">c</span><span class="p">:</span><span class="mi">346</span><span class="o">:</span>    <span class="n">rc</span> <span class="o">=</span> <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ieee802154_family_ops</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2466</span> <span class="cm">/**</span>
+</span><span class='line'><span class="cm">2467  *      sock_register - add a socket protocol handler</span>
+</span><span class='line'><span class="cm">2468  *      @ops: description of protocol</span>
+</span><span class='line'><span class="cm">2469  *</span>
+</span><span class='line'><span class="cm">2470  *      This function is called by a protocol handler that wants to</span>
+</span><span class='line'><span class="cm">2471  *      advertise its address family, and have it linked into the</span>
+</span><span class='line'><span class="cm">2472  *      socket interface. The value ops-&gt;family coresponds to the</span>
+</span><span class='line'><span class="cm">2473  *      socket system call protocol family.</span>
+</span><span class='line'><span class="cm">2474  */</span>
+</span><span class='line'><span class="mi">2475</span> <span class="kt">int</span> <span class="n">sock_register</span><span class="p">(</span><span class="k">const</span> <span class="k">struct</span> <span class="n">net_proto_family</span> <span class="o">*</span><span class="n">ops</span><span class="p">)</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">2485</span>         <span class="n">spin_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net_family_lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2486</span>         <span class="k">if</span> <span class="p">(</span><span class="n">rcu_dereference_protected</span><span class="p">(</span><span class="n">net_families</span><span class="p">[</span><span class="n">ops</span><span class="o">-&gt;</span><span class="n">family</span><span class="p">],</span>
+</span><span class='line'><span class="mi">2487</span>                                       <span class="n">lockdep_is_held</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net_family_lock</span><span class="p">)))</span>
+</span><span class='line'><span class="mi">2488</span>                 <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">EEXIST</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2489</span>         <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2490</span>                 <span class="n">rcu_assign_pointer</span><span class="p">(</span><span class="n">net_families</span><span class="p">[</span><span class="n">ops</span><span class="o">-&gt;</span><span class="n">family</span><span class="p">],</span> <span class="n">ops</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2491</span>                 <span class="n">err</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2492</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">2493</span>         <span class="n">spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">net_family_lock</span><span class="p">);</span>
+</span><span class='line'><span class="p">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h2>socket related system call</h2>
+
+<h3>syscall</h3>
+
+<p>In kennel(ver 3.4), the syscall are defined in net/socket.c</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="p">[</span><span class="n">junwei</span><span class="err">@</span><span class="n">junwei</span> <span class="n">linux</span><span class="o">-</span><span class="mf">3.4</span><span class="p">]</span><span class="err">$</span> <span class="n">grep</span> <span class="n">SYSCALL_DEFINE</span> <span class="n">net</span><span class="o">/</span><span class="n">socket</span><span class="p">.</span><span class="n">c</span> <span class="o">-</span><span class="n">n</span>
+</span><span class='line'><span class="mi">1325</span><span class="o">:</span><span class="n">SYSCALL_DEFINE3</span><span class="p">(</span><span class="n">socket</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">family</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">type</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">protocol</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1366</span><span class="o">:</span><span class="n">SYSCALL_DEFINE4</span><span class="p">(</span><span class="n">socketpair</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">family</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">type</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">protocol</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1447</span><span class="o">:</span><span class="n">SYSCALL_DEFINE3</span><span class="p">(</span><span class="n">bind</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sockaddr</span> <span class="n">__user</span> <span class="o">*</span><span class="p">,</span> <span class="n">umyaddr</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">addrlen</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1476</span><span class="o">:</span><span class="n">SYSCALL_DEFINE2</span><span class="p">(</span><span class="n">listen</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">backlog</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1509</span><span class="o">:</span><span class="n">SYSCALL_DEFINE4</span><span class="p">(</span><span class="n">accept4</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sockaddr</span> <span class="n">__user</span> <span class="o">*</span><span class="p">,</span> <span class="n">upeer_sockaddr</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1583</span><span class="o">:</span><span class="n">SYSCALL_DEFINE3</span><span class="p">(</span><span class="n">accept</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sockaddr</span> <span class="n">__user</span> <span class="o">*</span><span class="p">,</span> <span class="n">upeer_sockaddr</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1601</span><span class="o">:</span><span class="n">SYSCALL_DEFINE3</span><span class="p">(</span><span class="n">connect</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sockaddr</span> <span class="n">__user</span> <span class="o">*</span><span class="p">,</span> <span class="n">uservaddr</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1633</span><span class="o">:</span><span class="n">SYSCALL_DEFINE3</span><span class="p">(</span><span class="n">getsockname</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sockaddr</span> <span class="n">__user</span> <span class="o">*</span><span class="p">,</span> <span class="n">usockaddr</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1664</span><span class="o">:</span><span class="n">SYSCALL_DEFINE3</span><span class="p">(</span><span class="n">getpeername</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sockaddr</span> <span class="n">__user</span> <span class="o">*</span><span class="p">,</span> <span class="n">usockaddr</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1696</span><span class="o">:</span><span class="n">SYSCALL_DEFINE6</span><span class="p">(</span><span class="n">sendto</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="kt">void</span> <span class="n">__user</span> <span class="o">*</span><span class="p">,</span> <span class="n">buff</span><span class="p">,</span> <span class="kt">size_t</span><span class="p">,</span> <span class="n">len</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1743</span><span class="o">:</span><span class="n">SYSCALL_DEFINE4</span><span class="p">(</span><span class="n">send</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="kt">void</span> <span class="n">__user</span> <span class="o">*</span><span class="p">,</span> <span class="n">buff</span><span class="p">,</span> <span class="kt">size_t</span><span class="p">,</span> <span class="n">len</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1755</span><span class="o">:</span><span class="n">SYSCALL_DEFINE6</span><span class="p">(</span><span class="n">recvfrom</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="kt">void</span> <span class="n">__user</span> <span class="o">*</span><span class="p">,</span> <span class="n">ubuf</span><span class="p">,</span> <span class="kt">size_t</span><span class="p">,</span> <span class="n">size</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1811</span><span class="o">:</span><span class="n">SYSCALL_DEFINE5</span><span class="p">(</span><span class="n">setsockopt</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">optname</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1845</span><span class="o">:</span><span class="n">SYSCALL_DEFINE5</span><span class="p">(</span><span class="n">getsockopt</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">level</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">optname</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1875</span><span class="o">:</span><span class="n">SYSCALL_DEFINE2</span><span class="p">(</span><span class="n">shutdown</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">how</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2020</span><span class="o">:</span><span class="n">SYSCALL_DEFINE3</span><span class="p">(</span><span class="n">sendmsg</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="k">struct</span> <span class="n">msghdr</span> <span class="n">__user</span> <span class="o">*</span><span class="p">,</span> <span class="n">msg</span><span class="p">,</span> <span class="kt">unsigned</span><span class="p">,</span> <span class="n">flags</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2095</span><span class="o">:</span><span class="n">SYSCALL_DEFINE4</span><span class="p">(</span><span class="n">sendmmsg</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="k">struct</span> <span class="n">mmsghdr</span> <span class="n">__user</span> <span class="o">*</span><span class="p">,</span> <span class="n">mmsg</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2195</span><span class="o">:</span><span class="n">SYSCALL_DEFINE3</span><span class="p">(</span><span class="n">recvmsg</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="k">struct</span> <span class="n">msghdr</span> <span class="n">__user</span> <span class="o">*</span><span class="p">,</span> <span class="n">msg</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2319</span><span class="o">:</span><span class="n">SYSCALL_DEFINE5</span><span class="p">(</span><span class="n">recvmmsg</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="k">struct</span> <span class="n">mmsghdr</span> <span class="n">__user</span> <span class="o">*</span><span class="p">,</span> <span class="n">mmsg</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2361</span><span class="o">:</span><span class="n">SYSCALL_DEFINE2</span><span class="p">(</span><span class="n">socketcall</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">call</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">__user</span> <span class="o">*</span><span class="p">,</span> <span class="n">args</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>ex: netlink socket register.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">2129</span> <span class="k">static</span> <span class="kt">int</span> <span class="n">__init</span> <span class="nf">netlink_proto_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">2174</span>         <span class="n">sock_register</span><span class="p">(</span><span class="o">&amp;</span><span class="n">netlink_family_ops</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2175</span>         <span class="nf">register_pernet_subsys</span><span class="p">(</span><span class="o">&amp;</span><span class="n">netlink_net_ops</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>socket system call socket</h3>
+
+<p><code>sock_create</code> is a very basic and important method.</p>
+
+<p>When create a socket, we dedicate the its family/proto, The create method of the corresponding net_proto_family is called, and set the socket->ops with corresponding struct proto_ops.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">139</span> <span class="k">struct</span> <span class="n">socket</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">152</span>         <span class="k">const</span> <span class="k">struct</span> <span class="n">proto_ops</span>  <span class="o">*</span><span class="n">ops</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>See detail:</p>
+
+<h3><code>SYSCALL_DEFINE3(socket</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1325</span> <span class="n">SYSCALL_DEFINE3</span><span class="p">(</span><span class="n">socket</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">family</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">type</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">protocol</span><span class="p">)</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">1337</span>         <span class="n">flags</span> <span class="o">=</span> <span class="n">type</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">SOCK_TYPE_MASK</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1338</span>         <span class="k">if</span> <span class="p">(</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="o">~</span><span class="p">(</span><span class="n">SOCK_CLOEXEC</span> <span class="o">|</span> <span class="n">SOCK_NONBLOCK</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1339</span>                 <span class="k">return</span> <span class="o">-</span><span class="n">EINVAL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1340</span>         <span class="n">type</span> <span class="o">&amp;=</span> <span class="n">SOCK_TYPE_MASK</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1341</span>
+</span><span class='line'><span class="mi">1342</span>         <span class="k">if</span> <span class="p">(</span><span class="n">SOCK_NONBLOCK</span> <span class="o">!=</span> <span class="n">O_NONBLOCK</span> <span class="o">&amp;&amp;</span> <span class="p">(</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">SOCK_NONBLOCK</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1343</span>                 <span class="n">flags</span> <span class="o">=</span> <span class="p">(</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">SOCK_NONBLOCK</span><span class="p">)</span> <span class="o">|</span> <span class="n">O_NONBLOCK</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1344</span>
+</span><span class='line'><span class="mi">1345</span>         <span class="n">retval</span> <span class="o">=</span> <span class="n">sock_create</span><span class="p">(</span><span class="n">family</span><span class="p">,</span> <span class="n">type</span><span class="p">,</span> <span class="n">protocol</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">sock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1346</span>         <span class="k">if</span> <span class="p">(</span><span class="n">retval</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1347</span>                 <span class="k">goto</span> <span class="n">out</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1348</span>
+</span><span class='line'><span class="mi">1349</span>         <span class="n">retval</span> <span class="o">=</span> <span class="n">sock_map_fd</span><span class="p">(</span><span class="n">sock</span><span class="p">,</span> <span class="n">flags</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">O_CLOEXEC</span> <span class="o">|</span> <span class="n">O_NONBLOCK</span><span class="p">));</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">1359</span>         <span class="k">return</span> <span class="n">retval</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4><code>int sock_create(...)</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1313</span> <span class="kt">int</span> <span class="nf">sock_create</span><span class="p">(</span><span class="kt">int</span> <span class="n">family</span><span class="p">,</span> <span class="kt">int</span> <span class="n">type</span><span class="p">,</span> <span class="kt">int</span> <span class="n">protocol</span><span class="p">,</span> <span class="k">struct</span> <span class="n">socket</span> <span class="o">**</span><span class="n">res</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1314</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1315</span>         <span class="k">return</span> <span class="n">__sock_create</span><span class="p">(</span><span class="n">current</span><span class="o">-&gt;</span><span class="n">nsproxy</span><span class="o">-&gt;</span><span class="n">net_ns</span><span class="p">,</span> <span class="n">family</span><span class="p">,</span> <span class="n">type</span><span class="p">,</span> <span class="n">protocol</span><span class="p">,</span> <span class="n">res</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1316</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1199</span> <span class="kt">int</span> <span class="nf">__sock_create</span><span class="p">(</span><span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span><span class="p">,</span> <span class="kt">int</span> <span class="n">family</span><span class="p">,</span> <span class="kt">int</span> <span class="n">type</span><span class="p">,</span> <span class="kt">int</span> <span class="n">protocol</span><span class="p">,</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">1259</span>         <span class="n">rcu_read_lock</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1260</span>         <span class="n">pf</span> <span class="o">=</span> <span class="n">rcu_dereference</span><span class="p">(</span><span class="n">net_families</span><span class="p">[</span><span class="n">family</span><span class="p">]);</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">1272</span>         <span class="cm">/* Now protected by module ref count */</span>
+</span><span class='line'><span class="mi">1273</span>         <span class="n">rcu_read_unlock</span><span class="p">();</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">1275</span>         <span class="n">err</span> <span class="o">=</span> <span class="n">pf</span><span class="o">-&gt;</span><span class="n">create</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">sock</span><span class="p">,</span> <span class="n">protocol</span><span class="p">,</span> <span class="n">kern</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1276</span>         <span class="k">if</span> <span class="p">(</span><span class="n">err</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1277</span>                 <span class="k">goto</span> <span class="n">out_module_put</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>NOTE:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1260</span> <span class="n">pf</span> <span class="o">=</span> <span class="n">rcu_dereference</span><span class="p">(</span><span class="n">net_families</span><span class="p">[</span><span class="n">family</span><span class="p">]);</span>
+</span><span class='line'><span class="mi">1275</span> <span class="n">err</span> <span class="o">=</span> <span class="n">pf</span><span class="o">-&gt;</span><span class="n">create</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">sock</span><span class="p">,</span> <span class="n">protocol</span><span class="p">,</span> <span class="n">kern</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>What is pf->create(&hellip;)?
+For netlink socket, pf->create is netlink_create.</p>
+
+<h3>socket system call listen</h3>
+
+<p>Most of them are simple, and just call respond function by ops->xxx.
+ex: listen</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1476</span> <span class="nf">SYSCALL_DEFINE2</span><span class="p">(</span><span class="n">listen</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">fd</span><span class="p">,</span> <span class="kt">int</span><span class="p">,</span> <span class="n">backlog</span><span class="p">)</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">1482</span>         <span class="n">sock</span> <span class="o">=</span> <span class="n">sockfd_lookup_light</span><span class="p">(</span><span class="n">fd</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">err</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">fput_needed</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1483</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">sock</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1484</span>                 <span class="n">somaxconn</span> <span class="o">=</span> <span class="n">sock_net</span><span class="p">(</span><span class="n">sock</span><span class="o">-&gt;</span><span class="n">sk</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">core</span><span class="p">.</span><span class="n">sysctl_somaxconn</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1485</span>                 <span class="k">if</span> <span class="p">((</span><span class="kt">unsigned</span><span class="p">)</span><span class="n">backlog</span> <span class="o">&gt;</span> <span class="n">somaxconn</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1486</span>                         <span class="n">backlog</span> <span class="o">=</span> <span class="n">somaxconn</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1487</span>
+</span><span class='line'><span class="mi">1488</span>                 <span class="n">err</span> <span class="o">=</span> <span class="n">security_socket_listen</span><span class="p">(</span><span class="n">sock</span><span class="p">,</span> <span class="n">backlog</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1489</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">err</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1490</span>                         <span class="n">err</span> <span class="o">=</span> <span class="n">sock</span><span class="o">-&gt;</span><span class="n">ops</span><span class="o">-&gt;</span><span class="n">listen</span><span class="p">(</span><span class="n">sock</span><span class="p">,</span> <span class="n">backlog</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1491</span>
+</span><span class='line'><span class="mi">1492</span>                 <span class="n">fput_light</span><span class="p">(</span><span class="n">sock</span><span class="o">-&gt;</span><span class="n">file</span><span class="p">,</span> <span class="n">fput_needed</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1493</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1494</span>         <span class="k">return</span> <span class="n">err</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>The import ops is inited in function sock_create</p>
+
+<p>ex: the ops in netlink socket.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">430</span> <span class="k">static</span> <span class="kt">int</span> <span class="nf">netlink_create</span><span class="p">(</span><span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span><span class="p">,</span> <span class="k">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock</span><span class="p">,</span> <span class="kt">int</span> <span class="n">protocol</span><span class="p">,</span>
+</span><span class='line'> <span class="p">...</span>
+</span><span class='line'> <span class="mi">465</span>         <span class="n">err</span> <span class="o">=</span> <span class="n">__netlink_create</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">sock</span><span class="p">,</span> <span class="n">cb_mutex</span><span class="p">,</span> <span class="n">protocol</span><span class="p">);</span>
+</span><span class='line'> <span class="p">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">402</span> <span class="k">static</span> <span class="kt">int</span> <span class="n">__netlink_create</span><span class="p">(</span><span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span><span class="p">,</span> <span class="k">struct</span> <span class="n">socket</span> <span class="o">*</span><span class="n">sock</span><span class="p">,</span>
+</span><span class='line'> <span class="mi">403</span>                             <span class="k">struct</span> <span class="n">mutex</span> <span class="o">*</span><span class="n">cb_mutex</span><span class="p">,</span> <span class="kt">int</span> <span class="n">protocol</span><span class="p">)</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'> <span class="mi">408</span>         <span class="n">sock</span><span class="o">-&gt;</span><span class="n">ops</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">netlink_ops</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>other socket system call</h3>
+
+<p>the socket related sytem call has similar source, just like sock->ops->listen(&hellip;)</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-02-16T00:00:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>16</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/socket/'>socket</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/02/16/netlink-in-kernel/" title="Previous Post: Netlink in kernel">&laquo; Netlink in kernel</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/03/07/netlink-bulk-dump/" title="Next Post: netlink bulk dump">netlink bulk dump &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

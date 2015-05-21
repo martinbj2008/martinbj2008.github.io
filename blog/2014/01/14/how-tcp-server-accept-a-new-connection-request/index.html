@@ -1,0 +1,752 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>How Tcp Server Accept a New Connection Request - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="Two packets will be proessed by tcp server side:
+1. SYN
+2. ACK For the first packet(syn) of handshake, it first lookup the listen socket,
+and create &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2014/01/14/how-tcp-server-accept-a-new-connection-request/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">How Tcp Server Accept a New Connection Request</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-01-14T16:01:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>14</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>4:01 pm</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>Two packets will be proessed by tcp server side:
+1. SYN
+2. ACK</p>
+
+<p>For the first packet(syn) of handshake, it first lookup the listen socket,
+and create a req socket as temporary.</p>
+
+<p>For the third packet(ack) of handshake, it will match the req socket created
+in previous steps.</p>
+
+<!-- more -->
+
+
+<p>SYN:</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="o">==</span> <span class="n">tcp_v4_rcv</span><span class="p">(</span><span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span>  <span class="n">sk</span> <span class="o">=</span> <span class="n">__inet_lookup_skb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tcp_hashinfo</span><span class="p">,</span> <span class="n">skb</span><span class="p">,</span> <span class="n">th</span><span class="o">-&gt;</span><span class="n">source</span><span class="p">,</span> <span class="n">th</span><span class="o">-&gt;</span><span class="n">dest</span><span class="p">);</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span>  <span class="n">tcp_v4_do_rcv</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">nsk</span> <span class="o">=</span> <span class="n">tcp_v4_hnd_req</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">)</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="n">tcp_rcv_state_process</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="k">if</span> <span class="p">(</span><span class="n">icsk</span><span class="o">-&gt;</span><span class="n">icsk_af_ops</span><span class="o">-&gt;</span><span class="n">conn_request</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="nl">tcp_v4_conn_request</span><span class="p">:</span> <span class="n">icsk</span><span class="o">-&gt;</span><span class="n">icsk_af_ops</span><span class="o">-&gt;</span><span class="n">conn_request</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="n">inet_reqsk_alloc</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="n">tcp_openreq_init</span><span class="p">(</span><span class="n">req</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">tmp_opt</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="n">inet_csk_reqsk_queue_hash_add</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="n">reqsk_queue_hash_req</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="n">inet_csk_reqsk_queue_added</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>ACK:</p>
+
+<h3><code>tcp_rcv_state_process</code> use a child socket, not the listen socket.</h3>
+
+<p>The new socket state is <code>TCP_SYN_RECV</code></p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="o">==</span> <span class="n">tcp_v4_rcv</span><span class="p">(</span><span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span>  <span class="n">sk</span> <span class="o">=</span> <span class="n">__inet_lookup_skb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tcp_hashinfo</span><span class="p">,</span> <span class="n">skb</span><span class="p">,</span> <span class="n">th</span><span class="o">-&gt;</span><span class="n">source</span><span class="p">,</span> <span class="n">th</span><span class="o">-&gt;</span><span class="n">dest</span><span class="p">);</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="n">tcp_v4_do_rcv</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="n">nsk</span> <span class="o">=</span> <span class="n">tcp_v4_hnd_req</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">)</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="n">inet_csk_search_req</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="n">tcp_check_req</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="n">child</span> <span class="o">=</span> <span class="n">inet_csk</span><span class="p">(</span><span class="n">sk</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">icsk_af_ops</span><span class="o">-&gt;</span><span class="n">syn_recv_sock</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="n">inet_csk_reqsk_queue_unlink</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="n">prev</span><span class="p">);</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="n">inet_csk_reqsk_queue_removed</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">req</span><span class="p">);</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="n">inet_csk_reqsk_queue_add</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="n">child</span><span class="p">);</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="n">tcp_child_process</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">nsk</span><span class="p">,</span> <span class="n">skb</span><span class="p">)</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span>  <span class="n">tcp_rcv_state_process</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">skb</span><span class="p">,</span> <span class="n">tcp_hdr</span><span class="p">(</span><span class="n">skb</span><span class="p">),...</span><span class="n">i</span>
+</span><span class='line'><span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="o">==</span> <span class="nl">TCP_SYN_RECV</span><span class="p">:</span> <span class="n">tcp_rcv_synsent_state_process</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>tcp_v4_rcv</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+<span class='line-number'>101</span>
+<span class='line-number'>102</span>
+<span class='line-number'>103</span>
+<span class='line-number'>104</span>
+<span class='line-number'>105</span>
+<span class='line-number'>106</span>
+<span class='line-number'>107</span>
+<span class='line-number'>108</span>
+<span class='line-number'>109</span>
+<span class='line-number'>110</span>
+<span class='line-number'>111</span>
+<span class='line-number'>112</span>
+<span class='line-number'>113</span>
+<span class='line-number'>114</span>
+<span class='line-number'>115</span>
+<span class='line-number'>116</span>
+<span class='line-number'>117</span>
+<span class='line-number'>118</span>
+<span class='line-number'>119</span>
+<span class='line-number'>120</span>
+<span class='line-number'>121</span>
+<span class='line-number'>122</span>
+<span class='line-number'>123</span>
+<span class='line-number'>124</span>
+<span class='line-number'>125</span>
+<span class='line-number'>126</span>
+<span class='line-number'>127</span>
+<span class='line-number'>128</span>
+<span class='line-number'>129</span>
+<span class='line-number'>130</span>
+<span class='line-number'>131</span>
+<span class='line-number'>132</span>
+<span class='line-number'>133</span>
+<span class='line-number'>134</span>
+<span class='line-number'>135</span>
+<span class='line-number'>136</span>
+<span class='line-number'>137</span>
+<span class='line-number'>138</span>
+<span class='line-number'>139</span>
+<span class='line-number'>140</span>
+<span class='line-number'>141</span>
+<span class='line-number'>142</span>
+<span class='line-number'>143</span>
+<span class='line-number'>144</span>
+<span class='line-number'>145</span>
+<span class='line-number'>146</span>
+<span class='line-number'>147</span>
+<span class='line-number'>148</span>
+<span class='line-number'>149</span>
+<span class='line-number'>150</span>
+<span class='line-number'>151</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1936</span> <span class="kt">int</span> <span class="n">tcp_v4_rcv</span><span class="p">(</span><span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1937</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1938</span>         <span class="k">const</span> <span class="k">struct</span> <span class="n">iphdr</span> <span class="o">*</span><span class="n">iph</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1939</span>         <span class="k">const</span> <span class="k">struct</span> <span class="n">tcphdr</span> <span class="o">*</span><span class="n">th</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1940</span>         <span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1941</span>         <span class="kt">int</span> <span class="n">ret</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1942</span>         <span class="k">struct</span> <span class="n">net</span> <span class="o">*</span><span class="n">net</span> <span class="o">=</span> <span class="n">dev_net</span><span class="p">(</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">dev</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1943</span>
+</span><span class='line'><span class="mi">1944</span>         <span class="k">if</span> <span class="p">(</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">pkt_type</span> <span class="o">!=</span> <span class="n">PACKET_HOST</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1945</span>                 <span class="k">goto</span> <span class="n">discard_it</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1946</span>
+</span><span class='line'><span class="mi">1947</span>         <span class="cm">/* Count it even if it&#39;s bad */</span>
+</span><span class='line'><span class="mi">1948</span>         <span class="n">TCP_INC_STATS_BH</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">TCP_MIB_INSEGS</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1949</span>
+</span><span class='line'><span class="mi">1950</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pskb_may_pull</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">tcphdr</span><span class="p">)))</span>
+</span><span class='line'><span class="mi">1951</span>                 <span class="k">goto</span> <span class="n">discard_it</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1952</span>
+</span><span class='line'><span class="mi">1953</span>         <span class="n">th</span> <span class="o">=</span> <span class="n">tcp_hdr</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1954</span>
+</span><span class='line'><span class="mi">1955</span>         <span class="k">if</span> <span class="p">(</span><span class="n">th</span><span class="o">-&gt;</span><span class="n">doff</span> <span class="o">&lt;</span> <span class="k">sizeof</span><span class="p">(</span><span class="k">struct</span> <span class="n">tcphdr</span><span class="p">)</span> <span class="o">/</span> <span class="mi">4</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1956</span>                 <span class="k">goto</span> <span class="n">bad_packet</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1957</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">pskb_may_pull</span><span class="p">(</span><span class="n">skb</span><span class="p">,</span> <span class="n">th</span><span class="o">-&gt;</span><span class="n">doff</span> <span class="o">*</span> <span class="mi">4</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1958</span>                 <span class="k">goto</span> <span class="n">discard_it</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1959</span>
+</span><span class='line'><span class="mi">1960</span>         <span class="cm">/* An explanation is required here, I think.</span>
+</span><span class='line'><span class="cm">1961          * Packet length and doff are validated by header prediction,</span>
+</span><span class='line'><span class="cm">1962          * provided case of th-&gt;doff==0 is eliminated.</span>
+</span><span class='line'><span class="cm">1963          * So, we defer the checks. */</span>
+</span><span class='line'><span class="mi">1964</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">skb_csum_unnecessary</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span> <span class="o">&amp;&amp;</span> <span class="n">tcp_v4_checksum_init</span><span class="p">(</span><span class="n">skb</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1965</span>                 <span class="k">goto</span> <span class="n">csum_error</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1966</span>
+</span><span class='line'><span class="mi">1967</span>         <span class="n">th</span> <span class="o">=</span> <span class="n">tcp_hdr</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1968</span>         <span class="n">iph</span> <span class="o">=</span> <span class="n">ip_hdr</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1969</span>         <span class="nf">TCP_SKB_CB</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">seq</span> <span class="o">=</span> <span class="n">ntohl</span><span class="p">(</span><span class="n">th</span><span class="o">-&gt;</span><span class="n">seq</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1970</span>         <span class="nf">TCP_SKB_CB</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">end_seq</span> <span class="o">=</span> <span class="p">(</span><span class="n">TCP_SKB_CB</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">seq</span> <span class="o">+</span> <span class="n">th</span><span class="o">-&gt;</span><span class="n">syn</span> <span class="o">+</span> <span class="n">th</span><span class="o">-&gt;</span><span class="n">fin</span> <span class="o">+</span>
+</span><span class='line'><span class="mi">1971</span>                                     <span class="n">skb</span><span class="o">-&gt;</span><span class="n">len</span> <span class="o">-</span> <span class="n">th</span><span class="o">-&gt;</span><span class="n">doff</span> <span class="o">*</span> <span class="mi">4</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1972</span>         <span class="nf">TCP_SKB_CB</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">ack_seq</span> <span class="o">=</span> <span class="n">ntohl</span><span class="p">(</span><span class="n">th</span><span class="o">-&gt;</span><span class="n">ack_seq</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1973</span>         <span class="n">TCP_SKB_CB</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">when</span>    <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1974</span>         <span class="nf">TCP_SKB_CB</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">ip_dsfield</span> <span class="o">=</span> <span class="n">ipv4_get_dsfield</span><span class="p">(</span><span class="n">iph</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1975</span>         <span class="n">TCP_SKB_CB</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">sacked</span>  <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1976</span>
+</span><span class='line'><span class="mi">1977</span>         <span class="n">sk</span> <span class="o">=</span> <span class="n">__inet_lookup_skb</span><span class="p">(</span><span class="o">&amp;</span><span class="n">tcp_hashinfo</span><span class="p">,</span> <span class="n">skb</span><span class="p">,</span> <span class="n">th</span><span class="o">-&gt;</span><span class="n">source</span><span class="p">,</span> <span class="n">th</span><span class="o">-&gt;</span><span class="n">dest</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1978</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">sk</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1979</span>                 <span class="k">goto</span> <span class="n">no_tcp_socket</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1980</span>
+</span><span class='line'><span class="mi">1981</span> <span class="nl">process</span><span class="p">:</span>
+</span><span class='line'><span class="mi">1982</span>         <span class="k">if</span> <span class="p">(</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state</span> <span class="o">==</span> <span class="n">TCP_TIME_WAIT</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1983</span>                 <span class="k">goto</span> <span class="n">do_time_wait</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1984</span>
+</span><span class='line'><span class="mi">1985</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="n">iph</span><span class="o">-&gt;</span><span class="n">ttl</span> <span class="o">&lt;</span> <span class="n">inet_sk</span><span class="p">(</span><span class="n">sk</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">min_ttl</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1986</span>                 <span class="n">NET_INC_STATS_BH</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">LINUX_MIB_TCPMINTTLDROP</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1987</span>                 <span class="k">goto</span> <span class="n">discard_and_relse</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1988</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1989</span>
+</span><span class='line'><span class="mi">1990</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">xfrm4_policy_check</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">XFRM_POLICY_IN</span><span class="p">,</span> <span class="n">skb</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1991</span>                 <span class="k">goto</span> <span class="n">discard_and_relse</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1992</span>         <span class="nf">nf_reset</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1993</span>
+</span><span class='line'><span class="mi">1994</span>         <span class="k">if</span> <span class="p">(</span><span class="n">sk_filter</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1995</span>                 <span class="k">goto</span> <span class="n">discard_and_relse</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1996</span>
+</span><span class='line'><span class="mi">1997</span>         <span class="nf">sk_mark_napi_id</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1998</span>         <span class="n">skb</span><span class="o">-&gt;</span><span class="n">dev</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1999</span>
+</span><span class='line'><span class="mi">2000</span>         <span class="nf">bh_lock_sock_nested</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2001</span>         <span class="n">ret</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2002</span>         <span class="nf">if</span> <span class="p">(</span><span class="o">!</span><span class="n">sock_owned_by_user</span><span class="p">(</span><span class="n">sk</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2003</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_NET_DMA</span>
+</span><span class='line'><span class="mi">2004</span>                 <span class="k">struct</span> <span class="n">tcp_sock</span> <span class="o">*</span><span class="n">tp</span> <span class="o">=</span> <span class="n">tcp_sk</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2005</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">tp</span><span class="o">-&gt;</span><span class="n">ucopy</span><span class="p">.</span><span class="n">dma_chan</span> <span class="o">&amp;&amp;</span> <span class="n">tp</span><span class="o">-&gt;</span><span class="n">ucopy</span><span class="p">.</span><span class="n">pinned_list</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2006</span>                         <span class="n">tp</span><span class="o">-&gt;</span><span class="n">ucopy</span><span class="p">.</span><span class="n">dma_chan</span> <span class="o">=</span> <span class="n">net_dma_find_channel</span><span class="p">();</span>
+</span><span class='line'><span class="mi">2007</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">tp</span><span class="o">-&gt;</span><span class="n">ucopy</span><span class="p">.</span><span class="n">dma_chan</span><span class="p">)</span>
+</span><span class='line'><span class="mi">2008</span>                         <span class="n">ret</span> <span class="o">=</span> <span class="n">tcp_v4_do_rcv</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2009</span>                 <span class="k">else</span>
+</span><span class='line'><span class="mi">2010</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'><span class="mi">2011</span>                 <span class="p">{</span>
+</span><span class='line'><span class="mi">2012</span>                         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">tcp_prequeue</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">))</span>
+</span><span class='line'><span class="mi">2013</span>                                 <span class="n">ret</span> <span class="o">=</span> <span class="n">tcp_v4_do_rcv</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2014</span>                 <span class="p">}</span>
+</span><span class='line'><span class="mi">2015</span>         <span class="p">}</span> <span class="k">else</span> <span class="nf">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="n">sk_add_backlog</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2016</span>                                            <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_rcvbuf</span> <span class="o">+</span> <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_sndbuf</span><span class="p">)))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2017</span>                 <span class="n">bh_unlock_sock</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2018</span>                 <span class="n">NET_INC_STATS_BH</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">LINUX_MIB_TCPBACKLOGDROP</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2019</span>                 <span class="k">goto</span> <span class="n">discard_and_relse</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2020</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">2021</span>         <span class="nf">bh_unlock_sock</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2022</span>
+</span><span class='line'><span class="mi">2023</span>         <span class="nf">sock_put</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2024</span>
+</span><span class='line'><span class="mi">2025</span>         <span class="k">return</span> <span class="n">ret</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2026</span>
+</span><span class='line'><span class="mi">2027</span> <span class="nl">no_tcp_socket</span><span class="p">:</span>
+</span><span class='line'><span class="mi">2028</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">xfrm4_policy_check</span><span class="p">(</span><span class="nb">NULL</span><span class="p">,</span> <span class="n">XFRM_POLICY_IN</span><span class="p">,</span> <span class="n">skb</span><span class="p">))</span>
+</span><span class='line'><span class="mi">2029</span>                 <span class="k">goto</span> <span class="n">discard_it</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2030</span>
+</span><span class='line'><span class="mi">2031</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">len</span> <span class="o">&lt;</span> <span class="p">(</span><span class="n">th</span><span class="o">-&gt;</span><span class="n">doff</span> <span class="o">&lt;&lt;</span> <span class="mi">2</span><span class="p">)</span> <span class="o">||</span> <span class="n">tcp_checksum_complete</span><span class="p">(</span><span class="n">skb</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2032</span> <span class="nl">csum_error</span><span class="p">:</span>
+</span><span class='line'><span class="mi">2033</span>                 <span class="n">TCP_INC_STATS_BH</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">TCP_MIB_CSUMERRORS</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2034</span> <span class="nl">bad_packet</span><span class="p">:</span>
+</span><span class='line'><span class="mi">2035</span>                 <span class="n">TCP_INC_STATS_BH</span><span class="p">(</span><span class="n">net</span><span class="p">,</span> <span class="n">TCP_MIB_INERRS</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2036</span>         <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2037</span>                 <span class="n">tcp_v4_send_reset</span><span class="p">(</span><span class="nb">NULL</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2038</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">2039</span>
+</span><span class='line'><span class="mi">2040</span> <span class="nl">discard_it</span><span class="p">:</span>
+</span><span class='line'><span class="mi">2041</span>         <span class="cm">/* Discard frame. */</span>
+</span><span class='line'><span class="mi">2042</span>         <span class="n">kfree_skb</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2043</span>         <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2044</span>
+</span><span class='line'><span class="mi">2045</span> <span class="nl">discard_and_relse</span><span class="p">:</span>
+</span><span class='line'><span class="mi">2046</span>         <span class="n">sock_put</span><span class="p">(</span><span class="n">sk</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2047</span>         <span class="k">goto</span> <span class="n">discard_it</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2048</span>
+</span><span class='line'><span class="mi">2049</span> <span class="nl">do_time_wait</span><span class="p">:</span>
+</span><span class='line'><span class="mi">2050</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">xfrm4_policy_check</span><span class="p">(</span><span class="nb">NULL</span><span class="p">,</span> <span class="n">XFRM_POLICY_IN</span><span class="p">,</span> <span class="n">skb</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2051</span>                 <span class="n">inet_twsk_put</span><span class="p">(</span><span class="n">inet_twsk</span><span class="p">(</span><span class="n">sk</span><span class="p">));</span>
+</span><span class='line'><span class="mi">2052</span>                 <span class="k">goto</span> <span class="n">discard_it</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2053</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">2054</span>
+</span><span class='line'><span class="mi">2055</span>         <span class="k">if</span> <span class="p">(</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">len</span> <span class="o">&lt;</span> <span class="p">(</span><span class="n">th</span><span class="o">-&gt;</span><span class="n">doff</span> <span class="o">&lt;&lt;</span> <span class="mi">2</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2056</span>                 <span class="n">inet_twsk_put</span><span class="p">(</span><span class="n">inet_twsk</span><span class="p">(</span><span class="n">sk</span><span class="p">));</span>
+</span><span class='line'><span class="mi">2057</span>                 <span class="k">goto</span> <span class="n">bad_packet</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2058</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">2059</span>         <span class="k">if</span> <span class="p">(</span><span class="n">tcp_checksum_complete</span><span class="p">(</span><span class="n">skb</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2060</span>                 <span class="n">inet_twsk_put</span><span class="p">(</span><span class="n">inet_twsk</span><span class="p">(</span><span class="n">sk</span><span class="p">));</span>
+</span><span class='line'><span class="mi">2061</span>                 <span class="k">goto</span> <span class="n">csum_error</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2062</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">2063</span>         <span class="k">switch</span> <span class="p">(</span><span class="n">tcp_timewait_state_process</span><span class="p">(</span><span class="n">inet_twsk</span><span class="p">(</span><span class="n">sk</span><span class="p">),</span> <span class="n">skb</span><span class="p">,</span> <span class="n">th</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2064</span>         <span class="k">case</span> <span class="nl">TCP_TW_SYN</span><span class="p">:</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2065</span>                 <span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk2</span> <span class="o">=</span> <span class="n">inet_lookup_listener</span><span class="p">(</span><span class="n">dev_net</span><span class="p">(</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">dev</span><span class="p">),</span>
+</span><span class='line'><span class="mi">2066</span>                                                         <span class="o">&amp;</span><span class="n">tcp_hashinfo</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2067</span>                                                         <span class="n">iph</span><span class="o">-&gt;</span><span class="n">saddr</span><span class="p">,</span> <span class="n">th</span><span class="o">-&gt;</span><span class="n">source</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2068</span>                                                         <span class="n">iph</span><span class="o">-&gt;</span><span class="n">daddr</span><span class="p">,</span> <span class="n">th</span><span class="o">-&gt;</span><span class="n">dest</span><span class="p">,</span>
+</span><span class='line'><span class="mi">2069</span>                                                         <span class="n">inet_iif</span><span class="p">(</span><span class="n">skb</span><span class="p">));</span>
+</span><span class='line'><span class="mi">2070</span>                 <span class="nf">if</span> <span class="p">(</span><span class="n">sk2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">2071</span>                         <span class="n">inet_twsk_deschedule</span><span class="p">(</span><span class="n">inet_twsk</span><span class="p">(</span><span class="n">sk</span><span class="p">),</span> <span class="o">&amp;</span><span class="n">tcp_death_row</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2072</span>                         <span class="n">inet_twsk_put</span><span class="p">(</span><span class="n">inet_twsk</span><span class="p">(</span><span class="n">sk</span><span class="p">));</span>
+</span><span class='line'><span class="mi">2073</span>                         <span class="n">sk</span> <span class="o">=</span> <span class="n">sk2</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2074</span>                         <span class="k">goto</span> <span class="n">process</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2075</span>                 <span class="p">}</span>
+</span><span class='line'><span class="mi">2076</span>                 <span class="cm">/* Fall through to ACK */</span>
+</span><span class='line'><span class="mi">2077</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">2078</span>         <span class="k">case</span> <span class="nl">TCP_TW_ACK</span><span class="p">:</span>
+</span><span class='line'><span class="mi">2079</span>                 <span class="n">tcp_v4_timewait_ack</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">2080</span>                 <span class="k">break</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2081</span>         <span class="k">case</span> <span class="nl">TCP_TW_RST</span><span class="p">:</span>
+</span><span class='line'><span class="mi">2082</span>                 <span class="k">goto</span> <span class="n">no_tcp_socket</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2083</span>         <span class="k">case</span> <span class="nl">TCP_TW_SUCCESS</span><span class="p">:;</span>
+</span><span class='line'><span class="mi">2084</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">2085</span>         <span class="k">goto</span> <span class="n">discard_it</span><span class="p">;</span>
+</span><span class='line'><span class="mi">2086</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3><code>tcp_v4_do_rcv</code></h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1778</span> <span class="kt">int</span> <span class="n">tcp_v4_do_rcv</span><span class="p">(</span><span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">sk</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1779</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1780</span>         <span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">rsk</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1781</span> <span class="err">#</span><span class="n">ifdef</span> <span class="n">CONFIG_TCP_MD5SIG</span>
+</span><span class='line'><span class="mi">1782</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">1783          * We really want to reject the packet as early as possible</span>
+</span><span class='line'><span class="cm">1784          * if:</span>
+</span><span class='line'><span class="cm">1785          *  o We&#39;re expecting an MD5&#39;d packet and this is no MD5 tcp option</span>
+</span><span class='line'><span class="cm">1786          *  o There is an MD5 option and we&#39;re not expecting one</span>
+</span><span class='line'><span class="cm">1787          */</span>
+</span><span class='line'><span class="mi">1788</span>         <span class="k">if</span> <span class="p">(</span><span class="n">tcp_v4_inbound_md5_hash</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1789</span>                 <span class="k">goto</span> <span class="n">discard</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1790</span> <span class="err">#</span><span class="n">endif</span>
+</span><span class='line'><span class="mi">1791</span>
+</span><span class='line'><span class="mi">1792</span>         <span class="k">if</span> <span class="p">(</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state</span> <span class="o">==</span> <span class="n">TCP_ESTABLISHED</span><span class="p">)</span> <span class="p">{</span> <span class="cm">/* Fast path */</span>
+</span><span class='line'><span class="mi">1793</span>                 <span class="k">struct</span> <span class="n">dst_entry</span> <span class="o">*</span><span class="n">dst</span> <span class="o">=</span> <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_rx_dst</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1794</span>
+</span><span class='line'><span class="mi">1795</span>                 <span class="nf">sock_rps_save_rxhash</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1796</span>                 <span class="nf">if</span> <span class="p">(</span><span class="n">dst</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1797</span>                         <span class="k">if</span> <span class="p">(</span><span class="n">inet_sk</span><span class="p">(</span><span class="n">sk</span><span class="p">)</span><span class="o">-&gt;</span><span class="n">rx_dst_ifindex</span> <span class="o">!=</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">skb_iif</span> <span class="o">||</span>
+</span><span class='line'><span class="mi">1798</span>                             <span class="n">dst</span><span class="o">-&gt;</span><span class="n">ops</span><span class="o">-&gt;</span><span class="n">check</span><span class="p">(</span><span class="n">dst</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1799</span>                                 <span class="n">dst_release</span><span class="p">(</span><span class="n">dst</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1800</span>                                 <span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_rx_dst</span> <span class="o">=</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1801</span>                         <span class="p">}</span>
+</span><span class='line'><span class="mi">1802</span>                 <span class="p">}</span>
+</span><span class='line'><span class="mi">1803</span>                 <span class="nf">tcp_rcv_established</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">,</span> <span class="n">tcp_hdr</span><span class="p">(</span><span class="n">skb</span><span class="p">),</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1804</span>                 <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1805</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1806</span>
+</span><span class='line'><span class="mi">1807</span>         <span class="k">if</span> <span class="p">(</span><span class="n">skb</span><span class="o">-&gt;</span><span class="n">len</span> <span class="o">&lt;</span> <span class="n">tcp_hdrlen</span><span class="p">(</span><span class="n">skb</span><span class="p">)</span> <span class="o">||</span> <span class="n">tcp_checksum_complete</span><span class="p">(</span><span class="n">skb</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1808</span>                 <span class="k">goto</span> <span class="n">csum_err</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1809</span>
+</span><span class='line'><span class="mi">1810</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state</span> <span class="o">==</span> <span class="n">TCP_LISTEN</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1809</span>
+</span><span class='line'><span class="mi">1810</span>         <span class="k">if</span> <span class="p">(</span><span class="n">sk</span><span class="o">-&gt;</span><span class="n">sk_state</span> <span class="o">==</span> <span class="n">TCP_LISTEN</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1811</span>                 <span class="k">struct</span> <span class="n">sock</span> <span class="o">*</span><span class="n">nsk</span> <span class="o">=</span> <span class="n">tcp_v4_hnd_req</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1812</span>                 <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">nsk</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1813</span>                         <span class="k">goto</span> <span class="n">discard</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1814</span>
+</span><span class='line'><span class="mi">1815</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">nsk</span> <span class="o">!=</span> <span class="n">sk</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1816</span>                         <span class="n">sock_rps_save_rxhash</span><span class="p">(</span><span class="n">nsk</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1817</span>                         <span class="k">if</span> <span class="p">(</span><span class="n">tcp_child_process</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">nsk</span><span class="p">,</span> <span class="n">skb</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1818</span>                                 <span class="n">rsk</span> <span class="o">=</span> <span class="n">nsk</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1819</span>                                 <span class="k">goto</span> <span class="n">reset</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1820</span>                         <span class="p">}</span>
+</span><span class='line'><span class="mi">1821</span>                         <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1822</span>                 <span class="p">}</span>
+</span><span class='line'><span class="mi">1823</span>         <span class="p">}</span> <span class="k">else</span>
+</span><span class='line'><span class="mi">1824</span>                 <span class="n">sock_rps_save_rxhash</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1825</span>
+</span><span class='line'><span class="mi">1826</span>         <span class="k">if</span> <span class="p">(</span><span class="n">tcp_rcv_state_process</span><span class="p">(</span><span class="n">sk</span><span class="p">,</span> <span class="n">skb</span><span class="p">,</span> <span class="n">tcp_hdr</span><span class="p">(</span><span class="n">skb</span><span class="p">),</span> <span class="n">skb</span><span class="o">-&gt;</span><span class="n">len</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1827</span>                 <span class="n">rsk</span> <span class="o">=</span> <span class="n">sk</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1828</span>                 <span class="k">goto</span> <span class="n">reset</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1829</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1830</span>         <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1831</span>
+</span><span class='line'><span class="mi">1832</span> <span class="nl">reset</span><span class="p">:</span>
+</span><span class='line'><span class="mi">1833</span>         <span class="n">tcp_v4_send_reset</span><span class="p">(</span><span class="n">rsk</span><span class="p">,</span> <span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1834</span> <span class="nl">discard</span><span class="p">:</span>
+</span><span class='line'><span class="mi">1835</span>         <span class="n">kfree_skb</span><span class="p">(</span><span class="n">skb</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1836</span>         <span class="cm">/* Be careful here. If this function gets more complicated and</span>
+</span><span class='line'><span class="cm">1837          * gcc suffers from register pressure on the x86, sk (in %ebx)</span>
+</span><span class='line'><span class="cm">1838          * might be destroyed here. This current version compiles correctly,</span>
+</span><span class='line'><span class="cm">1839          * but you have been warned.</span>
+</span><span class='line'><span class="cm">1840          */</span>
+</span><span class='line'><span class="mi">1841</span>         <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1842</span>
+</span><span class='line'><span class="mi">1843</span> <span class="nl">csum_err</span><span class="p">:</span>
+</span><span class='line'><span class="mi">1844</span>         <span class="n">TCP_INC_STATS_BH</span><span class="p">(</span><span class="n">sock_net</span><span class="p">(</span><span class="n">sk</span><span class="p">),</span> <span class="n">TCP_MIB_CSUMERRORS</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1845</span>         <span class="n">TCP_INC_STATS_BH</span><span class="p">(</span><span class="n">sock_net</span><span class="p">(</span><span class="n">sk</span><span class="p">),</span> <span class="n">TCP_MIB_INERRS</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1846</span>         <span class="k">goto</span> <span class="n">discard</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1847</span> <span class="p">}</span>
+</span><span class='line'><span class="mi">1848</span> <span class="nf">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">tcp_v4_do_rcv</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2014-01-14T16:01:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>14</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>4:01 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/socket/'>socket</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/11/25/net-protocol-handler-for-tcp-udp/" title="Previous Post: How IPV4/6 process input tcp/udp packet">&laquo; How IPV4/6 process input tcp/udp packet</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2014/01/27/how-to-remember-ip-slash-tcp-slash-udp-header/" title="Next Post: how to remember ip/tcp/udp header">how to remember ip/tcp/udp header &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

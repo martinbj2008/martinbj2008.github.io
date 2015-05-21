@@ -1,0 +1,702 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Memory | My Octopress Blog]]></title>
+  <link href="http://martinbj2008.github.io/blog/categories/memory/atom.xml" rel="self"/>
+  <link href="http://martinbj2008.github.io/"/>
+  <updated>2015-05-21T16:26:25+08:00</updated>
+  <id>http://martinbj2008.github.io/</id>
+  <author>
+    <name><![CDATA[Your Name]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Pfn_to_page and Page_to_pfn]]></title>
+    <link href="http://martinbj2008.github.io/blog/2013/09/06/pfn-to-page-and-page-to-pfn/"/>
+    <updated>2013-09-06T17:11:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2013/09/06/pfn-to-page-and-page-to-pfn</id>
+    <content type="html"><![CDATA[<h3>summary</h3>
+
+<p><code>page_to_pfn</code> and <code>pfn_to_page</code> are often used in kernel.</p>
+
+<p>for PP81, kernel uses CONFIG_DISCONTIGMEM + NUMA.
+Every node has <code>node_mem_map</code> and <code>node_start_pfn</code>to help the page/pfn covertion.
+<code>node_start_pfn</code> is the first page&rsquo;s pfn of this node.
+<code>node_mem_map</code> stores all the <code>struct page</code> of this node.</p>
+
+<p>so thete is a map between them:</p>
+
+<pre><code>`node_start_pfn + i` &lt;===&gt; `node_mem_map[i]`
+</code></pre>
+
+<p>The key is how to get <strong>node id</strong> by pfn or page.
+the corresponding function is <code>pfn_to_nid</code> and <code>page_to_nid</code></p>
+
+<p><code>page_to_nid</code> is simpile.
+    the <code>node id</code> is store in <code>struct page -&gt;flags</code>
+while <code>pfn_to_nid</code>(for pp81), it convert to pageaddress and then turn to <code>pa_to_nid</code>.</p>
+
+<p>感觉这个实现有点罗嗦！
+直接在include/asm-generic/memory_model.h 把<code>pa_to_nid</code> 定义一个 <code>arch_pfn_to_nid</code>宏。
+省得pfn转为pa以后，又转为pfn。</p>
+
+<!-- more -->
+
+
+<h3><code>pfn_to_page</code></h3>
+
+<p>funtion defination:
+include/asm-generic/memory_model.h
+<code>c
+ 73 #define pfn_to_page __pfn_to_page
+</code></p>
+
+<pre><code class="c"> 33 #elif defined(CONFIG_DISCONTIGMEM)
+ 34    
+ 35 #define __pfn_to_page(pfn)                      \
+ 36 ({      unsigned long __pfn = (pfn);            \
+ 37         unsigned long __nid = arch_pfn_to_nid(__pfn);  \
+ 38         NODE_DATA(__nid)-&gt;node_mem_map + arch_local_page_offset(__pfn, __nid);\
+ 39 }) 
+</code></pre>
+
+<h4><code>arch_local_page_offset</code></h4>
+
+<pre><code class="c"> 18 #ifndef arch_local_page_offset
+ 19 #define arch_local_page_offset(pfn, nid)        \
+ 20         ((pfn) - NODE_DATA(nid)-&gt;node_start_pfn)
+ 21 #endif
+</code></pre>
+
+<h4><code>arch_pfn_to_nid</code></h4>
+
+<p>call trace:</p>
+
+<pre><code class="c">arch_pfn_to_nid 
+  --&gt; pfn_to_nid
+    --&gt;pa_to_nid((pfn) &lt;&lt; PAGE_SHIFT)
+</code></pre>
+
+<pre><code class="c"> 14 #ifndef arch_pfn_to_nid
+ 15 #define arch_pfn_to_nid(pfn)    pfn_to_nid(pfn)
+ 16 #endif
+</code></pre>
+
+<p>arch/mips/include/asm/mmzone.h
+<code>c
+ 11 #ifdef CONFIG_DISCONTIGMEM
+ 12
+ 13 #define pfn_to_nid(pfn)         pa_to_nid((pfn) &lt;&lt; PAGE_SHIFT)
+</code></p>
+
+<p>arch/mips/include/asm/mach-netlogic/mmzone.h
+<code>c
+ 52 static inline unsigned int pa_to_nid(unsigned long addr)
+ 53 {
+ 54         unsigned int  i;
+ 55         unsigned long pfn = addr &gt;&gt; PAGE_SHIFT;
+ 56
+ 57         /* TODO: Implement this using NODE_DATA */
+ 58         for (i = 0; i &lt; NLM_MAX_CPU_NODE; i++) {
+ 59
+ 60                 if ((!node_online(i)) || ((NODE_MEM_DATA(i)-&gt;low_pfn == 0) &amp;&amp; (NODE_MEM_DATA(i)-&gt;high_pfn == 0)))
+ 61                         continue;
+ 62
+ 63                 if (pfn &gt;= NODE_MEM_DATA(i)-&gt;low_pfn &amp;&amp; pfn &lt;= NODE_MEM_DATA(i)-&gt;high_pfn)
+ 64                         return i;
+ 65         }
+....
+</code></p>
+
+<h3><code>page_to_pfn</code></h3>
+
+<p>include/asm-generic/memory_model.h
+<code>c
+ 72 #define page_to_pfn __page_to_pfn
+</code></p>
+
+<pre><code class="c"> 41 #define __page_to_pfn(pg)                                               \
+ 42 ({      struct page *__pg = (pg);                                       \
+ 43         struct pglist_data *__pgdat = NODE_DATA(page_to_nid(__pg));     \
+ 44         (unsigned long)(__pg - __pgdat-&gt;node_mem_map) +                 \
+ 45          __pgdat-&gt;node_start_pfn;                                       \
+ 46 })
+</code></pre>
+
+<h3><code>page_to_nid</code></h3>
+
+<pre><code class="c"> 538 #ifdef NODE_NOT_IN_PAGE_FLAGS
+ 539 extern int page_to_nid(struct page *page);
+ 540 #else
+ 541 static inline int page_to_nid(struct page *page)
+ 542 {
+ 543         return (page-&gt;flags &gt;&gt; NODES_PGSHIFT) &amp; NODES_MASK;
+ 544 }
+ 545 #endif
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Mmap in Kernel]]></title>
+    <link href="http://martinbj2008.github.io/blog/2013/01/23/mmap-in-kernel/"/>
+    <updated>2013-01-23T00:00:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2013/01/23/mmap-in-kernel</id>
+    <content type="html"><![CDATA[<h2>call trace</h2>
+
+<pre><code class="c">&gt; vmalloc
+&gt; &gt; __vmalloc_node_flags
+&gt; &gt; &gt; __vmalloc_node
+&gt; &gt; &gt; &gt; __vmalloc_node_range
+&gt; &gt; &gt; &gt; &gt; get_vm_area_node
+&gt; &gt; &gt; &gt; &gt; vmalloc_area_node
+&gt; &gt; &gt; &gt; &gt; insert_vmalloc_vmlist
+</code></pre>
+
+<!-- more -->
+
+
+<pre><code class="c">1731 void *vmalloc(unsigned long size)
+1732 {
+1733         return __vmalloc_node_flags(size, -1, GFP_KERNEL | __GFP_HIGHMEM);
+1734 }
+</code></pre>
+
+<pre><code class="c">1715 static inline void *__vmalloc_node_flags(unsigned long size,
+1716                                         int node, gfp_t flags)
+1717 {
+1718         return __vmalloc_node(size, 1, flags, PAGE_KERNEL,
+1719                                         node, __builtin_return_address(0));
+1720 }
+</code></pre>
+
+<pre><code class="c">1700 static void *__vmalloc_node(unsigned long size, unsigned long align,
+1701                             gfp_t gfp_mask, pgprot_t prot,
+1702                             int node, void *caller)
+1703 {
+1704         return __vmalloc_node_range(size, align, VMALLOC_START, VMALLOC_END,
+1705                                 gfp_mask, prot, node, caller);
+1706 }
+</code></pre>
+
+<p>相当于调用
+<code>c
+__vmalloc_node_range(size, 1, VMALLOC_START, VMALLOC_END, GFP_KERNEL | __GFP_HIGHMEM,PAGE_KERNEL, -1, __builtin_return_address(0));
+</code></p>
+
+<pre><code class="c">1644 void *__vmalloc_node_range(unsigned long size, unsigned long align,
+1645                         unsigned long start, unsigned long end, gfp_t gfp_mask,
+1646                         pgprot_t prot, int node, void *caller)
+1647 {
+1648         struct vm_struct *area;
+1649         void *addr;
+1650         unsigned long real_size = size;
+1651
+1652         size = PAGE_ALIGN(size);
+1653         if (!size || (size &gt;&gt; PAGE_SHIFT) &gt; totalram_pages)
+1654                 goto fail;
+1655
+1656         area = __get_vm_area_node(size, align, VM_ALLOC | VM_UNLIST,
+1657                                   start, end, node, gfp_mask, caller);
+1658         if (!area)
+1659                 goto fail;
+1660
+1661         addr = __vmalloc_area_node(area, gfp_mask, prot, node, caller);
+1662         if (!addr)
+1663                 return NULL;
+1664
+1665         /*
+1666          * In this function, newly allocated vm_struct is not added
+1667          * to vmlist at __get_vm_area_node(). so, it is added here.
+1668          */
+1669         insert_vmalloc_vmlist(area);
+1670
+1671         /*
+1672          * A ref_count = 3 is needed because the vm_struct and vmap_area
+1673          * structures allocated in the __get_vm_area_node() function contain
+1674          * references to the virtual address of the vmalloc'ed block.
+1675          */
+1676         kmemleak_alloc(addr, real_size, 3, gfp_mask);
+1677
+1678         return addr;
+1679
+1680 fail:
+1681         warn_alloc_failed(gfp_mask, 0,
+1682                           "vmalloc: allocation failure: %lu bytes\n",
+1683                           real_size);
+1684         return NULL;
+1685 }
+</code></pre>
+
+<pre><code class="c">1315 static struct vm_struct *__get_vm_area_node(unsigned long size,
+1316                 unsigned long align, unsigned long flags, unsigned long start,
+1317                 unsigned long end, int node, gfp_t gfp_mask, void *caller)
+1318 {
+1319         struct vmap_area *va;
+1320         struct vm_struct *area;
+1321
+1322         BUG_ON(in_interrupt());
+1323         if (flags &amp; VM_IOREMAP) {
+1324                 int bit = fls(size);
+1325
+1326                 if (bit &gt; IOREMAP_MAX_ORDER)
+1327                         bit = IOREMAP_MAX_ORDER;
+1328                 else if (bit &lt; PAGE_SHIFT)
+1329                         bit = PAGE_SHIFT;
+1330
+1331                 align = 1ul &lt;&lt; bit;
+1332         }
+1333
+1334         size = PAGE_ALIGN(size);
+1335         if (unlikely(!size))
+1336                 return NULL;
+1337
+1338         area = kzalloc_node(sizeof(*area), gfp_mask &amp; GFP_RECLAIM_MASK, node);
+1339         if (unlikely(!area))
+1340                 return NULL;
+1341
+1342         /*
+1343          * We always allocate a guard page.
+1344          */
+1345         size += PAGE_SIZE;
+1346
+1347         va = alloc_vmap_area(size, align, start, end, node, gfp_mask);
+1348         if (IS_ERR(va)) {
+1349                 kfree(area);
+1350                 return NULL;
+1351         }
+1352
+1353         /*
+1354          * When this function is called from __vmalloc_node_range,
+1355          * we do not add vm_struct to vmlist here to avoid
+1356          * accessing uninitialized members of vm_struct such as
+1357          * pages and nr_pages fields. They will be set later.
+1358          * To distinguish it from others, we use a VM_UNLIST flag.
+1359          */
+1360         if (flags &amp; VM_UNLIST)
+1361                 setup_vmalloc_vm(area, va, flags, caller);
+1362         else
+1363                 insert_vmalloc_vm(area, va, flags, caller);
+1364
+1365         return area;
+1366 }
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[X86_64 Memory Map When Boot]]></title>
+    <link href="http://martinbj2008.github.io/blog/2012/08/16/x86_64-memory-map/"/>
+    <updated>2012-08-16T00:00:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2012/08/16/x86_64-memory-map</id>
+    <content type="html"><![CDATA[<p>x86_64 Memory Map When Boot</p>
+
+<!-- more -->
+
+
+<pre><code>Linux version 3.6.0-rc1+ (martin@fc17) (gcc version 4.7.0 20120507 (Red Hat 4.7.0-5) (GCC) ) #9 SMP Sun Aug 12 09:42:26 CST 2012
+</code></pre>
+
+<pre><code>[martin@fc17 Documents]$ cat bios.e820.diff 
+boot.1G.log:BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable
+boot.1G.log:BIOS-e820: [mem 0x000000000009fc00-0x000000000009ffff] reserved
+boot.1G.log:BIOS-e820: [mem 0x00000000000f0000-0x00000000000fffff] reserved
+boot.1G.log:BIOS-e820: [mem 0x0000000000100000-0x000000003ffeffff] usable
+boot.1G.log:BIOS-e820: [mem 0x000000003fff0000-0x000000003fffffff] ACPI data
+boot.1G.log:BIOS-e820: [mem 0x00000000fffc0000-0x00000000ffffffff] reserved
+boot.2G.log:BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable
+boot.2G.log:BIOS-e820: [mem 0x000000000009fc00-0x000000000009ffff] reserved
+boot.2G.log:BIOS-e820: [mem 0x00000000000f0000-0x00000000000fffff] reserved
+boot.2G.log:BIOS-e820: [mem 0x0000000000100000-0x000000007ffeffff] usable
+boot.2G.log:BIOS-e820: [mem 0x000000007fff0000-0x000000007fffffff] ACPI data
+boot.2G.log:BIOS-e820: [mem 0x00000000fffc0000-0x00000000ffffffff] reserved
+boot.4G.log:BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable
+boot.4G.log:BIOS-e820: [mem 0x000000000009fc00-0x000000000009ffff] reserved
+boot.4G.log:BIOS-e820: [mem 0x00000000000f0000-0x00000000000fffff] reserved
+boot.4G.log:BIOS-e820: [mem 0x0000000000100000-0x00000000dffeffff] usable
+boot.4G.log:BIOS-e820: [mem 0x00000000dfff0000-0x00000000dfffffff] ACPI data
+boot.4G.log:BIOS-e820: [mem 0x00000000fffc0000-0x00000000ffffffff] reserved
+boot.4G.log:BIOS-e820: [mem 0x0000000100000000-0x000000011fffffff] usable
+boot.6G.log:BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable
+boot.6G.log:BIOS-e820: [mem 0x000000000009fc00-0x000000000009ffff] reserved
+boot.6G.log:BIOS-e820: [mem 0x00000000000f0000-0x00000000000fffff] reserved
+boot.6G.log:BIOS-e820: [mem 0x0000000000100000-0x00000000dffeffff] usable
+boot.6G.log:BIOS-e820: [mem 0x00000000dfff0000-0x00000000dfffffff] ACPI data
+boot.6G.log:BIOS-e820: [mem 0x00000000fffc0000-0x00000000ffffffff] reserved
+boot.6G.log:BIOS-e820: [mem 0x0000000100000000-0x000000019fffffff] usable
+</code></pre>
+
+<h2>1G / 2G / 4G / 6G compare:</h2>
+
+<h3>Same</h3>
+
+<pre><code>  1 boot.1G.log:BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable
+  2 boot.2G.log:BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable
+  3 boot.4G.log:BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable
+  4 boot.6G.log:BIOS-e820: [mem 0x0000000000000000-0x000000000009fbff] usable
+</code></pre>
+
+<pre><code>  6 boot.1G.log:BIOS-e820: [mem 0x000000000009fc00-0x000000000009ffff] reserved
+  7 boot.2G.log:BIOS-e820: [mem 0x000000000009fc00-0x000000000009ffff] reserved
+  8 boot.4G.log:BIOS-e820: [mem 0x000000000009fc00-0x000000000009ffff] reserved
+  9 boot.6G.log:BIOS-e820: [mem 0x000000000009fc00-0x000000000009ffff] reserved
+</code></pre>
+
+<pre><code> 11 boot.1G.log:BIOS-e820: [mem 0x00000000000f0000-0x00000000000fffff] reserved
+ 12 boot.2G.log:BIOS-e820: [mem 0x00000000000f0000-0x00000000000fffff] reserved
+ 13 boot.4G.log:BIOS-e820: [mem 0x00000000000f0000-0x00000000000fffff] reserved
+ 14 boot.6G.log:BIOS-e820: [mem 0x00000000000f0000-0x00000000000fffff] reserved
+</code></pre>
+
+<pre><code> 26 boot.1G.log:BIOS-e820: [mem 0x00000000fffc0000-0x00000000ffffffff] reserved
+ 27 boot.2G.log:BIOS-e820: [mem 0x00000000fffc0000-0x00000000ffffffff] reserved
+ 28 boot.4G.log:BIOS-e820: [mem 0x00000000fffc0000-0x00000000ffffffff] reserved
+ 29 boot.6G.log:BIOS-e820: [mem 0x00000000fffc0000-0x00000000ffffffff] reserved
+</code></pre>
+
+<h3>Diff</h3>
+
+<pre><code> 16 boot.1G.log:BIOS-e820: [mem 0x0000000000100000-0x000000003ffeffff] usable
+ 17 boot.2G.log:BIOS-e820: [mem 0x0000000000100000-0x000000007ffeffff] usable
+ 18 boot.4G.log:BIOS-e820: [mem 0x0000000000100000-0x00000000dffeffff] usable
+ 19 boot.6G.log:BIOS-e820: [mem 0x0000000000100000-0x00000000dffeffff] usable
+</code></pre>
+
+<pre><code> 21 boot.1G.log:BIOS-e820: [mem 0x000000003fff0000-0x000000003fffffff] ACPI data
+ 22 boot.2G.log:BIOS-e820: [mem 0x000000007fff0000-0x000000007fffffff] ACPI data
+ 23 boot.4G.log:BIOS-e820: [mem 0x00000000dfff0000-0x00000000dfffffff] ACPI data
+ 24 boot.6G.log:BIOS-e820: [mem 0x00000000dfff0000-0x00000000dfffffff] ACPI data
+</code></pre>
+
+<p>Diff(only 4G, 6G need this range).
+<code>
+31 boot.4G.log:BIOS-e820: [mem 0x0000000100000000-0x000000011fffffff] usable
+32 boot.6G.log:BIOS-e820: [mem 0x0000000100000000-0x000000019fffffff] usable
+</code></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[The Mem_init on Mips(octean)]]></title>
+    <link href="http://martinbj2008.github.io/blog/2011/10/07/mem-init/"/>
+    <updated>2011-10-07T00:00:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2011/10/07/mem-init</id>
+    <content type="html"><![CDATA[<!-- more -->
+
+
+<h1>arch/mips/kernel/setup.c</h1>
+
+<pre><code class="c">static void __init bootmem_init(void)
+{
+unsigned long reserved_end;
+unsigned long mapstart = ~0UL;
+unsigned long bootmap_size;
+int i;
+
+/*
+* Init any data related to initrd. It's a nop if INITRD is
+* not selected. Once that done we can determine the low bound
+* of usable memory.
+*/
+reserved_end = max(init_initrd(),
+  (unsigned long) PFN_UP(__pa_symbol(&amp;_end)));
+
+/*
+* max_low_pfn is not a number of pages. The number of pages
+* of the system is given by 'max_low_pfn - min_low_pfn'.
+*/
+min_low_pfn = ~0UL;
+max_low_pfn = 0;
+
+/*
+* Find the highest page frame number we have available.
+*/
+for (i = 0; i &lt; boot_mem_map.nr_map; i++) {
+unsigned long start, end;
+
+if (boot_mem_map.map[i].type != BOOT_MEM_RAM)
+continue;
+
+start = PFN_UP(boot_mem_map.map[i].addr);
+end = PFN_DOWN(boot_mem_map.map[i].addr
++ boot_mem_map.map[i].size);
+
+if (end &gt; max_low_pfn)
+max_low_pfn = end;
+if (start &lt; min_low_pfn)
+min_low_pfn = start;
+if (end &lt;= reserved_end)
+continue;
+if (start &gt;= mapstart)
+continue;
+mapstart = max(reserved_end, start);
+}
+
+if (min_low_pfn &gt;= max_low_pfn)
+panic("Incorrect memory mapping !!!");
+if (min_low_pfn &gt; ARCH_PFN_OFFSET) {
+pr_info("Wasting %lu bytes for tracking %lu unused pages\n",
+(min_low_pfn - ARCH_PFN_OFFSET) * sizeof(struct page),
+min_low_pfn - ARCH_PFN_OFFSET);
+} else if (min_low_pfn &lt; ARCH_PFN_OFFSET) {
+pr_info("%lu free pages won't be used\n",
+ARCH_PFN_OFFSET - min_low_pfn);
+}
+min_low_pfn = ARCH_PFN_OFFSET;
+
+/*
+* Determine low and high memory ranges
+*/
+max_pfn = max_low_pfn;
+if (max_low_pfn &gt; PFN_DOWN(HIGHMEM_START)) {
+#ifdef CONFIG_HIGHMEM
+highstart_pfn = PFN_DOWN(HIGHMEM_START);
+highend_pfn = max_low_pfn;
+#endif
+max_low_pfn = PFN_DOWN(HIGHMEM_START);
+}
+
+/*
+* Initialize the boot-time allocator with low memory only.
+*/
+bootmap_size = init_bootmem_node(NODE_DATA(0), mapstart,
+min_low_pfn, max_low_pfn);
+
+
+for (i = 0; i &lt; boot_mem_map.nr_map; i++) {
+unsigned long start, end;
+
+start = PFN_UP(boot_mem_map.map[i].addr);
+end = PFN_DOWN(boot_mem_map.map[i].addr
++ boot_mem_map.map[i].size);
+
+if (start &lt;= min_low_pfn)
+start = min_low_pfn;
+if (start &gt;= end)
+continue;
+
+#ifndef CONFIG_HIGHMEM
+if (end &gt; max_low_pfn)
+end = max_low_pfn;
+
+/*
+* ... finally, is the area going away?
+*/
+if (end &lt;= start)
+continue;
+#endif
+
+add_active_range(0, start, end);
+}
+
+/*
+* Register fully available low RAM pages with the bootmem allocator.
+*/
+for (i = 0; i &lt; boot_mem_map.nr_map; i++) {
+unsigned long start, end, size;
+
+/*
+* Reserve usable memory.
+*/
+if (boot_mem_map.map[i].type != BOOT_MEM_RAM)
+continue;
+
+start = PFN_UP(boot_mem_map.map[i].addr);
+end   = PFN_DOWN(boot_mem_map.map[i].addr
+   + boot_mem_map.map[i].size);
+/*
+* We are rounding up the start address of usable memory
+* and at the end of the usable range downwards.
+*/
+if (start &gt;= max_low_pfn)
+continue;
+if (start &lt; reserved_end)
+start = reserved_end;
+if (end &gt; max_low_pfn)
+end = max_low_pfn;
+
+/*
+* ... finally, is the area going away?
+*/
+if (end &lt;= start)
+continue;
+size = end - start;
+
+/* Register lowmem ranges */
+free_bootmem(PFN_PHYS(start), size &lt;&lt; PAGE_SHIFT);
+memory_present(0, start, end);
+}
+
+/*
+* Reserve the bootmap memory.
+*/
+reserve_bootmem(PFN_PHYS(mapstart), bootmap_size, BOOTMEM_DEFAULT);
+
+/*
+* Reserve initrd memory if needed.
+*/
+finalize_initrd();
+}
+
+
+
+struct node_active_region {
+unsigned long start_pfn;
+unsigned long end_pfn;
+int nid;
+};
+
+
+
+mm/page_alloc.c
+===================
+  static struct node_active_region __meminitdata early_node_map[MAX_ACTIVE_REGIONS];
+
+
+
+/**
+ * add_active_range - Register a range of PFNs backed by physical memory
+ * @nid: The node ID the range resides on
+ * @start_pfn: The start PFN of the available physical memory
+ * @end_pfn: The end PFN of the available physical memory
+ *
+ * These ranges are stored in an early_node_map[] and later used by
+ * free_area_init_nodes() to calculate zone sizes and holes. If the
+ * range spans a memory hole, it is up to the architecture to ensure
+ * the memory is not freed by the bootmem allocator. If possible
+ * the range being registered will be merged with existing ranges.
+ */
+void __init add_active_range(unsigned int nid, unsigned long start_pfn,
+unsigned long end_pfn)
+{
+int i;
+
+mminit_dprintk(MMINIT_TRACE, "memory_register",
+"Entering add_active_range(%d, %#lx, %#lx) "
+"%d entries of %d used\n",
+nid, start_pfn, end_pfn,
+nr_nodemap_entries, MAX_ACTIVE_REGIONS);
+
+mminit_validate_memmodel_limits(&amp;start_pfn, &amp;end_pfn);
+
+/* Merge with existing active regions if possible */
+for (i = 0; i &lt; nr_nodemap_entries; i++) {
+if (early_node_map[i].nid != nid)
+continue;
+
+/* Skip if an existing region covers this new one */
+if (start_pfn &gt;= early_node_map[i].start_pfn &amp;&amp;
+end_pfn &lt;= early_node_map[i].end_pfn)
+return;
+
+/* Merge forward if suitable */
+if (start_pfn &lt;= early_node_map[i].end_pfn &amp;&amp;
+end_pfn &gt; early_node_map[i].end_pfn) {
+early_node_map[i].end_pfn = end_pfn;
+return;
+}
+
+/* Merge backward if suitable */
+if (start_pfn &lt; early_node_map[i].start_pfn &amp;&amp;
+end_pfn &gt;= early_node_map[i].start_pfn) {
+early_node_map[i].start_pfn = start_pfn;
+return;
+}
+}
+
+/* Check that early_node_map is large enough */
+if (i &gt;= MAX_ACTIVE_REGIONS) {
+printk(KERN_CRIT "More than %d memory regions, truncating\n",
+MAX_ACTIVE_REGIONS);
+return;
+}
+
+early_node_map[i].nid = nid;
+early_node_map[i].start_pfn = start_pfn;
+early_node_map[i].end_pfn = end_pfn;
+nr_nodemap_entries = i + 1;
+}
+
+
+
+
+
+arch/mips/mm/init.c
+====================================
+
+
+void __init paging_init(void)
+{
+unsigned long max_zone_pfns[MAX_NR_ZONES];
+unsigned long lastpfn __maybe_unused;
+
+pagetable_init();
+
+#ifdef CONFIG_HIGHMEM
+kmap_init();
+#endif
+kmap_coherent_init();
+
+#ifdef CONFIG_ZONE_DMA
+max_zone_pfns[ZONE_DMA] = MAX_DMA_PFN;
+#endif
+#ifdef CONFIG_ZONE_DMA32
+max_zone_pfns[ZONE_DMA32] = MAX_DMA32_PFN;
+#endif
+max_zone_pfns[ZONE_NORMAL] = max_low_pfn;
+lastpfn = max_low_pfn;
+#ifdef CONFIG_HIGHMEM
+max_zone_pfns[ZONE_HIGHMEM] = highend_pfn;
+lastpfn = highend_pfn;
+
+if (cpu_has_dc_aliases &amp;&amp; max_low_pfn != highend_pfn) {
+printk(KERN_WARNING "This processor doesn't support highmem."
+      " %ldk highmem ignored\n",
+      (highend_pfn - max_low_pfn) &lt;&lt; (PAGE_SHIFT - 10));
+max_zone_pfns[ZONE_HIGHMEM] = max_low_pfn;
+lastpfn = max_low_pfn;
+}
+#endif
+
+free_area_init_nodes(max_zone_pfns);
+}
+
+#ifdef CONFIG_64BIT
+static struct kcore_list kcore_kseg0;
+#endif
+
+
+arch/mips/kernel.c
+================================
+void __init setup_arch(char **cmdline_p)
+{
+cpu_probe();
+prom_init();&lt;=====
+
+#ifdef CONFIG_EARLY_PRINTK
+setup_early_printk();
+#endif
+cpu_report();
+check_bugs_early();
+
+#if defined(CONFIG_VT)
+#if defined(CONFIG_VGA_CONSOLE)
+conswitchp = &amp;vga_con;
+#elif defined(CONFIG_DUMMY_CONSOLE)
+conswitchp = &amp;dummy_con;
+#endif
+#endif
+
+arch_mem_init(cmdline_p);&lt;=====
+
+resource_init();
+plat_smp_setup();
+}
+</code></pre>
+]]></content>
+  </entry>
+  
+</feed>

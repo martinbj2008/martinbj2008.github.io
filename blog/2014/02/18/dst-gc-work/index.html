@@ -1,0 +1,580 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Delayed Work: Dst_gc_work - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="summary A delayed work will first start a timer,
+and when timeout, the delayed work will be put a worker_pool&rsquo;s
+worklist or a pool_workqueue& &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2014/02/18/dst-gc-work/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Delayed Work: Dst_gc_work</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-02-18T15:26:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>18</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>3:26 pm</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h3>summary</h3>
+
+<p>A delayed work will first start a timer,
+and when timeout, the delayed work will be put a <code>worker_pool</code>&rsquo;s
+<code>worklist</code> or a <code>pool_workqueue</code>&rsquo;s <code>delayed_works</code></p>
+
+<h3>how to use delayed work</h3>
+
+<h4>data structure</h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">113</span> <span class="k">struct</span> <span class="n">delayed_work</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">114</span>         <span class="k">struct</span> <span class="n">work_struct</span> <span class="n">work</span><span class="p">;</span>
+</span><span class='line'><span class="mi">115</span>         <span class="k">struct</span> <span class="n">timer_list</span> <span class="n">timer</span><span class="p">;</span>
+</span><span class='line'><span class="mi">116</span>
+</span><span class='line'><span class="mi">117</span>         <span class="cm">/* target workqueue and CPU -&gt;timer uses to queue -&gt;work */</span>
+</span><span class='line'><span class="mi">118</span>         <span class="k">struct</span> <span class="n">workqueue_struct</span> <span class="o">*</span><span class="n">wq</span><span class="p">;</span>
+</span><span class='line'><span class="mi">119</span>         <span class="kt">int</span> <span class="n">cpu</span><span class="p">;</span>
+</span><span class='line'><span class="mi">120</span> <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<!-- more -->
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">157</span> <span class="err">#</span><span class="n">define</span> <span class="n">__WORK_INITIALIZER</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span> <span class="p">{</span>                                      \
+</span><span class='line'><span class="mi">158</span>         <span class="p">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">WORK_DATA_STATIC_INIT</span><span class="p">(),</span>                                \
+</span><span class='line'><span class="mi">159</span>         <span class="p">.</span><span class="n">entry</span>  <span class="o">=</span> <span class="p">{</span> <span class="o">&amp;</span><span class="p">(</span><span class="n">n</span><span class="p">).</span><span class="n">entry</span><span class="p">,</span> <span class="o">&amp;</span><span class="p">(</span><span class="n">n</span><span class="p">).</span><span class="n">entry</span> <span class="p">},</span>                           \
+</span><span class='line'><span class="mi">160</span>         <span class="p">.</span><span class="n">func</span> <span class="o">=</span> <span class="p">(</span><span class="n">f</span><span class="p">),</span>                                                    \
+</span><span class='line'><span class="mi">161</span>         <span class="n">__WORK_INIT_LOCKDEP_MAP</span><span class="p">(</span><span class="err">#</span><span class="n">n</span><span class="p">,</span> <span class="o">&amp;</span><span class="p">(</span><span class="n">n</span><span class="p">))</span>                               \
+</span><span class='line'><span class="mi">162</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">163</span>
+</span><span class='line'><span class="mi">164</span> <span class="err">#</span><span class="n">define</span> <span class="n">__DELAYED_WORK_INITIALIZER</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="n">tflags</span><span class="p">)</span> <span class="p">{</span>                      \
+</span><span class='line'><span class="mi">165</span>         <span class="p">.</span><span class="n">work</span> <span class="o">=</span> <span class="n">__WORK_INITIALIZER</span><span class="p">((</span><span class="n">n</span><span class="p">).</span><span class="n">work</span><span class="p">,</span> <span class="p">(</span><span class="n">f</span><span class="p">)),</span>                      \
+</span><span class='line'><span class="mi">166</span>         <span class="p">.</span><span class="n">timer</span> <span class="o">=</span> <span class="n">__TIMER_INITIALIZER</span><span class="p">(</span><span class="n">delayed_work_timer_fn</span><span class="p">,</span>             \
+</span><span class='line'><span class="mi">167</span>                                      <span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span><span class="p">)</span><span class="o">&amp;</span><span class="p">(</span><span class="n">n</span><span class="p">),</span>            \
+</span><span class='line'><span class="mi">168</span>                                      <span class="p">(</span><span class="n">tflags</span><span class="p">)</span> <span class="o">|</span> <span class="n">TIMER_IRQSAFE</span><span class="p">),</span>         \
+</span><span class='line'><span class="mi">169</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">170</span>
+</span><span class='line'><span class="mi">171</span> <span class="err">#</span><span class="n">define</span> <span class="n">DECLARE_WORK</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>                                              \
+</span><span class='line'><span class="mi">172</span>         <span class="k">struct</span> <span class="n">work_struct</span> <span class="n">n</span> <span class="o">=</span> <span class="n">__WORK_INITIALIZER</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+</span><span class='line'><span class="mi">173</span>
+</span><span class='line'><span class="mi">174</span> <span class="err">#</span><span class="n">define</span> <span class="n">DECLARE_DELAYED_WORK</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>                                      \
+</span><span class='line'><span class="mi">175</span>         <span class="k">struct</span> <span class="n">delayed_work</span> <span class="n">n</span> <span class="o">=</span> <span class="n">__DELAYED_WORK_INITIALIZER</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">f</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>defination</h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">52</span> <span class="k">static</span> <span class="kt">void</span> <span class="nf">dst_gc_task</span><span class="p">(</span><span class="k">struct</span> <span class="n">work_struct</span> <span class="o">*</span><span class="n">work</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">55</span> <span class="k">static</span> <span class="nf">DECLARE_DELAYED_WORK</span><span class="p">(</span><span class="n">dst_gc_work</span><span class="p">,</span> <span class="n">dst_gc_task</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">63</span> <span class="k">static</span> <span class="kt">void</span> <span class="n">dst_gc_task</span><span class="p">(</span><span class="k">struct</span> <span class="n">work_struct</span> <span class="o">*</span><span class="n">work</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">64</span> <span class="p">{</span>
+</span><span class='line'><span class="p">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>api to schedule workqueue.</h4>
+
+<p><code>schedule_delayed_work</code> will put the work into a <code>struct work_pool</code>&rsquo;s <code>worklist</code>
+or a <code>pool_workqueue</code>&rsquo;s <code>delayed_works</code>.</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">586</span> <span class="cm">/**</span>
+</span><span class='line'><span class="cm">587  * schedule_delayed_work - put work task in global workqueue after delay</span>
+</span><span class='line'><span class="cm">588  * @dwork: job to be done</span>
+</span><span class='line'><span class="cm">589  * @delay: number of jiffies to wait or 0 for immediate execution</span>
+</span><span class='line'><span class="cm">590  *</span>
+</span><span class='line'><span class="cm">591  * After waiting for a given time this puts a job in the kernel-global</span>
+</span><span class='line'><span class="cm">592  * workqueue.</span>
+</span><span class='line'><span class="cm">593  */</span>
+</span><span class='line'><span class="mi">594</span> <span class="k">static</span> <span class="kr">inline</span> <span class="kt">bool</span> <span class="n">schedule_delayed_work</span><span class="p">(</span><span class="k">struct</span> <span class="n">delayed_work</span> <span class="o">*</span><span class="n">dwork</span><span class="p">,</span>
+</span><span class='line'><span class="mi">595</span>                                          <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">delay</span><span class="p">)</span>
+</span><span class='line'><span class="mi">596</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">597</span>         <span class="k">return</span> <span class="n">queue_delayed_work</span><span class="p">(</span><span class="n">system_wq</span><span class="p">,</span> <span class="n">dwork</span><span class="p">,</span> <span class="n">delay</span><span class="p">);</span>
+</span><span class='line'><span class="mi">598</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="p">...</span>
+</span><span class='line'><span class="mi">138</span>                 <span class="n">schedule_delayed_work</span><span class="p">(</span><span class="o">&amp;</span><span class="n">dst_gc_work</span><span class="p">,</span> <span class="n">expires</span><span class="p">);</span>
+</span><span class='line'><span class="p">...</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>call trace</h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="o">&gt;</span> <span class="n">schedule_delayed_work</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">queue_delayed_work</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">queue_delayed_work_on</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">__queue_delayed_work</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">start</span> <span class="n">a</span> <span class="n">timer</span> <span class="n">with</span> <span class="n">timer</span> <span class="n">function</span> <span class="n">delayed_work_timer_fn</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">delayed_work_timer_fn</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">__queue_work</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>core function <code>__queue_work</code></h4>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1314</span> <span class="k">static</span> <span class="kt">void</span> <span class="n">__queue_work</span><span class="p">(</span><span class="kt">int</span> <span class="n">cpu</span><span class="p">,</span> <span class="k">struct</span> <span class="n">workqueue_struct</span> <span class="o">*</span><span class="n">wq</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1315</span>                          <span class="k">struct</span> <span class="n">work_struct</span> <span class="o">*</span><span class="n">work</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1316</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1317</span>         <span class="k">struct</span> <span class="n">pool_workqueue</span> <span class="o">*</span><span class="n">pwq</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1318</span>         <span class="k">struct</span> <span class="n">worker_pool</span> <span class="o">*</span><span class="n">last_pool</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1319</span>         <span class="k">struct</span> <span class="n">list_head</span> <span class="o">*</span><span class="n">worklist</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1320</span>         <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">work_flags</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1321</span>         <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">req_cpu</span> <span class="o">=</span> <span class="n">cpu</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1322</span>
+</span><span class='line'><span class="mi">1323</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">1324          * While a work item is PENDING &amp;&amp; off queue, a task trying to</span>
+</span><span class='line'><span class="cm">1325          * steal the PENDING will busy-loop waiting for it to either get</span>
+</span><span class='line'><span class="cm">1326          * queued or lose PENDING.  Grabbing PENDING and queueing should</span>
+</span><span class='line'><span class="cm">1327          * happen with IRQ disabled.</span>
+</span><span class='line'><span class="cm">1328          */</span>
+</span><span class='line'><span class="mi">1329</span>         <span class="n">WARN_ON_ONCE</span><span class="p">(</span><span class="o">!</span><span class="n">irqs_disabled</span><span class="p">());</span>
+</span><span class='line'><span class="mi">1330</span>
+</span><span class='line'><span class="mi">1331</span>         <span class="nf">debug_work_activate</span><span class="p">(</span><span class="n">work</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1332</span>
+</span><span class='line'><span class="mi">1333</span>         <span class="cm">/* if draining, only works from the same workqueue are allowed */</span>
+</span><span class='line'><span class="mi">1334</span>         <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="n">wq</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">__WQ_DRAINING</span><span class="p">)</span> <span class="o">&amp;&amp;</span>
+</span><span class='line'><span class="mi">1335</span>             <span class="n">WARN_ON_ONCE</span><span class="p">(</span><span class="o">!</span><span class="n">is_chained_work</span><span class="p">(</span><span class="n">wq</span><span class="p">)))</span>
+</span><span class='line'><span class="mi">1336</span>                 <span class="k">return</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1337</span> <span class="nl">retry</span><span class="p">:</span>
+</span><span class='line'><span class="mi">1338</span>         <span class="k">if</span> <span class="p">(</span><span class="n">req_cpu</span> <span class="o">==</span> <span class="n">WORK_CPU_UNBOUND</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1339</span>                 <span class="n">cpu</span> <span class="o">=</span> <span class="n">raw_smp_processor_id</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1340</span>
+</span><span class='line'><span class="mi">1341</span>         <span class="cm">/* pwq which will be used unless @work is executing elsewhere */</span>
+</span><span class='line'><span class="mi">1342</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="n">wq</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">WQ_UNBOUND</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1343</span>                 <span class="n">pwq</span> <span class="o">=</span> <span class="n">per_cpu_ptr</span><span class="p">(</span><span class="n">wq</span><span class="o">-&gt;</span><span class="n">cpu_pwqs</span><span class="p">,</span> <span class="n">cpu</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1344</span>         <span class="k">else</span>
+</span><span class='line'><span class="mi">1345</span>                 <span class="n">pwq</span> <span class="o">=</span> <span class="n">unbound_pwq_by_node</span><span class="p">(</span><span class="n">wq</span><span class="p">,</span> <span class="n">cpu_to_node</span><span class="p">(</span><span class="n">cpu</span><span class="p">));</span>
+</span><span class='line'><span class="mi">1346</span>
+</span><span class='line'><span class="mi">1347</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">1348          * If @work was previously on a different pool, it might still be</span>
+</span><span class='line'><span class="cm">1349          * running there, in which case the work needs to be queued on that</span>
+</span><span class='line'><span class="cm">1350          * pool to guarantee non-reentrancy.</span>
+</span><span class='line'><span class="cm">1351          */</span>
+</span><span class='line'><span class="mi">1352</span>         <span class="n">last_pool</span> <span class="o">=</span> <span class="n">get_work_pool</span><span class="p">(</span><span class="n">work</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1353</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">last_pool</span> <span class="o">&amp;&amp;</span> <span class="n">last_pool</span> <span class="o">!=</span> <span class="n">pwq</span><span class="o">-&gt;</span><span class="n">pool</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1354</span>                 <span class="k">struct</span> <span class="n">worker</span> <span class="o">*</span><span class="n">worker</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1355</span>
+</span><span class='line'><span class="mi">1356</span>                 <span class="n">spin_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">last_pool</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1357</span>
+</span><span class='line'><span class="mi">1358</span>                 <span class="n">worker</span> <span class="o">=</span> <span class="n">find_worker_executing_work</span><span class="p">(</span><span class="n">last_pool</span><span class="p">,</span> <span class="n">work</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1359</span>
+</span><span class='line'><span class="mi">1360</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">worker</span> <span class="o">&amp;&amp;</span> <span class="n">worker</span><span class="o">-&gt;</span><span class="n">current_pwq</span><span class="o">-&gt;</span><span class="n">wq</span> <span class="o">==</span> <span class="n">wq</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1361</span>                         <span class="n">pwq</span> <span class="o">=</span> <span class="n">worker</span><span class="o">-&gt;</span><span class="n">current_pwq</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1362</span>                 <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1363</span>                         <span class="cm">/* meh... not running there, queue here */</span>
+</span><span class='line'><span class="mi">1364</span>                         <span class="n">spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">last_pool</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1365</span>                         <span class="n">spin_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pwq</span><span class="o">-&gt;</span><span class="n">pool</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1366</span>                 <span class="p">}</span>
+</span><span class='line'><span class="mi">1367</span>         <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1368</span>                 <span class="n">spin_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pwq</span><span class="o">-&gt;</span><span class="n">pool</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1369</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1370</span>
+</span><span class='line'><span class="mi">1371</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">1372          * pwq is determined and locked.  For unbound pools, we could have</span>
+</span><span class='line'><span class="cm">1373          * raced with pwq release and it could already be dead.  If its</span>
+</span><span class='line'><span class="cm">1374          * refcnt is zero, repeat pwq selection.  Note that pwqs never die</span>
+</span><span class='line'><span class="cm">1375          * without another pwq replacing it in the numa_pwq_tbl or while</span>
+</span><span class='line'><span class="cm">1376          * work items are executing on it, so the retrying is guaranteed to</span>
+</span><span class='line'><span class="cm">1377          * make forward-progress.</span>
+</span><span class='line'><span class="cm">1378          */</span>
+</span><span class='line'><span class="mi">1379</span>         <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="o">!</span><span class="n">pwq</span><span class="o">-&gt;</span><span class="n">refcnt</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1380</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">wq</span><span class="o">-&gt;</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">WQ_UNBOUND</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1381</span>                         <span class="n">spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pwq</span><span class="o">-&gt;</span><span class="n">pool</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1382</span>                         <span class="nf">cpu_relax</span><span class="p">();</span>
+</span><span class='line'><span class="mi">1383</span>                         <span class="k">goto</span> <span class="n">retry</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1384</span>                 <span class="p">}</span>
+</span><span class='line'><span class="mi">1385</span>                 <span class="cm">/* oops */</span>
+</span><span class='line'><span class="mi">1386</span>                 <span class="n">WARN_ONCE</span><span class="p">(</span><span class="nb">true</span><span class="p">,</span> <span class="s">&quot;workqueue: per-cpu pwq for %s on cpu%d has 0 refcnt&quot;</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1387</span>                           <span class="n">wq</span><span class="o">-&gt;</span><span class="n">name</span><span class="p">,</span> <span class="n">cpu</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1388</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1389</span>
+</span><span class='line'><span class="mi">1390</span>         <span class="cm">/* pwq determined, queue */</span>
+</span><span class='line'><span class="mi">1391</span>         <span class="n">trace_workqueue_queue_work</span><span class="p">(</span><span class="n">req_cpu</span><span class="p">,</span> <span class="n">pwq</span><span class="p">,</span> <span class="n">work</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1392</span>
+</span><span class='line'><span class="mi">1393</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">WARN_ON</span><span class="p">(</span><span class="o">!</span><span class="n">list_empty</span><span class="p">(</span><span class="o">&amp;</span><span class="n">work</span><span class="o">-&gt;</span><span class="n">entry</span><span class="p">)))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1394</span>                 <span class="n">spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pwq</span><span class="o">-&gt;</span><span class="n">pool</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1395</span>                 <span class="k">return</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1396</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1397</span>
+</span><span class='line'><span class="mi">1398</span>         <span class="n">pwq</span><span class="o">-&gt;</span><span class="n">nr_in_flight</span><span class="p">[</span><span class="n">pwq</span><span class="o">-&gt;</span><span class="n">work_color</span><span class="p">]</span><span class="o">++</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1399</span>         <span class="n">work_flags</span> <span class="o">=</span> <span class="n">work_color_to_flags</span><span class="p">(</span><span class="n">pwq</span><span class="o">-&gt;</span><span class="n">work_color</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1400</span>
+</span><span class='line'><span class="mi">1401</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">likely</span><span class="p">(</span><span class="n">pwq</span><span class="o">-&gt;</span><span class="n">nr_active</span> <span class="o">&lt;</span> <span class="n">pwq</span><span class="o">-&gt;</span><span class="n">max_active</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1402</span>                 <span class="n">trace_workqueue_activate_work</span><span class="p">(</span><span class="n">work</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1403</span>                 <span class="n">pwq</span><span class="o">-&gt;</span><span class="n">nr_active</span><span class="o">++</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1404</span>                 <span class="n">worklist</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">pwq</span><span class="o">-&gt;</span><span class="n">pool</span><span class="o">-&gt;</span><span class="n">worklist</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1405</span>         <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1406</span>                 <span class="n">work_flags</span> <span class="o">|=</span> <span class="n">WORK_STRUCT_DELAYED</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1407</span>                 <span class="n">worklist</span> <span class="o">=</span> <span class="o">&amp;</span><span class="n">pwq</span><span class="o">-&gt;</span><span class="n">delayed_works</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1408</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1409</span>
+</span><span class='line'><span class="mi">1410</span>         <span class="n">insert_work</span><span class="p">(</span><span class="n">pwq</span><span class="p">,</span> <span class="n">work</span><span class="p">,</span> <span class="n">worklist</span><span class="p">,</span> <span class="n">work_flags</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1411</span>
+</span><span class='line'><span class="mi">1412</span>         <span class="nf">spin_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">pwq</span><span class="o">-&gt;</span><span class="n">pool</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1413</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2014-02-18T15:26:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>18</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>3:26 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/irqs/'>irqs</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2014/02/18/struct-worker-pool-%3Enr-running/" title="Previous Post: struct worker_pool->nr_running">&laquo; struct worker_pool->nr_running</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2014/07/17/irq-framework/" title="Next Post: irq framework">irq framework &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

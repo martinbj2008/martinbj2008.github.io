@@ -1,0 +1,301 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Netlink Grab - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="对nl_table的操作： 读操作: netlink_lock_table 和 netlink_unlock_table 写操作netlink_table_grab 和 netlink_table_ungrab 原子变量nl_table_users 用来保存对nl_table的读者引用计数。 &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/03/11/netlink-grab/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Netlink Grab</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-03-11T00:00:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>11</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>12:00 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>对<code>nl_table</code>的操作：  <br/>
+读操作: <code>netlink_lock_table</code> 和 <code>netlink_unlock_table</code> <br/>
+写操作<code>netlink_table_grab</code> 和 <code>netlink_table_ungrab</code></p>
+
+<p>原子变量<code>nl_table_users</code> 用来保存对<code>nl_table</code>的读者引用计数。</p>
+
+<p>只要没有进行的写者，即使有n个写者在等待，m个读者也可以同时读。
+当没有任何读者时，写着才可以获得权限。
+一旦一个写着获得权限，所有的读者和写者都得等待。</p>
+
+<!-- more -->
+
+
+<h3><code>nl_table_lock</code></h3>
+
+<p>保证了    <br/>
+1. 读写之间的互斥 <br/>
+2. 写者之间的互斥</p>
+
+<h3><code>nl_table_users</code></h3>
+
+<p>读者的引用计数。</p>
+
+<p>感觉很类是读写锁，只是写着可以睡眠。</p>
+
+<h1>data struct</h1>
+
+<p>134 static DECLARE_WAIT_QUEUE_HEAD(nl_table_wait);
+138 static DEFINE_RWLOCK(nl_table_lock);
+139 static atomic_t nl_table_users = ATOMIC_INIT(0);</p>
+
+<h4>读操作上锁：</h4>
+
+<ol type="a">
+<li>获取锁<code>nl_table_lock</code>的读权限，</li>
+<li>访问数增加1.</li>
+<li>释放读锁。</li>
+</ol>
+
+
+<p> 229 static inline void
+ 230 netlink_lock_table(void)
+ 231 {     <br/>
+ 232         /<em> read_lock() synchronizes us to netlink_table_grab </em>/
+ 233<br/>
+ 234         read_lock(&amp;nl_table_lock);
+ 235         atomic_inc(&amp;nl_table_users);
+ 236         read_unlock(&amp;nl_table_lock);
+ 237 }</p>
+
+<h4>读操作开锁：</h4>
+
+<p> nl_table_users减一，
+ 判断nl_table_users == 0？
+ YES, nl_table_users为0，表示没有读者, 调用wakeup唤醒等待的写操作。
+ NO, &ndash;return.</p>
+
+<p> 239 static inline void
+ 240 netlink_unlock_table(void)
+ 241 {
+ 242         if (atomic_dec_and_test(&amp;nl_table_users))
+ 243                 wake_up(&amp;nl_table_wait);
+ 244 }</p>
+
+<h4>写操作上锁:</h4>
+
+<p>1.而写操作首先获取锁<code>nl_table_lock</code>的写权限，
+如果当前用户个数为0，
+（幸运啊）那么后续的所有操作（读和写)都被阻塞.因为<code>nl_table_lock</code>被锁上了。</p>
+
+<p>如果用户数不为零，那么存在nl_table_users个读者和m（m>=0)个等待的写着。
+创建一个等待队列，等待其他的读或者写的完成，同时自己通过schedule放弃cpu。</p>
+
+<p>再次得到调度时，首先获取写锁<code>nl_table_lock</code>，重复上一步的判断。
+<a href="https://gist.github.com/martinbj2008/b878b0a3d55533e7073f">netlink_table_grab</a></p>
+
+<h4>写操作开锁：</h4>
+
+<p>释放写锁。
+唤醒等待队列。
+ 222 void netlink_table_ungrab(void)
+ 223         __releases(nl_table_lock)
+ 224 {
+ 225         write_unlock_irq(&amp;nl_table_lock);      <br/>
+ 226         wake_up(&amp;nl_table_wait);
+ 227 }</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-03-11T00:00:00+08:00'><span class='date'><span class='date-month'>Mar</span> <span class='date-day'>11</span><span class='date-suffix'>th</span>, <span class='date-year'>2013</span></span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/netlink/'>netlink</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/03/07/netlink-bulk-dump/" title="Previous Post: netlink bulk dump">&laquo; netlink bulk dump</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/03/15/netlink-in-kernel/" title="Next Post: Netlink in kernel(continue)">Netlink in kernel(continue) &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

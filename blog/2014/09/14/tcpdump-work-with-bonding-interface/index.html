@@ -1,0 +1,430 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Tcpdump Work With Bonding Interface - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="test case On redhat5, Why tcpdump could not work on bonding work. OS: redhat 5.
+There are two 82599 interfaces eth0 and eth1.
+These two interfaces &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2014/09/14/tcpdump-work-with-bonding-interface/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Tcpdump Work With Bonding Interface</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-09-14T08:12:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>14</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>8:12 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h3>test case</h3>
+
+<h4>On redhat5, Why tcpdump could not work on bonding work.</h4>
+
+<p>OS: redhat 5.
+There are two 82599 interfaces eth0 and eth1.
+These two interfaces are used as slave of bond0,
+eth1 is backup of eth0.</p>
+
+<p>We ping the default gateway on test machine.
+ping work OK, and tcpdump on bond0 show the icmp request and icmp require packets.
+while on eth0 only icmp request, and eth1 has no any packet.</p>
+
+<!-- more -->
+
+
+<p>It is impossible there is no incoming packet on any physical interface.
+Why tcpdump could not capture the packets on eth0.</p>
+
+<h3>analysis</h3>
+
+<p>tcpdump is <code>pf_socket</code> which is based on <code>ptye_all</code>.</p>
+
+<h4>linux V2.6.32</h4>
+
+<p>In linux v2.6.32, there is bond process before <code>ptye_all</code>,
+and thus the <code>skb-&gt;dev</code> will be change to <code>bond0</code> from <code>eth0</code>.
+so when packet arrive <code>ptye_all</code>, ony match incoming dev <code>bond0</code>.
+we has no chance to capture packet on physical interface eth0.</p>
+
+<h4>upstream linux v3.17-rc4</h4>
+
+<p>bond related process is moved to <code>dev-&gt;rx_handler</code>,
+Just like the bridge or openvswitch.</p>
+
+<p>Packet will first be processed by <code>ptype_all</code> with <code>skb-&gt;dev</code> is eth0
+and then <code>rx_handler</code>(bond handler for eth0,eth1).
+if the rx handler return <code>RX_HANDLER_ANOTHER</code>,
+the packet arrive by <code>ptye_all</code> again with different<code>skb-&gt;dev</code> (bond0).</p>
+
+<h4>related patch</h4>
+
+<p><a href="https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/commit/?id=5b2c4d">https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/commit/?id=5b2c4d</a>
+<a href="https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/commit/?id=63d8ea">https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/commit/?id=63d8ea</a>
+<a href="https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/commit/?id=5b2c4dd">https://git.kernel.org/cgit/linux/kernel/git/torvalds/linux.git/commit/?id=5b2c4dd</a></p>
+
+<h5>TODO:</h5>
+
+<p>Test with upstream kernel.</p>
+
+<h3>Redhat source</h3>
+
+<p>redhat source is based on 2.6.32</p>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>2616 int __netif_receive_skb(struct sk_buff *skb)
+</span><span class='line'>2617 {
+</span><span class='line'>...
+</span><span class='line'>2636         if (!skb-&gt;iif)
+</span><span class='line'>2637                 skb-&gt;iif = skb-&gt;dev-&gt;ifindex;
+</span><span class='line'>2638 
+</span><span class='line'>2639         /*
+</span><span class='line'>2640          * bonding note: skbs received on inactive slaves should only
+</span><span class='line'>2641          * be delivered to pkt handlers that are exact matches.  Also
+</span><span class='line'>2642          * the deliver_no_wcard flag will be set.  If packet handlers
+</span><span class='line'>2643          * are sensitive to duplicate packets these skbs will need to
+</span><span class='line'>2644          * be dropped at the handler.  The vlan accel path may have
+</span><span class='line'>2645          * already set the deliver_no_wcard flag.
+</span><span class='line'>2646          */
+</span><span class='line'>2647 
+</span><span class='line'>2648         null_or_orig = NULL;
+</span><span class='line'>2649         orig_dev = skb-&gt;dev;
+</span><span class='line'>2650         if (skb-&gt;deliver_no_wcard)
+</span><span class='line'>2651                 null_or_orig = orig_dev;
+</span><span class='line'>2652         else if (orig_dev-&gt;master) {
+</span><span class='line'>2653                 if (skb_bond_should_drop(skb)) {
+</span><span class='line'>2654                         skb-&gt;deliver_no_wcard = 1;
+</span><span class='line'>2655                         null_or_orig = orig_dev; /* deliver only exact match */
+</span><span class='line'>2656                 } else
+</span><span class='line'>2657                         skb-&gt;dev = orig_dev-&gt;master;
+</span><span class='line'>2658         }
+</span><span class='line'>...
+</span><span class='line'>2677         list_for_each_entry_rcu(ptype, &ptype_all, list) {
+</span><span class='line'>2678                 if (ptype-&gt;dev == null_or_orig || ptype-&gt;dev == skb-&gt;dev ||
+</span><span class='line'>2679                     ptype-&gt;dev == orig_dev) {
+</span><span class='line'>2680                         if (pt_prev)
+</span><span class='line'>2681                                 ret = deliver_skb(skb, pt_prev, orig_dev);
+</span><span class='line'>2682                         pt_prev = ptype;
+</span><span class='line'>2683                 }
+</span><span class='line'>2684         }</span></code></pre></td></tr></table></div></figure>
+
+
+<h4>upstream linux V3.16</h4>
+
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>3579 static int __netif_receive_skb_core(struct sk_buff *skb, bool pfmemalloc)
+</span><span class='line'>3580 {
+</span><span class='line'>...
+</span><span class='line'>3604 another_round:
+</span><span class='line'>...
+</span><span class='line'>3626         list_for_each_entry_rcu(ptype, &ptype_all, list) {
+</span><span class='line'>3627                 if (!ptype-&gt;dev || ptype-&gt;dev == skb-&gt;dev) {
+</span><span class='line'>3628                         if (pt_prev)
+</span><span class='line'>3629                                 ret = deliver_skb(skb, pt_prev, orig_dev);
+</span><span class='line'>3630                         pt_prev = ptype;
+</span><span class='line'>3631                 }
+</span><span class='line'>3632         }
+</span><span class='line'>3633
+</span><span class='line'>3634 skip_taps:
+</span><span class='line'>3635 #ifdef CONFIG_NET_CLS_ACT
+</span><span class='line'>3636         skb = handle_ing(skb, &pt_prev, &ret, orig_dev);
+</span><span class='line'>3637         if (!skb)
+</span><span class='line'>3638                 goto unlock;
+</span><span class='line'>3639 ncls:
+</span><span class='line'>3640 #endif
+</span><span class='line'>3641
+</span><span class='line'>...
+</span><span class='line'>3656         rx_handler = rcu_dereference(skb-&gt;dev-&gt;rx_handler);
+</span><span class='line'>3657         if (rx_handler) {
+</span><span class='line'>3658                 if (pt_prev) {
+</span><span class='line'>3659                         ret = deliver_skb(skb, pt_prev, orig_dev);
+</span><span class='line'>3660                         pt_prev = NULL;
+</span><span class='line'>3661                 }
+</span><span class='line'>3662                 switch (rx_handler(&skb)) {
+</span><span class='line'>3663                 case RX_HANDLER_CONSUMED:
+</span><span class='line'>3664                         ret = NET_RX_SUCCESS;
+</span><span class='line'>3665                         goto unlock;
+</span><span class='line'>3666                 case RX_HANDLER_ANOTHER:
+</span><span class='line'>3667                         goto another_round;
+</span><span class='line'>3668                 case RX_HANDLER_EXACT:
+</span><span class='line'>3669                         deliver_exact = true;
+</span><span class='line'>3670                 case RX_HANDLER_PASS:
+</span><span class='line'>3671                         break;
+</span><span class='line'>3672                 default:
+</span><span class='line'>3673                         BUG();
+</span><span class='line'>3674                 }
+</span><span class='line'>3675         }</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2014-09-14T08:12:00+08:00'><span class='date'><span class='date-month'>Sep</span> <span class='date-day'>14</span><span class='date-suffix'>th</span>, <span class='date-year'>2014</span></span> <span class='time'>8:12 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/netcore/'>netcore</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/" title="Previous Post: how to select source ip for a tcp socket">&laquo; how to select source ip for a tcp socket</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2014/09/16/ixgbe-queue-index/" title="Next Post: how does ixgbe use queue index">how does ixgbe use queue index &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

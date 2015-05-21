@@ -1,0 +1,1180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Route | My Octopress Blog]]></title>
+  <link href="http://martinbj2008.github.io/blog/categories/route/atom.xml" rel="self"/>
+  <link href="http://martinbj2008.github.io/"/>
+  <updated>2015-05-21T16:26:25+08:00</updated>
+  <id>http://martinbj2008.github.io/</id>
+  <author>
+    <name><![CDATA[Your Name]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Dst Garbage]]></title>
+    <link href="http://martinbj2008.github.io/blog/2014/02/11/dst-garbage/"/>
+    <updated>2014-02-11T14:22:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2014/02/11/dst-garbage</id>
+    <content type="html"><![CDATA[<h3>dst garbage summary</h3>
+
+<p><code>garbage collection</code> is a common method used in kernel.
+When a object(struct,memeory) become invalid, we need
+free them, but the object maybe reference by others.</p>
+
+<p>such as a <code>dst_entry</code> is not invalid, and it is still
+referenced(used) by others.</p>
+
+<p>then <code>__dst_free</code> will be called for this case.
+It will first set <code>dst</code> to dirty(dead),
+and then put it into <code>dst_garbage.list</code> by <code>dst-&gt;next</code>.</p>
+
+<p>Then a workqueue task will check the <code>dst</code>&rsquo;s reference,
+and free(destory) it when no reference on it.</p>
+
+<p>Two key struct <strong><code>struct dst_garbage</code></strong> and <strong><code>dst_gc_work</code></strong></p>
+
+<!-- more -->
+
+
+<h3><code>struct dst_garbage</code></h3>
+
+<pre><code class="c"> 38 /*
+ 39  * We want to keep lock &amp; list close together
+ 40  * to dirty as few cache lines as possible in __dst_free().
+ 41  * As this is not a very strong hint, we dont force an alignment on SMP.
+ 42  */
+ 43 static struct {
+ 44         spinlock_t              lock;
+ 45         struct dst_entry        *list;
+ 46         unsigned long           timer_inc;
+ 47         unsigned long           timer_expires;
+ 48 } dst_garbage = {
+ 49         .lock = __SPIN_LOCK_UNLOCKED(dst_garbage.lock),
+ 50         .timer_inc = DST_GC_MAX,
+ 51 };
+</code></pre>
+
+<pre><code class="c">52 static void dst_gc_task(struct work_struct *work);
+ ...
+55 static DECLARE_DELAYED_WORK(dst_gc_work, dst_gc_task);
+</code></pre>
+
+<pre><code class="c">217 void __dst_free(struct dst_entry *dst)
+218 {
+219         spin_lock_bh(&amp;dst_garbage.lock);
+220         ___dst_free(dst);
+221         dst-&gt;next = dst_garbage.list;
+222         dst_garbage.list = dst;
+223         if (dst_garbage.timer_inc &gt; DST_GC_INC) {
+224                 dst_garbage.timer_inc = DST_GC_INC;
+225                 dst_garbage.timer_expires = DST_GC_MIN;
+226                 mod_delayed_work(system_wq, &amp;dst_gc_work,
+227                                  dst_garbage.timer_expires);
+228         }
+229         spin_unlock_bh(&amp;dst_garbage.lock);
+230 }
+231 EXPORT_SYMBOL(__dst_free);
+</code></pre>
+
+<h3><code>dst_gc_task</code></h3>
+
+<p><code>dst_busy_list</code> is not initialized?</p>
+
+<p>There are 3 list in this function.</p>
+
+<h4><code>dst_garbage.list</code>:</h4>
+
+<p>The nodes in this list are added by <code>__dst_free</code>.</p>
+
+<p>Eeach round, <code>dst_gc_task</code> will check this list.
+The dst has no reference will be free(destroy).
+the others will be appended to <code>dst_busy_list</code>.
+So after <strong>a round</strong> , the list will be empty.</p>
+
+<h4><code>dst_busy_list</code></h4>
+
+<p>After <code>dst_gc_task</code> finish, all the referenced <code>dst</code> nodes are in this list.</p>
+
+<h4><code>head</code></h4>
+
+<p>This is temporary list.
+All the referenced <code>dst</code> nodes during <code>dst_gc_task</code> are in this list.
+Before <code>dst_gc_task</code> finish, they will be moved to <code>dst_busy_list</code>.</p>
+
+<h4>the main function of workqueue <code>dst_gc_task</code></h4>
+
+<ol>
+<li>check the old <code>dst</code> nodes,</li>
+<li>for the un-referenced node, free(destory) it. or
+put them to the temp list <code>head</code>.</li>
+<li>for the node in <code>dst_garbage.list</code> do the same
+operation like 2</li>
+<li>move tmp list <code>head</code> to <code>dst_busy_list</code>.</li>
+<li>schedule gc task.</li>
+</ol>
+
+
+<p>NOTE: BH lock are needed because TX softirq also aceess <code>dst_garbage</code>.
+<code>c
+ 63 static void dst_gc_task(struct work_struct *work)
+ 64 {
+ 65         int    delayed = 0;
+ 66         int    work_performed = 0;
+ 67         unsigned long expires = ~0L;
+ 68         struct dst_entry *dst, *next, head;
+ 69         struct dst_entry *last = &amp;head;
+ 70
+ 71         mutex_lock(&amp;dst_gc_mutex);
+ 72         next = dst_busy_list;
+ 73
+ 74 loop:
+ 75         while ((dst = next) != NULL) {
+ 76                 next = dst-&gt;next;
+ 77                 prefetch(&amp;next-&gt;next);
+ 78                 cond_resched();
+ 79                 if (likely(atomic_read(&amp;dst-&gt;__refcnt))) {
+ 80                         last-&gt;next = dst;
+ 81                         last = dst;
+ 82                         delayed++;
+ 83                         continue;
+ 84                 }
+ 85                 work_performed++;
+ 86
+ 87                 dst = dst_destroy(dst);
+ 88                 if (dst) {
+ 89                         /* NOHASH and still referenced. Unless it is already
+ 90                          * on gc list, invalidate it and add to gc list.
+ 91                          *
+ 92                          * Note: this is temporary. Actually, NOHASH dst's
+ 93                          * must be obsoleted when parent is obsoleted.
+ 94                          * But we do not have state "obsoleted, but
+ 95                          * referenced by parent", so it is right.
+ 96                          */
+ 97                         if (dst-&gt;obsolete &gt; 0)
+ 98                                 continue;
+ 99
+100                         ___dst_free(dst);
+101                         dst-&gt;next = next;
+102                         next = dst;
+103                 }
+104         }
+105
+106         spin_lock_bh(&amp;dst_garbage.lock);
+107         next = dst_garbage.list;
+108         if (next) {
+109                 dst_garbage.list = NULL;
+110                 spin_unlock_bh(&amp;dst_garbage.lock);
+111                 goto loop;
+112         }
+113         last-&gt;next = NULL;
+114         dst_busy_list = head.next;
+115         if (!dst_busy_list)
+116                 dst_garbage.timer_inc = DST_GC_MAX;
+117         else {
+118                 /*
+119                  * if we freed less than 1/10 of delayed entries,
+120                  * we can sleep longer.
+121                  */
+122                 if (work_performed &lt;= delayed/10) {
+123                         dst_garbage.timer_expires += dst_garbage.timer_inc;
+124                         if (dst_garbage.timer_expires &gt; DST_GC_MAX)
+125                                 dst_garbage.timer_expires = DST_GC_MAX;
+126                         dst_garbage.timer_inc += DST_GC_INC;
+127                 } else {
+128                         dst_garbage.timer_inc = DST_GC_INC;
+129                         dst_garbage.timer_expires = DST_GC_MIN;
+130                 }
+131                 expires = dst_garbage.timer_expires;
+132                 /*
+133                  * if the next desired timer is more than 4 seconds in the
+134                  * future then round the timer to whole seconds
+135                  */
+136                 if (expires &gt; 4*HZ)
+137                         expires = round_jiffies_relative(expires);
+138                 schedule_delayed_work(&amp;dst_gc_work, expires);
+139         }
+140
+141         spin_unlock_bh(&amp;dst_garbage.lock);
+142         mutex_unlock(&amp;dst_gc_mutex);
+143 }
+</code></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Dst Ops]]></title>
+    <link href="http://martinbj2008.github.io/blog/2014/02/10/dst-ops/"/>
+    <updated>2014-02-10T15:31:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2014/02/10/dst-ops</id>
+    <content type="html"><![CDATA[<h3>Call trace</h3>
+
+<p>forward a packet.</p>
+
+<pre><code class="c">&gt; ip_rcv_finish
+&gt; &gt; ip_route_input_noref
+&gt; &gt; &gt; ip_route_input_slow  
+&gt; &gt; &gt; &gt; fib_lookup 
+&gt; &gt; &gt; &gt; ip_mkroute_input
+&gt; &gt; dst_input(skb)
+</code></pre>
+
+<pre><code class="c">&gt; &gt; &gt; &gt; ip_mkroute_input
+&gt; &gt; &gt; &gt; &gt; __mkroute_input
+&gt; &gt; &gt; &gt; &gt; &gt; rth = rt_dst_alloc(...)
+&gt; &gt; &gt; &gt; &gt; &gt; skb_dst_set(skb, &amp;rth-&gt;dst);
+</code></pre>
+
+<!-- more -->
+
+
+<p><img src="/images/net/skb_refdst.jpeg" alt="case 3b" />
+<code>c
+1410 static struct rtable *rt_dst_alloc(struct net_device *dev,
+1411                                    bool nopolicy, bool noxfrm, bool will_cache)
+1412 {
+1413         return dst_alloc(&amp;ipv4_dst_ops, dev, 1, DST_OBSOLETE_FORCE_CHK,
+1414                          (will_cache ? 0 : (DST_HOST | DST_NOCACHE)) |
+1415                          (nopolicy ? DST_NOPOLICY : 0) |
+1416                          (noxfrm ? DST_NOXFRM : 0));
+1417 }
+</code></p>
+
+<h3>#</h3>
+
+<pre><code class="c">2711 int __init ip_rt_init(void)
+2712 {
+2713         int rc = 0;
+2714
+2715 #ifdef CONFIG_IP_ROUTE_CLASSID
+2716         ip_rt_acct = __alloc_percpu(256 * sizeof(struct ip_rt_acct), __alignof__(struct ip_rt_acct));
+2717         if (!ip_rt_acct)
+2718                 panic("IP: failed to allocate ip_rt_acct\n");
+2719 #endif
+2720
+2721         ipv4_dst_ops.kmem_cachep =
+2722                 kmem_cache_create("ip_dst_cache", sizeof(struct rtable), 0,
+2723                                   SLAB_HWCACHE_ALIGN|SLAB_PANIC, NULL);
+2724
+2725         ipv4_dst_blackhole_ops.kmem_cachep = ipv4_dst_ops.kmem_cachep;
+</code></pre>
+
+<pre><code class="c">162 void *dst_alloc(struct dst_ops *ops, struct net_device *dev,
+163                 int initial_ref, int initial_obsolete, unsigned short flags)
+164 {
+165         struct dst_entry *dst;
+166
+167         if (ops-&gt;gc &amp;&amp; dst_entries_get_fast(ops) &gt; ops-&gt;gc_thresh) {
+168                 if (ops-&gt;gc(ops))
+169                         return NULL;
+170         }
+171         dst = kmem_cache_alloc(ops-&gt;kmem_cachep, GFP_ATOMIC);
+172         if (!dst)
+173                 return NULL;
+174         dst-&gt;child = NULL;
+175         dst-&gt;dev = dev;
+176         if (dev)
+177                 dev_hold(dev);
+178         dst-&gt;ops = ops;
+179         dst_init_metrics(dst, dst_default_metrics, true);
+180         dst-&gt;expires = 0UL;
+181         dst-&gt;path = dst;
+182         dst-&gt;from = NULL;
+183 #ifdef CONFIG_XFRM
+184         dst-&gt;xfrm = NULL;
+185 #endif
+186         dst-&gt;input = dst_discard;
+187         dst-&gt;output = dst_discard;
+188         dst-&gt;error = 0;
+189         dst-&gt;obsolete = initial_obsolete;
+190         dst-&gt;header_len = 0;
+191         dst-&gt;trailer_len = 0;
+192 #ifdef CONFIG_IP_ROUTE_CLASSID
+193         dst-&gt;tclassid = 0;
+194 #endif
+195         atomic_set(&amp;dst-&gt;__refcnt, initial_ref);
+196         dst-&gt;__use = 0;
+197         dst-&gt;lastuse = jiffies;
+198         dst-&gt;flags = flags;
+199         dst-&gt;pending_confirm = 0;
+200         dst-&gt;next = NULL;
+201         if (!(flags &amp; DST_NOCOUNT))
+202                 dst_entries_add(ops, 1);
+203         return dst;
+204 }
+205 EXPORT_SYMBOL(dst_alloc);
+</code></pre>
+
+<pre><code class="c">1517 /* called in rcu_read_lock() section */
+1518 static int __mkroute_input(struct sk_buff *skb,
+1519                            const struct fib_result *res,
+1520                            struct in_device *in_dev,
+1521                            __be32 daddr, __be32 saddr, u32 tos)
+1522 {
+...
+1583         rth = rt_dst_alloc(out_dev-&gt;dev,
+1584                            IN_DEV_CONF_GET(in_dev, NOPOLICY),
+1585                            IN_DEV_CONF_GET(out_dev, NOXFRM), do_cache);
+1586         if (!rth) {
+1587                 err = -ENOBUFS;
+1588                 goto cleanup;
+1589         }
+1590
+1591         rth-&gt;rt_genid = rt_genid_ipv4(dev_net(rth-&gt;dst.dev));
+1592         rth-&gt;rt_flags = flags;
+1593         rth-&gt;rt_type = res-&gt;type;
+1594         rth-&gt;rt_is_input = 1;
+1595         rth-&gt;rt_iif     = 0;
+1596         rth-&gt;rt_pmtu    = 0;
+1597         rth-&gt;rt_gateway = 0;
+1598         rth-&gt;rt_uses_gateway = 0;
+1599         INIT_LIST_HEAD(&amp;rth-&gt;rt_uncached);
+1600
+1601         rth-&gt;dst.input = ip_forward;
+1602         rth-&gt;dst.output = ip_output;
+1603
+1604         rt_set_nexthop(rth, daddr, res, fnhe, res-&gt;fi, res-&gt;type, itag);
+1605         skb_dst_set(skb, &amp;rth-&gt;dst);
+</code></pre>
+
+<h3>dst functions</h3>
+
+<p><code>__refcnt</code> is the important filed of <code>struct dst_entry</code>.</p>
+
+<h4><code>dst_hold</code></h4>
+
+<pre><code class="c">235 static inline void dst_hold(struct dst_entry *dst)
+236 {
+237         /*
+238          * If your kernel compilation stops here, please check
+239          * __pad_to_align_refcnt declaration in struct dst_entry
+240          */
+241         BUILD_BUG_ON(offsetof(struct dst_entry, __refcnt) &amp; 63);
+242         atomic_inc(&amp;dst-&gt;__refcnt);
+243 }
+</code></pre>
+
+<h4><code>dst_clone</code></h4>
+
+<pre><code class="c">258 static inline struct dst_entry *dst_clone(struct dst_entry *dst)
+259 {
+260         if (dst)
+261                 atomic_inc(&amp;dst-&gt;__refcnt);
+262         return dst;
+263 }
+</code></pre>
+
+<h4><code>skb_dst_copy</code></h4>
+
+<pre><code class="c">287 static inline void skb_dst_copy(struct sk_buff *nskb, const struct sk_buff *oskb)
+288 {
+289         nskb-&gt;_skb_refdst = oskb-&gt;_skb_refdst;
+290         if (!(nskb-&gt;_skb_refdst &amp; SKB_DST_NOREF))
+291                 dst_clone(skb_dst(nskb));
+292 }
+</code></pre>
+
+<h4>dst free</h4>
+
+<p>If nobody is reference the dst, directly free it by <code>dst_destroy</code>,
+else put it into the garbage collection list <code>dst_garbage.list</code>.
+<code>c
+370 static inline void dst_free(struct dst_entry *dst)
+371 {
+372         if (dst-&gt;obsolete &gt; 0)
+373                 return;
+374         if (!atomic_read(&amp;dst-&gt;__refcnt)) {
+375                 dst = dst_destroy(dst);
+376                 if (!dst)
+377                         return;
+378         }
+379         __dst_free(dst);
+380 }
+</code></p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Ipv4 Route Fib Table Lookup]]></title>
+    <link href="http://martinbj2008.github.io/blog/2013/10/10/ipv4-route-fib-table-lookup/"/>
+    <updated>2013-10-10T07:34:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2013/10/10/ipv4-route-fib-table-lookup</id>
+    <content type="html"><![CDATA[<h3>calltrace</h3>
+
+<pre><code class="c"> &gt; ip_rcv_finish
+ &gt; &gt; ip_route_input_noref
+ &gt; &gt; &gt; ip_route_input_slow
+ &gt; &gt; &gt; &gt; fib_lookup
+ &gt; &gt; &gt; &gt; &gt; fib_table_lookup with RT_TABLE_LOCAL
+ &gt; &gt; &gt; &gt; &gt; fib_table_lookup with RT_TABLE_MAIN
+ &gt; &gt; &gt; &gt; ip_mkroute_input
+</code></pre>
+
+<!-- more -->
+
+
+<h3>#</h3>
+
+<pre><code class="c">1397 int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
+1398                      struct fib_result *res, int fib_flags)
+1399 {
+1400         struct trie *t = (struct trie *) tb-&gt;tb_data;
+1401         int ret;
+1402         struct rt_trie_node *n;
+1403         struct tnode *pn;
+1404         unsigned int pos, bits;
+1405         t_key key = ntohl(flp-&gt;daddr);
+1406         unsigned int chopped_off;
+1407         t_key cindex = 0;
+1408         unsigned int current_prefix_length = KEYLENGTH;
+1409         struct tnode *cn;
+1410         t_key pref_mismatch;
+1411 
+1412         rcu_read_lock();
+1413 
+1414         n = rcu_dereference(t-&gt;trie);
+1415         if (!n)
+1416                 goto failed;
+1417 
+1418 #ifdef CONFIG_IP_FIB_TRIE_STATS
+1419         t-&gt;stats.gets++;
+1420 #endif
+1421 
+1422         /* Just a leaf? */
+1423         if (IS_LEAF(n)) {
+1424                 ret = check_leaf(tb, t, (struct leaf *)n, key, flp, res, fib_flags);
+1425                 goto found;
+1426         }
+1427 
+1428         pn = (struct tnode *) n;
+1429         chopped_off = 0;
+1430 
+1431         while (pn) {
+1432                 pos = pn-&gt;pos;
+1433                 bits = pn-&gt;bits;
+1434 
+1435                 if (!chopped_off)
+1436                         cindex = tkey_extract_bits(mask_pfx(key, current_prefix_length),
+1437                                                    pos, bits);
+1438 
+1439                 n = tnode_get_child_rcu(pn, cindex);
+1440 
+1441                 if (n == NULL) {
+1442 #ifdef CONFIG_IP_FIB_TRIE_STATS
+1443                         t-&gt;stats.null_node_hit++;
+1444 #endif
+1445                         goto backtrace;
+1446                 }
+1447 
+1448                 if (IS_LEAF(n)) {
+1449                         ret = check_leaf(tb, t, (struct leaf *)n, key, flp, res, fib_flags);
+1450                         if (ret &gt; 0)
+1451                                 goto backtrace;
+1452                         goto found;
+1453                 }
+1454 
+1455                 cn = (struct tnode *)n;
+1456 
+1457                 /*
+1458                  * It's a tnode, and we can do some extra checks here if we
+1459                  * like, to avoid descending into a dead-end branch.
+1460                  * This tnode is in the parent's child array at index
+1461                  * key[p_pos..p_pos+p_bits] but potentially with some bits
+1462                  * chopped off, so in reality the index may be just a
+1463                  * subprefix, padded with zero at the end.
+1464                  * We can also take a look at any skipped bits in this
+1465                  * tnode - everything up to p_pos is supposed to be ok,
+1466                  * and the non-chopped bits of the index (se previous
+1467                  * paragraph) are also guaranteed ok, but the rest is
+1468                  * considered unknown.
+1469                  *
+1470                  * The skipped bits are key[pos+bits..cn-&gt;pos].
+1471                  */
+1472 
+1473                 /* If current_prefix_length &lt; pos+bits, we are already doing
+1474                  * actual prefix  matching, which means everything from
+1475                  * pos+(bits-chopped_off) onward must be zero along some
+1476                  * branch of this subtree - otherwise there is *no* valid
+1477                  * prefix present. Here we can only check the skipped
+1478                  * bits. Remember, since we have already indexed into the
+1479                  * parent's child array, we know that the bits we chopped of
+1480                  * *are* zero.
+1481                  */
+1482 
+1483                 /* NOTA BENE: Checking only skipped bits
+1484                    for the new node here */
+1485 
+1486                 if (current_prefix_length &lt; pos+bits) {
+1487                         if (tkey_extract_bits(cn-&gt;key, current_prefix_length,
+1488                                                 cn-&gt;pos - current_prefix_length)
+1489                             || !(cn-&gt;child[0]))
+1490                                 goto backtrace;
+1491                 }
+1492 
+1493                 /*
+1494                  * If chopped_off=0, the index is fully validated and we
+1495                  * only need to look at the skipped bits for this, the new,
+1496                  * tnode. What we actually want to do is to find out if
+1497                  * these skipped bits match our key perfectly, or if we will
+1498                  * have to count on finding a matching prefix further down,
+1499                  * because if we do, we would like to have some way of
+1500                  * verifying the existence of such a prefix at this point.
+1501                  */
+1502 
+1503                 /* The only thing we can do at this point is to verify that
+1504                  * any such matching prefix can indeed be a prefix to our
+1505                  * key, and if the bits in the node we are inspecting that
+1506                  * do not match our key are not ZERO, this cannot be true.
+1507                  * Thus, find out where there is a mismatch (before cn-&gt;pos)
+1508                  * and verify that all the mismatching bits are zero in the
+1509                  * new tnode's key.
+1510                  */
+1511 
+1512                 /*
+1513                  * Note: We aren't very concerned about the piece of
+1514                  * the key that precede pn-&gt;pos+pn-&gt;bits, since these
+1515                  * have already been checked. The bits after cn-&gt;pos
+1516                  * aren't checked since these are by definition
+1517                  * "unknown" at this point. Thus, what we want to see
+1518                  * is if we are about to enter the "prefix matching"
+1519                  * state, and in that case verify that the skipped
+1520                  * bits that will prevail throughout this subtree are
+1521                  * zero, as they have to be if we are to find a
+1522                  * matching prefix.
+1523                  */
+1524 
+1525                 pref_mismatch = mask_pfx(cn-&gt;key ^ key, cn-&gt;pos);
+1526 
+1527                 /*
+1528                  * In short: If skipped bits in this node do not match
+1529                  * the search key, enter the "prefix matching"
+1530                  * state.directly.
+1531                  */
+1532                 if (pref_mismatch) {
+1533                         /* fls(x) = __fls(x) + 1 */
+1534                         int mp = KEYLENGTH - __fls(pref_mismatch) - 1;
+1535 
+1536                         if (tkey_extract_bits(cn-&gt;key, mp, cn-&gt;pos - mp) != 0)
+1537                                 goto backtrace;
+1538 
+1539                         if (current_prefix_length &gt;= cn-&gt;pos)
+1540                                 current_prefix_length = mp;
+1541                 }
+1542 
+1543                 pn = (struct tnode *)n; /* Descend */
+1544                 chopped_off = 0;
+1545                 continue;
+1546 
+1547 backtrace:
+1548                 chopped_off++;
+1549 
+1550                 /* As zero don't change the child key (cindex) */
+1551                 while ((chopped_off &lt;= pn-&gt;bits)
+1552                        &amp;&amp; !(cindex &amp; (1&lt;&lt;(chopped_off-1))))
+1553                         chopped_off++;
+1554 
+1555                 /* Decrease current_... with bits chopped off */
+1556                 if (current_prefix_length &gt; pn-&gt;pos + pn-&gt;bits - chopped_off)
+1557                         current_prefix_length = pn-&gt;pos + pn-&gt;bits
+1558                                 - chopped_off;
+1559 
+1560                 /*
+1561                  * Either we do the actual chop off according or if we have
+1562                  * chopped off all bits in this tnode walk up to our parent.
+1563                  */
+1564 
+1565                 if (chopped_off &lt;= pn-&gt;bits) {
+1566                         cindex &amp;= ~(1 &lt;&lt; (chopped_off-1));
+1567                 } else {
+1568                         struct tnode *parent = node_parent_rcu((struct rt_trie_node *) pn);
+1569                         if (!parent)
+1570                                 goto failed;
+1571 
+1572                         /* Get Child's index */
+1573                         cindex = tkey_extract_bits(pn-&gt;key, parent-&gt;pos, parent-&gt;bits);
+1574                         pn = parent;
+1575                         chopped_off = 0;
+1576 
+1577 #ifdef CONFIG_IP_FIB_TRIE_STATS
+1578                         t-&gt;stats.backtrack++;
+1579 #endif
+1580                         goto backtrace;
+1581                 }
+1582         }
+1583 failed:
+1584         ret = 1;
+1585 found:
+1586         rcu_read_unlock();
+1587         return ret;
+1588 }
+1589 EXPORT_SYMBOL_GPL(fib_table_lookup);
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[IPv4 Route Fib Trie Inflate]]></title>
+    <link href="http://martinbj2008.github.io/blog/2013/09/29/ipv4-route-fib-tree-inflate/"/>
+    <updated>2013-09-29T17:16:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2013/09/29/ipv4-route-fib-tree-inflate</id>
+    <content type="html"><![CDATA[<h2>summary</h2>
+
+<p><code>inflate</code> duplicate a new node whose child array is double of orignal node,
+and put original node&rsquo;s child into the new node.</p>
+
+<!-- more -->
+
+
+<pre><code class="c">tn's bits = 2 * oldnode-&gt;bits
+
+`struct tnode *oldnode` is the orignal node.
+`struct tnode *tn` is the new malloc node.
+</code></pre>
+
+<p>Just like the comment in the source, child nodes are divided into 3 kind nodes:</p>
+
+<h3>case 1. child node is a leaf or an internal node with skipped bits.</h3>
+
+<pre><code>节点不变，直接挂到新的节点下面，作为第2*i或者2*i+1个孩子节点。
+</code></pre>
+
+<p><img src="/images/fib_trie/inflate.case1.jpg" alt="case 1" /></p>
+
+<h3>case 2. an internal node with two children.</h3>
+
+<pre><code>释放节点，并将其左右两个孩子挂到新的节点下面，依次作第2*i和2*i+1个孩子节点。
+</code></pre>
+
+<p><img src="/images/fib_trie/inflate.case2.jpg" alt="case 2" /></p>
+
+<h3>case 3. an internal node with more than two children.</h3>
+
+<pre><code>    释放节点，该节点的孩子节点从中间一分为二， 并分别被复制到两个新的节点（
+left和right）。这两个新节点被依次作为新节点的第2*i和2*i+1孩子节点。
+left和right节点要重新经过`resize`函数处理，然后再挂到新节点上。
+</code></pre>
+
+<p><img src="/images/fib_trie/inflate.case3.jpg" alt="case 3" /></p>
+
+<h3>NOTE:</h3>
+
+<ol>
+<li><p>预分配内存：
+     为了防止中间过程内存不足，在函数一开始，就先为第三类节点分配足够的内存(只有第三类情况需要新建节点)。
+     等真正处理的时候，只是先把left和right节点从新节点上取下来，待把中间节点(internal node)的所有子孩子重新分配后，再重新把left和right节点挂到新节点下。</p></li>
+<li><p>skipped bits:
+ a node&rsquo;s <code>pos</code> is bigger than parent nodes&rsquo;s <code>(pos+bits)</code>.</p></li>
+</ol>
+
+
+<!-- more -->
+
+
+<h3>how to divid child nodes</h3>
+
+<pre><code class="c">if (a leaf node) then
+    belong case1.
+else //assert: it must be a internal node).
+     if (it has skipped bits) then
+        belong case1
+     else //assert: pos= parent's(pos+bits)
+        if (two child nodes)
+            belong case2
+        else (more than two child nodes)
+            belong case3
+            (4,8,16... child nodes)
+</code></pre>
+
+<h3><code>inflate</code></h3>
+
+<pre><code class="c">   702  static struct tnode *inflate(struct trie *t, struct tnode *tn)
+   703  {
+   704      struct tnode *oldtnode = tn;
+   705      int olen = tnode_child_length(tn);
+   706      int i;
+   707  
+   708      pr_debug("In inflate\n");
+   709      /*扩展一个新的节点，其孩子节点的个数加倍*/
+   710      tn = tnode_new(oldtnode-&gt;key, oldtnode-&gt;pos, oldtnode-&gt;bits + 1);
+   711  
+   712      if (!tn)
+   713          return ERR_PTR(-ENOMEM);
+   714  
+   715      /*
+   716       * Preallocate and store tnodes before the actual work so we
+   717       * don't get into an inconsistent state if memory allocation
+   718       * fails. In case of failure we return the oldnode and  inflate
+   719       * of tnode is ignored.
+   720       */
+   721  
+   722      for (i = 0; i &lt; olen; i++) {
+   723          struct tnode *inode;
+   724  
+   725          inode = (struct tnode *) tnode_get_child(oldtnode, i);
+   726          if (inode &amp;&amp;
+   727              IS_TNODE(inode) &amp;&amp;
+   728              inode-&gt;pos == oldtnode-&gt;pos + oldtnode-&gt;bits &amp;&amp;
+   729              inode-&gt;bits &gt; 1) {
+   730              struct tnode *left, *right;
+   731              t_key m = ~0U &lt;&lt; (KEYLENGTH - 1) &gt;&gt; inode-&gt;pos;
+   732  
+   733              left = tnode_new(inode-&gt;key&amp;(~m), inode-&gt;pos + 1,
+   734                       inode-&gt;bits - 1);
+   735              if (!left)
+   736                  goto nomem;
+   737  
+   738              right = tnode_new(inode-&gt;key|m, inode-&gt;pos + 1,
+   739                        inode-&gt;bits - 1);
+   740  
+   741              if (!right) {
+   742                  tnode_free(left);
+   743                  goto nomem;
+   744              }
+   745  
+   746              put_child(tn, 2*i, (struct rt_trie_node *) left);
+   747              put_child(tn, 2*i+1, (struct rt_trie_node *) right);
+   748          }
+   749      }
+   750  
+   751      for (i = 0; i &lt; olen; i++) {
+   752          struct tnode *inode;
+   753          struct rt_trie_node *node = tnode_get_child(oldtnode, i);
+   754          struct tnode *left, *right;
+   755          int size, j;
+   756  
+   757          /* An empty child */
+   758          if (node == NULL)
+   759              continue;
+   760  
+   761          /* A leaf or an internal node with skipped bits */
+   762  
+   763          if (IS_LEAF(node) || ((struct tnode *) node)-&gt;pos &gt;
+   764             tn-&gt;pos + tn-&gt;bits - 1) {
+   765              put_child(tn,
+   766                  tkey_extract_bits(node-&gt;key, oldtnode-&gt;pos, oldtnode-&gt;bits + 1),
+   767                  node);
+   768              continue;
+   769          }
+   770  
+   771          /* An internal node with two children */
+   772          inode = (struct tnode *) node;
+   773  
+   774          if (inode-&gt;bits == 1) {
+   775              put_child(tn, 2*i, rtnl_dereference(inode-&gt;child[0]));
+   776              put_child(tn, 2*i+1, rtnl_dereference(inode-&gt;child[1]));
+   777  
+   778              tnode_free_safe(inode);
+   779              continue;
+   780          }
+   781  
+   782          /* An internal node with more than two children */
+   783  
+   784          /* We will replace this node 'inode' with two new
+   785           * ones, 'left' and 'right', each with half of the
+   786           * original children. The two new nodes will have
+   787           * a position one bit further down the key and this
+   788           * means that the "significant" part of their keys
+   789           * (see the discussion near the top of this file)
+   790           * will differ by one bit, which will be "0" in
+   791           * left's key and "1" in right's key. Since we are
+   792           * moving the key position by one step, the bit that
+   793           * we are moving away from - the bit at position
+   794           * (inode-&gt;pos) - is the one that will differ between
+   795           * left and right. So... we synthesize that bit in the
+   796           * two  new keys.
+   797           * The mask 'm' below will be a single "one" bit at
+   798           * the position (inode-&gt;pos)
+   799           */
+   800  
+   801          /* Use the old key, but set the new significant
+   802           *   bit to zero.
+   803           */
+   804  
+   805          left = (struct tnode *) tnode_get_child(tn, 2*i);
+   806          put_child(tn, 2*i, NULL);
+   807  
+   808          BUG_ON(!left);
+   809  
+   810          right = (struct tnode *) tnode_get_child(tn, 2*i+1);
+   811          put_child(tn, 2*i+1, NULL);
+   812  
+   813          BUG_ON(!right);
+   814  
+   815          size = tnode_child_length(left);
+   816          for (j = 0; j &lt; size; j++) {
+   817              put_child(left, j, rtnl_dereference(inode-&gt;child[j]));
+   818              put_child(right, j, rtnl_dereference(inode-&gt;child[j + size]));
+   819          }
+   820          put_child(tn, 2*i, resize(t, left));
+   821          put_child(tn, 2*i+1, resize(t, right));
+   822  
+   823          tnode_free_safe(inode);
+   824      }
+   825      tnode_free_safe(oldtnode);
+   826      return tn;
+   827  nomem:
+   828      tnode_clean_free(tn);
+   829      return ERR_PTR(-ENOMEM);
+   830  }
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[IPv4 Route Fib Tree Rebalance]]></title>
+    <link href="http://martinbj2008.github.io/blog/2013/09/27/ipv4-route-fib-tree-rebalance/"/>
+    <updated>2013-09-27T16:36:00+08:00</updated>
+    <id>http://martinbj2008.github.io/blog/2013/09/27/ipv4-route-fib-tree-rebalance</id>
+    <content type="html"><![CDATA[<h3>call trace</h3>
+
+<p>以插入一条新的路由为例。</p>
+
+<pre><code class="c">&gt; fib_insert_node
+&gt; &gt; trie_rebalance
+&gt; &gt; &gt; while loop
+&gt; &gt; &gt; &gt; resize
+&gt; &gt; &gt; &gt; tnode_put_child_reorg
+&gt; &gt; &gt; &gt; tnode_free_flush
+</code></pre>
+
+<h3><code>trie_rebalance</code></h3>
+
+<pre><code>for_each_node(from current node tn to  fib_trie root)
+    call resize()
+    tnode_put_child_reorg
+
+从当前节点开始一直到根节点，以当前节点作为一个子树，
+反复调用resize, 并通过tnode_put_child_reorg
+更新当前节点的父节点的统计信息。
+
+注： resize可能会更改子树的根节点！
+</code></pre>
+
+<!-- more -->
+
+
+<pre><code class="c"> 986 static void trie_rebalance(struct trie *t, struct tnode *tn)
+ 987 { 
+ 988         int wasfull;               
+ 989         t_key cindex, key;         
+ 990         struct tnode *tp;          
+ 991   
+ 992         key = tn-&gt;key;             
+ 993   
+ 994         while (tn != NULL &amp;&amp; (tp = node_parent((struct rt_trie_node *)tn)) != NULL) {
+ 995                 cindex = tkey_extract_bits(key, tp-&gt;pos, tp-&gt;bits);
+ 996                 wasfull = tnode_full(tp, tnode_get_child(tp, cindex));
+ 997                 tn = (struct tnode *)resize(t, tn);      
+ 998   
+ 999                 tnode_put_child_reorg(tp, cindex,        
+1000                                       (struct rt_trie_node *)tn, wasfull);     
+1001   
+1002                 tp = node_parent((struct rt_trie_node *) tn); 
+1003                 if (!tp)           
+1004                         rcu_assign_pointer(t-&gt;trie, (struct rt_trie_node *)tn);
+1005   
+1006                 tnode_free_flush();
+1007                 if (!tp)           
+1008                         break;     
+1009                 tn = tp;           
+1010         }
+1011   
+1012         /* Handle last (top) tnode */
+1013         if (IS_TNODE(tn))          
+1014                 tn = (struct tnode *)resize(t, tn);      
+1015   
+1016         rcu_assign_pointer(t-&gt;trie, (struct rt_trie_node *)tn);
+1017         tnode_free_flush();        
+1018 } 
+</code></pre>
+
+<h3>rebalance的核心<code>resize</code>函数</h3>
+
+<h4><code>inflate</code>和<code>halve</code></h4>
+
+<p>rebalancede核心是resize函数。在该函数里有两种操作<code>inflate</code>和<code>halve</code>，他们是两种相反的操作。</p>
+
+<ol>
+<li><p><code>inflate</code>是将当前节点的孩子指针数组的元素个数增加一倍， 同时将尽量将各个子孩子的孩子，直接挂接到新的孩子指针数组上。
+ 最终达到减少树的深度。所以要像执行<code>inflate</code>操作，孙子节点必须足够多。</p></li>
+<li><p><code>halve</code>将当前节点的孩子指针数组的元素个数减半。
+ 如果第2i和2i+1个孩子都为空，则压缩后的第i个孩子也为空，
+ 如果第2i和2i+1个孩子只有一个为空，则将不非空的孩子作为压缩后的第i个孩子。
+ 如果第2i和2i+1个孩子都不为空，则插入一个新的中间节点。并将第2i和2i+1个孩子分别作为新的中间节点的左右(第0和第1个)孩子。
+<img src="/images/fib_trie//halve.jpg" alt="case 1" /></p></li>
+</ol>
+
+
+<h4><code>inflate</code>和<code>halve</code>的执行条件</h4>
+
+<p>英文注释说的很清楚了。见下文的翻译。</p>
+
+<h4><code>resize</code></h4>
+
+<pre><code class="c">523 #define MAX_WORK 10
+ 524 static struct rt_trie_node *resize(struct trie *t, struct tnode *tn)
+ 525 {
+ 526         int i;
+ 527         struct tnode *old_tn;
+ 528         int inflate_threshold_use; 
+ 529         int halve_threshold_use;
+ 530         int max_work;
+ 531         
+ 532         if (!tn)
+ 533                 return NULL; 
+ 534   
+ 535         pr_debug("In tnode_resize %p inflate_threshold=%d threshold=%d\n",
+ 536                  tn, inflate_threshold, halve_threshold);
+ 537 
+ 538         /* No children */
+ 539         if (tn-&gt;empty_children == tnode_child_length(tn)) {
+ 540                 tnode_free_safe(tn);
+ 541                 return NULL;
+ 542         }
+ 543         /* One child */
+ 544         if (tn-&gt;empty_children == tnode_child_length(tn) - 1)
+ 545                 goto one_child;    
+ 546         /*
+ 547          * Double as long as the resulting node has a number of
+ 548          * nonempty nodes that are above the threshold.
+ 549          */
+ 550         
+ 551         /*                         
+ 552          * From "Implementing a dynamic compressed trie" by Stefan Nilsson of
+ 553          * the Helsinki University of Technology and Matti Tikkanen of Nokia
+ 554          * Telecommunications, page 6:
+ 555          * "A node is doubled if the ratio of non-empty children to all
+ 556          * children in the *doubled* node is at least 'high'."
+
+        根据 "Implementing a dynamic compressed trie"的第6页
+        "如果想要一个节点的， 其非空子孩子在所有孩子中的比例必须不少于 ‘high'"
+
+ 557          *
+ 558          * 'high' in this instance is the variable 'inflate_threshold'. It
+ 559          * is expressed as a percentage, so we multiply it with
+ 560          * tnode_child_length() and instead of multiplying by 2 (since the
+ 561          * child array will be doubled by inflate()) and multiplying
+ 562          * the left-hand side by 100 (to handle the percentage thing) we
+ 563          * multiply the left-hand side by 50.
+ 564          *
+        'high'在这里有变量'inflate_threshold'表示。它有一个百分比的形式。
+        100 *  tn_noempty_children/(tnode_child_length() *2) = 'inflate_threshold'  
+        避免除法:
+        100 * tn_noempty_children = 'inflate_threshold' * (tnode_child_length() *2)
+        100和2 抵消： 
+        50 * tn_noempty_children = 'inflate_threshold' * tnode_child_length()
+        展开tn_noempty_children
+        50 * (tnode_child_length(tn) - tn-&gt;empty_children) = 'inflate_threshold' * tnode_child_length() 
+
+ 565          * The left-hand side may look a bit weird: tnode_child_length(tn)
+ 566          * - tn-&gt;empty_children is of course the number of non-null children
+ 567          * in the current node. tn-&gt;full_children is the number of "full"
+ 568          * children, that is non-null tnodes with a skip value of 0.
+ 569          * All of those will be doubled in the resulting inflated tnode, so
+ 570          * we just count them one extra time here.
+ 571          *
+        左边看起来有些怪异， 
+        tnode_child_length(tn) - tn-&gt;empty_children 指的是当前节点的非空孩子节点个数。
+        tn-&gt;full_children 是 'full'孩子节点的个数。即那些非空节点并且节点的
+        skip值为0（即 节点的pos == 父节点的pos+父节点的bits）
+        在最终膨胀的节点里，这些节点将会膨胀原来的两倍。
+
+ 572          * A clearer way to write this would be:
+ 573          *
+ 574          * to_be_doubled = tn-&gt;full_children;
+ 575          * not_to_be_doubled = tnode_child_length(tn) - tn-&gt;empty_children -
+ 576          *     tn-&gt;full_children;
+ 577          *
+ 578          * new_child_length = tnode_child_length(tn) * 2;
+ 579          *
+        要膨胀加倍的节点 = tn-&gt;full_children;
+        不需要膨胀的非空节点 = tnode_child_length(tn) - tn-&gt;empty_children - tn-&gt;full_children;
+        新的孩子节点总数 =  tnode_child_length(tn) * 2;
+
+ 580          * new_fill_factor = 100 * (not_to_be_doubled + 2*to_be_doubled) /
+ 581          *      new_child_length;
+ 582          * if (new_fill_factor &gt;= inflate_threshold)
+ 583          *
+ 584          * ...and so on, tho it would mess up the while () loop.
+ 585          *
+        new_fill_factor = 100 * （不需要膨胀的非空节点 + 2 * 要膨胀加倍的节点) / 新的孩子节点总数
+        if (new_fill_factor &gt; inflate_threshold)
+            就变得麻烦了， 我们需要一个while loop来处理。
+
+ 586          * anyway,
+ 587          * 100 * (not_to_be_doubled + 2*to_be_doubled) / new_child_length &gt;=
+ 588          *      inflate_threshold
+ 589          *
+        总之，
+        100 * （不需要膨胀的非空节点 + 2 * 要膨胀加倍的节点) / 新的孩子节点总数 &gt;= inflate_threshold
+
+ 590          * avoid a division:
+ 591          * 100 * (not_to_be_doubled + 2*to_be_doubled) &gt;=
+ 592          *      inflate_threshold * new_child_length
+ 593          *
+
+        避免除法
+        100 * （不需要膨胀的非空节点 + 2 * 要膨胀加倍的节点) &gt;= inflate_threshold * 新的孩子节点总数
+
+ 594          * expand not_to_be_doubled and to_be_doubled, and shorten:
+ 595          * 100 * (tnode_child_length(tn) - tn-&gt;empty_children +
+ 596          *    tn-&gt;full_children) &gt;= inflate_threshold * new_child_length
+ 597          *
+        展开 不需要膨胀的非空节点 与 要膨胀加倍的节点
+        100 *（tnode_child_length(tn) - tn-&gt;empty_children - tn-&gt;full_children + 2 * tn-&gt;full_children)
+            &gt;= inflate_threshold * 新的孩子节点总数
+        ===&gt;
+        100 * (tnode_child_length(tn) - tn-&gt;empty_children + tn-&gt;full_children) &gt;= inflate_threshold * 新的孩子节点总数
+
+ 598          * expand new_child_length:
+ 599          * 100 * (tnode_child_length(tn) - tn-&gt;empty_children +
+ 600          *    tn-&gt;full_children) &gt;=
+ 601          *      inflate_threshold * tnode_child_length(tn) * 2
+ 602          *
+        展开 新的孩子节点总数
+        100 * (tnode_child_length(tn) - tn-&gt;empty_children + tn-&gt;full_children) &gt;= inflate_threshold * tnode_child_length(tn) * 2;
+
+ 603          * shorten again:
+ 604          * 50 * (tn-&gt;full_children + tnode_child_length(tn) -
+ 605          *    tn-&gt;empty_children) &gt;= inflate_threshold *
+ 606          *    tnode_child_length(tn)
+ 607          *
+        再化简(2 被100 抵消):
+                50 * (tnode_child_length(tn) - tn-&gt;empty_children + tn-&gt;full_children) &gt;= inflate_threshold * tnode_child_length(tn);
+        调整位置:
+        50 * (tn-&gt;full_children + tnode_child_length(tn) - tn-&gt;empty_children)
+            &gt;= inflate_threshold * tnode_child_length(tn);
+ 608          */
+ 609 
+ 610         check_tnode(tn);
+ 611 
+ 612         /* Keep root node larger  */
+ 613 
+ 614         if (!node_parent((struct rt_trie_node *)tn)) {
+ 615                 inflate_threshold_use = inflate_threshold_root;
+ 616                 halve_threshold_use = halve_threshold_root;
+ 617         } else {
+ 618                 inflate_threshold_use = inflate_threshold;
+ 619                 halve_threshold_use = halve_threshold;
+ 620         }
+ 621 
+ 622         max_work = MAX_WORK;
+ 623         while ((tn-&gt;full_children &gt; 0 &amp;&amp;  max_work-- &amp;&amp;
+ 624                 50 * (tn-&gt;full_children + tnode_child_length(tn)
+ 625                       - tn-&gt;empty_children)
+ 626                 &gt;= inflate_threshold_use * tnode_child_length(tn))) {
+ 627 
+ 628                 old_tn = tn;
+ 629                 tn = inflate(t, tn);
+ 630 
+ 631                 if (IS_ERR(tn)) {
+ 632                         tn = old_tn;
+ 633 #ifdef CONFIG_IP_FIB_TRIE_STATS
+ 634                         t-&gt;stats.resize_node_skipped++;
+ 635 #endif
+ 636                         break;
+ 637                 }
+ 638         }
+ 639 
+ 640         check_tnode(tn);
+ 641 
+ 642         /* Return if at least one inflate is run */
+ 643         if (max_work != MAX_WORK)
+ 644                 return (struct rt_trie_node *) tn;
+ 645 
+ 646         /*
+ 647          * Halve as long as the number of empty children in this
+ 648          * node is above threshold.
+ 649          */
+ 650 
+ 651         max_work = MAX_WORK;
+ 652         while (tn-&gt;bits &gt; 1 &amp;&amp;  max_work-- &amp;&amp;
+ 653                100 * (tnode_child_length(tn) - tn-&gt;empty_children) &lt;
+ 654                halve_threshold_use * tnode_child_length(tn)) {
+ 654                halve_threshold_use * tnode_child_length(tn)) {
+ 655 
+ 656                 old_tn = tn;
+ 657                 tn = halve(t, tn);
+ 658                 if (IS_ERR(tn)) {
+ 659                         tn = old_tn;
+ 660 #ifdef CONFIG_IP_FIB_TRIE_STATS
+ 661                         t-&gt;stats.resize_node_skipped++;
+ 662 #endif
+ 663                         break;
+ 664                 }
+ 665         }
+ 666 
+ 667 
+ 668         /* Only one child remains */
+ 669         if (tn-&gt;empty_children == tnode_child_length(tn) - 1) {
+ 670 one_child:
+ 671                 for (i = 0; i &lt; tnode_child_length(tn); i++) {
+ 672                         struct rt_trie_node *n;
+ 673 
+ 674                         n = rtnl_dereference(tn-&gt;child[i]);
+ 675                         if (!n)
+ 676                                 continue;
+ 677 
+ 678                         /* compress one level */
+ 679 
+ 680                         node_set_parent(n, NULL);
+ 681                         tnode_free_safe(tn);
+ 682                         return n;
+ 683                 }
+ 684         }
+ 685         return (struct rt_trie_node *) tn;
+ 686 }
+ 687 
+</code></pre>
+
+<h3><code>tnode_put_child_reorg</code></h3>
+
+<p>英文注释说的很清楚了，主要有两个工作：</p>
+
+<ol>
+<li>更新父节点<code>tn</code> 的<code>full_children</code> 和 <code>empty_children</code>的统计值。</li>
+<li>设置<code>tn</code>节点的第<code>i</code>个子孩子为<code>n</code>。</li>
+</ol>
+
+
+<pre><code class="c"> /*
+  * Add a child at position i overwriting the old value.
+  * Update the value of full_children and empty_children.
+  */
+
+static void tnode_put_child_reorg(struct tnode *tn, int i, struct rt_trie_node *n,
+                                  int wasfull)
+{
+        struct rt_trie_node *chi = rtnl_dereference(tn-&gt;child[i]);
+        int isfull;
+
+        BUG_ON(i &gt;= 1&lt;&lt;tn-&gt;bits);
+
+        /* update emptyChildren */
+        if (n == NULL &amp;&amp; chi != NULL)
+                tn-&gt;empty_children++;
+        else if (n != NULL &amp;&amp; chi == NULL)
+                tn-&gt;empty_children--;
+
+        /* update fullChildren */
+        if (wasfull == -1)
+                wasfull = tnode_full(tn, chi);
+
+        isfull = tnode_full(tn, n);
+        if (wasfull &amp;&amp; !isfull)
+                tn-&gt;full_children--;
+        else if (!wasfull &amp;&amp; isfull)
+                tn-&gt;full_children++;
+
+        if (n)
+                node_set_parent(n, tn);
+
+        rcu_assign_pointer(tn-&gt;child[i], n);
+}
+</code></pre>
+]]></content>
+  </entry>
+  
+</feed>

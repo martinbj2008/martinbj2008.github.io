@@ -1,0 +1,412 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Xfrm in Kernel - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="global var and structure: static DEFINE_PER_NET(struct hlist_head *, xfrm_state_byspi); static struct xfrm_policy_afinfo *xfrm_policy_afinfo[NPROTO &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2009/05/13/xfrm-kernel/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Xfrm in Kernel</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2009-05-13T00:00:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2009</span></span> <span class='time'>12:00 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h3>global var and structure:</h3>
+
+<p><code>static DEFINE_PER_NET(struct hlist_head *, xfrm_state_byspi);</code>   <br/>
+<code>static struct xfrm_policy_afinfo *xfrm_policy_afinfo[NPROTO];</code>   <br/>
+xfrm_policy_afinfo 定义一个大的数组，每一个元素对应一个地址族，如ipv4（AF_INET），ipv6(AF_INET6).</p>
+
+<!-- more -->
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">struct</span> <span class="n">xfrm_policy_afinfo</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kt">unsigned</span> <span class="kt">short</span>        <span class="n">family</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">rwlock_t</span>        <span class="n">lock</span><span class="p">;</span>
+</span><span class='line'>    <span class="k">struct</span> <span class="n">xfrm_type_map</span>    <span class="o">*</span><span class="n">type_map</span><span class="p">;</span>
+</span><span class='line'>    <span class="k">struct</span> <span class="n">dst_ops</span>        <span class="o">*</span><span class="n">dst_ops</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">void</span>            <span class="p">(</span><span class="o">*</span><span class="n">garbage_collect</span><span class="p">)(</span><span class="kt">net_t</span> <span class="n">net</span><span class="p">);</span>
+</span><span class='line'>    <span class="kt">int</span>            <span class="p">(</span><span class="o">*</span><span class="n">dst_lookup</span><span class="p">)(</span><span class="k">struct</span> <span class="n">xfrm_dst</span> <span class="o">**</span><span class="n">dst</span><span class="p">,</span> <span class="k">struct</span> <span class="n">flowi</span> <span class="o">*</span><span class="n">fl</span><span class="p">);</span>
+</span><span class='line'>    <span class="kt">int</span>            <span class="p">(</span><span class="o">*</span><span class="n">get_saddr</span><span class="p">)(</span><span class="kt">net_t</span> <span class="n">net</span><span class="p">,</span> <span class="kt">xfrm_address_t</span> <span class="o">*</span><span class="n">saddr</span><span class="p">,</span> <span class="kt">xfrm_address_t</span> <span class="o">*</span><span class="n">daddr</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">struct</span> <span class="n">dst_entry</span>    <span class="o">*</span><span class="p">(</span><span class="o">*</span><span class="n">find_bundle</span><span class="p">)(</span><span class="k">struct</span> <span class="n">flowi</span> <span class="o">*</span><span class="n">fl</span><span class="p">,</span> <span class="k">struct</span> <span class="n">xfrm_policy</span> <span class="o">*</span><span class="n">policy</span><span class="p">);</span>
+</span><span class='line'>    <span class="kt">int</span>            <span class="p">(</span><span class="o">*</span><span class="n">bundle_create</span><span class="p">)(</span><span class="k">struct</span> <span class="n">xfrm_policy</span> <span class="o">*</span><span class="n">policy</span><span class="p">,</span>
+</span><span class='line'>                        <span class="k">struct</span> <span class="n">xfrm_state</span> <span class="o">**</span><span class="n">xfrm</span><span class="p">,</span>
+</span><span class='line'>                        <span class="kt">int</span> <span class="n">nx</span><span class="p">,</span>
+</span><span class='line'>                        <span class="k">struct</span> <span class="n">flowi</span> <span class="o">*</span><span class="n">fl</span><span class="p">,</span>
+</span><span class='line'>                        <span class="k">struct</span> <span class="n">dst_entry</span> <span class="o">**</span><span class="n">dst_p</span><span class="p">);</span>
+</span><span class='line'>    <span class="kt">void</span>            <span class="p">(</span><span class="o">*</span><span class="n">decode_session</span><span class="p">)(</span><span class="k">struct</span> <span class="n">sk_buff</span> <span class="o">*</span><span class="n">skb</span><span class="p">,</span>
+</span><span class='line'>                        <span class="k">struct</span> <span class="n">flowi</span> <span class="o">*</span><span class="n">fl</span><span class="p">);</span>
+</span><span class='line'><span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>在struct xfrm_policy_afinfo中有一个元素</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">struct</span> <span class="n">xfrm_type_map</span>    <span class="o">*</span><span class="n">type_map</span><span class="p">;</span>
+</span><span class='line'><span class="k">struct</span> <span class="n">xfrm_type_map</span> <span class="p">{</span>
+</span><span class='line'><span class="kt">rwlock_t</span>        <span class="n">lock</span><span class="p">;</span>
+</span><span class='line'><span class="k">struct</span> <span class="n">xfrm_type</span>    <span class="o">*</span><span class="n">map</span><span class="p">[</span><span class="mi">256</span><span class="p">];</span>
+</span><span class='line'><span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>map 也是一个指针数组，其每个元素对应一个应用层的协议如 ESP(IPPROTO_ESP), AH, UDP(IPPROTO_UDP),TCP等。</p>
+
+<p>两个相关的注册函数：</p>
+
+<p>关于xfrm_policy_afinfo</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="kt">int</span> <span class="nf">xfrm_policy_register_afinfo</span><span class="p">(</span><span class="k">struct</span> <span class="n">xfrm_policy_afinfo</span> <span class="o">*</span><span class="n">afinfo</span><span class="p">)</span><span class="err">；</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">static</span> <span class="kt">void</span> <span class="n">__init</span> <span class="n">xfrm4_policy_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="n">xfrm_policy_register_afinfo</span><span class="p">(</span><span class="o">&amp;</span><span class="n">xfrm4_policy_afinfo</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span><span class='line'>
+</span><span class='line'><span class="k">static</span> <span class="kt">void</span> <span class="n">__init</span> <span class="nf">xfrm6_policy_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="n">xfrm_policy_register_afinfo</span><span class="p">(</span><span class="o">&amp;</span><span class="n">xfrm6_policy_afinfo</span><span class="p">);</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="kt">int</span> <span class="nf">xfrm_policy_register_afinfo</span><span class="p">(</span><span class="k">struct</span> <span class="n">xfrm_policy_afinfo</span> <span class="o">*</span><span class="n">afinfo</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">err</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="n">afinfo</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">))</span>
+</span><span class='line'>        <span class="k">return</span> <span class="o">-</span><span class="n">EINVAL</span><span class="p">;</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="n">afinfo</span><span class="o">-&gt;</span><span class="n">family</span> <span class="o">&gt;=</span> <span class="n">NPROTO</span><span class="p">))</span>
+</span><span class='line'>        <span class="k">return</span> <span class="o">-</span><span class="n">EAFNOSUPPORT</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">write_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">xfrm_policy_afinfo_lock</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="n">xfrm_policy_afinfo</span><span class="p">[</span><span class="n">afinfo</span><span class="o">-&gt;</span><span class="n">family</span><span class="p">]</span> <span class="o">!=</span> <span class="nb">NULL</span><span class="p">))</span>
+</span><span class='line'>        <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">ENOBUFS</span><span class="p">;</span>
+</span><span class='line'>    <span class="k">else</span> <span class="p">{</span>
+</span><span class='line'>        <span class="k">struct</span> <span class="n">dst_ops</span> <span class="o">*</span><span class="n">dst_ops</span> <span class="o">=</span> <span class="n">afinfo</span><span class="o">-&gt;</span><span class="n">dst_ops</span><span class="p">;</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">likely</span><span class="p">(</span><span class="n">dst_ops</span><span class="o">-&gt;</span><span class="n">kmem_cachep</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">))</span>
+</span><span class='line'>            <span class="n">dst_ops</span><span class="o">-&gt;</span><span class="n">kmem_cachep</span> <span class="o">=</span> <span class="n">xfrm_dst_cache</span><span class="p">;</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">likely</span><span class="p">(</span><span class="n">dst_ops</span><span class="o">-&gt;</span><span class="n">check</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">))</span>
+</span><span class='line'>            <span class="n">dst_ops</span><span class="o">-&gt;</span><span class="n">check</span> <span class="o">=</span> <span class="n">xfrm_dst_check</span><span class="p">;</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">likely</span><span class="p">(</span><span class="n">dst_ops</span><span class="o">-&gt;</span><span class="n">negative_advice</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">))</span>
+</span><span class='line'>            <span class="n">dst_ops</span><span class="o">-&gt;</span><span class="n">negative_advice</span> <span class="o">=</span> <span class="n">xfrm_negative_advice</span><span class="p">;</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">likely</span><span class="p">(</span><span class="n">dst_ops</span><span class="o">-&gt;</span><span class="n">link_failure</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">))</span>
+</span><span class='line'>            <span class="n">dst_ops</span><span class="o">-&gt;</span><span class="n">link_failure</span> <span class="o">=</span> <span class="n">xfrm_link_failure</span><span class="p">;</span>
+</span><span class='line'>        <span class="k">if</span> <span class="p">(</span><span class="n">likely</span><span class="p">(</span><span class="n">afinfo</span><span class="o">-&gt;</span><span class="n">garbage_collect</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">))</span>
+</span><span class='line'>            <span class="n">afinfo</span><span class="o">-&gt;</span><span class="n">garbage_collect</span> <span class="o">=</span> <span class="n">__xfrm_garbage_collect</span><span class="p">;</span>
+</span><span class='line'>        <span class="n">xfrm_policy_afinfo</span><span class="p">[</span><span class="n">afinfo</span><span class="o">-&gt;</span><span class="n">family</span><span class="p">]</span> <span class="o">=</span> <span class="n">afinfo</span><span class="p">;</span>
+</span><span class='line'>    <span class="p">}</span>
+</span><span class='line'>    <span class="n">write_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">xfrm_policy_afinfo_lock</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">return</span> <span class="n">err</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="kt">int</span> <span class="nf">xfrm_register_type</span><span class="p">(</span><span class="k">struct</span> <span class="n">xfrm_type</span> <span class="o">*</span><span class="n">type</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">short</span> <span class="n">family</span><span class="p">)</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="k">struct</span> <span class="n">xfrm_policy_afinfo</span> <span class="o">*</span><span class="n">afinfo</span> <span class="o">=</span> <span class="n">xfrm_policy_get_afinfo</span><span class="p">(</span><span class="n">family</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">struct</span> <span class="n">xfrm_type_map</span> <span class="o">*</span><span class="n">typemap</span><span class="p">;</span>
+</span><span class='line'>    <span class="kt">int</span> <span class="n">err</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="n">afinfo</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">))</span>
+</span><span class='line'>        <span class="k">return</span> <span class="o">-</span><span class="n">EAFNOSUPPORT</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">typemap</span> <span class="o">=</span> <span class="n">afinfo</span><span class="o">-&gt;</span><span class="n">type_map</span><span class="p">;</span>
+</span><span class='line'>
+</span><span class='line'>    <span class="n">write_lock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">typemap</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">if</span> <span class="p">(</span><span class="n">likely</span><span class="p">(</span><span class="n">typemap</span><span class="o">-&gt;</span><span class="n">map</span><span class="p">[</span><span class="n">type</span><span class="o">-&gt;</span><span class="n">proto</span><span class="p">]</span> <span class="o">==</span> <span class="nb">NULL</span><span class="p">))</span>
+</span><span class='line'>        <span class="n">typemap</span><span class="o">-&gt;</span><span class="n">map</span><span class="p">[</span><span class="n">type</span><span class="o">-&gt;</span><span class="n">proto</span><span class="p">]</span> <span class="o">=</span> <span class="n">type</span><span class="p">;</span>
+</span><span class='line'>    <span class="k">else</span>
+</span><span class='line'>        <span class="n">err</span> <span class="o">=</span> <span class="o">-</span><span class="n">EEXIST</span><span class="p">;</span>
+</span><span class='line'>    <span class="n">write_unlock</span><span class="p">(</span><span class="o">&amp;</span><span class="n">typemap</span><span class="o">-&gt;</span><span class="n">lock</span><span class="p">);</span>
+</span><span class='line'>    <span class="n">xfrm_policy_put_afinfo</span><span class="p">(</span><span class="n">afinfo</span><span class="p">);</span>
+</span><span class='line'>    <span class="k">return</span> <span class="n">err</span><span class="p">;</span>
+</span><span class='line'><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2009-05-13T00:00:00+08:00'><span class='date'><span class='date-month'>May</span> <span class='date-day'>13</span><span class='date-suffix'>th</span>, <span class='date-year'>2009</span></span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/xfrm/'>xfrm</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2007/12/11/usb-storage/" title="Previous Post: 嵌入Linux下的usb storage的支持">&laquo; 嵌入Linux下的usb storage的支持</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2010/06/02/pfkey-in-kernel/" title="Next Post: pf_key module summary">pf_key module summary &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

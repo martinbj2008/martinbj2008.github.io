@@ -1,0 +1,501 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Mmap in Kernel - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="call trace 1
+2
+3
+4
+5
+6
+7
+&gt; vmalloc
+&gt; &gt; __vmalloc_node_flags
+&gt; &gt; &gt; __vmalloc_node
+&gt; &gt; &gt; &gt; __vmalloc_node_range
+&gt; &gt &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2013/01/23/mmap-in-kernel/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Mmap in Kernel</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-01-23T00:00:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>23</span><span class='date-suffix'>rd</span>, <span class='date-year'>2013</span></span> <span class='time'>12:00 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2>call trace</h2>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="o">&gt;</span> <span class="n">vmalloc</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">__vmalloc_node_flags</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">__vmalloc_node</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">__vmalloc_node_range</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">get_vm_area_node</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">vmalloc_area_node</span>
+</span><span class='line'><span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="o">&gt;</span> <span class="n">insert_vmalloc_vmlist</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<!-- more -->
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1731</span> <span class="kt">void</span> <span class="o">*</span><span class="nf">vmalloc</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">size</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1732</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1733</span>         <span class="k">return</span> <span class="n">__vmalloc_node_flags</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">GFP_KERNEL</span> <span class="o">|</span> <span class="n">__GFP_HIGHMEM</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1734</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1715</span> <span class="k">static</span> <span class="kr">inline</span> <span class="kt">void</span> <span class="o">*</span><span class="nf">__vmalloc_node_flags</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">size</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1716</span>                                         <span class="kt">int</span> <span class="n">node</span><span class="p">,</span> <span class="kt">gfp_t</span> <span class="n">flags</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1717</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1718</span>         <span class="k">return</span> <span class="n">__vmalloc_node</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">flags</span><span class="p">,</span> <span class="n">PAGE_KERNEL</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1719</span>                                         <span class="n">node</span><span class="p">,</span> <span class="n">__builtin_return_address</span><span class="p">(</span><span class="mi">0</span><span class="p">));</span>
+</span><span class='line'><span class="mi">1720</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1700</span> <span class="k">static</span> <span class="kt">void</span> <span class="o">*</span><span class="nf">__vmalloc_node</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">size</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">align</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1701</span>                             <span class="kt">gfp_t</span> <span class="n">gfp_mask</span><span class="p">,</span> <span class="kt">pgprot_t</span> <span class="n">prot</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1702</span>                             <span class="kt">int</span> <span class="n">node</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">caller</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1703</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1704</span>         <span class="k">return</span> <span class="n">__vmalloc_node_range</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="n">align</span><span class="p">,</span> <span class="n">VMALLOC_START</span><span class="p">,</span> <span class="n">VMALLOC_END</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1705</span>                                 <span class="n">gfp_mask</span><span class="p">,</span> <span class="n">prot</span><span class="p">,</span> <span class="n">node</span><span class="p">,</span> <span class="n">caller</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1706</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>相当于调用</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="n">__vmalloc_node_range</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">VMALLOC_START</span><span class="p">,</span> <span class="n">VMALLOC_END</span><span class="p">,</span> <span class="n">GFP_KERNEL</span> <span class="o">|</span> <span class="n">__GFP_HIGHMEM</span><span class="p">,</span><span class="n">PAGE_KERNEL</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">__builtin_return_address</span><span class="p">(</span><span class="mi">0</span><span class="p">));</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1644</span> <span class="kt">void</span> <span class="o">*</span><span class="n">__vmalloc_node_range</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">size</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">align</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1645</span>                         <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">start</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">end</span><span class="p">,</span> <span class="kt">gfp_t</span> <span class="n">gfp_mask</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1646</span>                         <span class="kt">pgprot_t</span> <span class="n">prot</span><span class="p">,</span> <span class="kt">int</span> <span class="n">node</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">caller</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1647</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1648</span>         <span class="k">struct</span> <span class="n">vm_struct</span> <span class="o">*</span><span class="n">area</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1649</span>         <span class="kt">void</span> <span class="o">*</span><span class="n">addr</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1650</span>         <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">real_size</span> <span class="o">=</span> <span class="n">size</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1651</span>
+</span><span class='line'><span class="mi">1652</span>         <span class="n">size</span> <span class="o">=</span> <span class="n">PAGE_ALIGN</span><span class="p">(</span><span class="n">size</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1653</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">size</span> <span class="o">||</span> <span class="p">(</span><span class="n">size</span> <span class="o">&gt;&gt;</span> <span class="n">PAGE_SHIFT</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">totalram_pages</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1654</span>                 <span class="k">goto</span> <span class="n">fail</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1655</span>
+</span><span class='line'><span class="mi">1656</span>         <span class="n">area</span> <span class="o">=</span> <span class="n">__get_vm_area_node</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="n">align</span><span class="p">,</span> <span class="n">VM_ALLOC</span> <span class="o">|</span> <span class="n">VM_UNLIST</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1657</span>                                   <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">node</span><span class="p">,</span> <span class="n">gfp_mask</span><span class="p">,</span> <span class="n">caller</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1658</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">area</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1659</span>                 <span class="k">goto</span> <span class="n">fail</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1660</span>
+</span><span class='line'><span class="mi">1661</span>         <span class="n">addr</span> <span class="o">=</span> <span class="n">__vmalloc_area_node</span><span class="p">(</span><span class="n">area</span><span class="p">,</span> <span class="n">gfp_mask</span><span class="p">,</span> <span class="n">prot</span><span class="p">,</span> <span class="n">node</span><span class="p">,</span> <span class="n">caller</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1662</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">addr</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1663</span>                 <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1664</span>
+</span><span class='line'><span class="mi">1665</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">1666          * In this function, newly allocated vm_struct is not added</span>
+</span><span class='line'><span class="cm">1667          * to vmlist at __get_vm_area_node(). so, it is added here.</span>
+</span><span class='line'><span class="cm">1668          */</span>
+</span><span class='line'><span class="mi">1669</span>         <span class="n">insert_vmalloc_vmlist</span><span class="p">(</span><span class="n">area</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1670</span>
+</span><span class='line'><span class="mi">1671</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">1672          * A ref_count = 3 is needed because the vm_struct and vmap_area</span>
+</span><span class='line'><span class="cm">1673          * structures allocated in the __get_vm_area_node() function contain</span>
+</span><span class='line'><span class="cm">1674          * references to the virtual address of the vmalloc&#39;ed block.</span>
+</span><span class='line'><span class="cm">1675          */</span>
+</span><span class='line'><span class="mi">1676</span>         <span class="n">kmemleak_alloc</span><span class="p">(</span><span class="n">addr</span><span class="p">,</span> <span class="n">real_size</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="n">gfp_mask</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1677</span>
+</span><span class='line'><span class="mi">1678</span>         <span class="k">return</span> <span class="n">addr</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1679</span>
+</span><span class='line'><span class="mi">1680</span> <span class="nl">fail</span><span class="p">:</span>
+</span><span class='line'><span class="mi">1681</span>         <span class="n">warn_alloc_failed</span><span class="p">(</span><span class="n">gfp_mask</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1682</span>                           <span class="s">&quot;vmalloc: allocation failure: %lu bytes</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1683</span>                           <span class="n">real_size</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1684</span>         <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1685</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">1315</span> <span class="k">static</span> <span class="k">struct</span> <span class="n">vm_struct</span> <span class="o">*</span><span class="n">__get_vm_area_node</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">size</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1316</span>                 <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">align</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">flags</span><span class="p">,</span> <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">start</span><span class="p">,</span>
+</span><span class='line'><span class="mi">1317</span>                 <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">end</span><span class="p">,</span> <span class="kt">int</span> <span class="n">node</span><span class="p">,</span> <span class="kt">gfp_t</span> <span class="n">gfp_mask</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="n">caller</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1318</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1319</span>         <span class="k">struct</span> <span class="n">vmap_area</span> <span class="o">*</span><span class="n">va</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1320</span>         <span class="k">struct</span> <span class="n">vm_struct</span> <span class="o">*</span><span class="n">area</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1321</span>
+</span><span class='line'><span class="mi">1322</span>         <span class="nf">BUG_ON</span><span class="p">(</span><span class="n">in_interrupt</span><span class="p">());</span>
+</span><span class='line'><span class="mi">1323</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">VM_IOREMAP</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1324</span>                 <span class="kt">int</span> <span class="n">bit</span> <span class="o">=</span> <span class="n">fls</span><span class="p">(</span><span class="n">size</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1325</span>
+</span><span class='line'><span class="mi">1326</span>                 <span class="k">if</span> <span class="p">(</span><span class="n">bit</span> <span class="o">&gt;</span> <span class="n">IOREMAP_MAX_ORDER</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1327</span>                         <span class="n">bit</span> <span class="o">=</span> <span class="n">IOREMAP_MAX_ORDER</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1328</span>                 <span class="k">else</span> <span class="k">if</span> <span class="p">(</span><span class="n">bit</span> <span class="o">&lt;</span> <span class="n">PAGE_SHIFT</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1329</span>                         <span class="n">bit</span> <span class="o">=</span> <span class="n">PAGE_SHIFT</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1330</span>
+</span><span class='line'><span class="mi">1331</span>                 <span class="n">align</span> <span class="o">=</span> <span class="mi">1ul</span> <span class="o">&lt;&lt;</span> <span class="n">bit</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1332</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1333</span>
+</span><span class='line'><span class="mi">1334</span>         <span class="n">size</span> <span class="o">=</span> <span class="n">PAGE_ALIGN</span><span class="p">(</span><span class="n">size</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1335</span>         <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="o">!</span><span class="n">size</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1336</span>                 <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1337</span>
+</span><span class='line'><span class="mi">1338</span>         <span class="n">area</span> <span class="o">=</span> <span class="n">kzalloc_node</span><span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="o">*</span><span class="n">area</span><span class="p">),</span> <span class="n">gfp_mask</span> <span class="o">&amp;</span> <span class="n">GFP_RECLAIM_MASK</span><span class="p">,</span> <span class="n">node</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1339</span>         <span class="k">if</span> <span class="p">(</span><span class="n">unlikely</span><span class="p">(</span><span class="o">!</span><span class="n">area</span><span class="p">))</span>
+</span><span class='line'><span class="mi">1340</span>                 <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1341</span>
+</span><span class='line'><span class="mi">1342</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">1343          * We always allocate a guard page.</span>
+</span><span class='line'><span class="cm">1344          */</span>
+</span><span class='line'><span class="mi">1345</span>         <span class="n">size</span> <span class="o">+=</span> <span class="n">PAGE_SIZE</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1346</span>
+</span><span class='line'><span class="mi">1347</span>         <span class="n">va</span> <span class="o">=</span> <span class="n">alloc_vmap_area</span><span class="p">(</span><span class="n">size</span><span class="p">,</span> <span class="n">align</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">node</span><span class="p">,</span> <span class="n">gfp_mask</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1348</span>         <span class="nf">if</span> <span class="p">(</span><span class="n">IS_ERR</span><span class="p">(</span><span class="n">va</span><span class="p">))</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">1349</span>                 <span class="n">kfree</span><span class="p">(</span><span class="n">area</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1350</span>                 <span class="k">return</span> <span class="nb">NULL</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1351</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">1352</span>
+</span><span class='line'><span class="mi">1353</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">1354          * When this function is called from __vmalloc_node_range,</span>
+</span><span class='line'><span class="cm">1355          * we do not add vm_struct to vmlist here to avoid</span>
+</span><span class='line'><span class="cm">1356          * accessing uninitialized members of vm_struct such as</span>
+</span><span class='line'><span class="cm">1357          * pages and nr_pages fields. They will be set later.</span>
+</span><span class='line'><span class="cm">1358          * To distinguish it from others, we use a VM_UNLIST flag.</span>
+</span><span class='line'><span class="cm">1359          */</span>
+</span><span class='line'><span class="mi">1360</span>         <span class="k">if</span> <span class="p">(</span><span class="n">flags</span> <span class="o">&amp;</span> <span class="n">VM_UNLIST</span><span class="p">)</span>
+</span><span class='line'><span class="mi">1361</span>                 <span class="n">setup_vmalloc_vm</span><span class="p">(</span><span class="n">area</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="n">flags</span><span class="p">,</span> <span class="n">caller</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1362</span>         <span class="k">else</span>
+</span><span class='line'><span class="mi">1363</span>                 <span class="nf">insert_vmalloc_vm</span><span class="p">(</span><span class="n">area</span><span class="p">,</span> <span class="n">va</span><span class="p">,</span> <span class="n">flags</span><span class="p">,</span> <span class="n">caller</span><span class="p">);</span>
+</span><span class='line'><span class="mi">1364</span>
+</span><span class='line'><span class="mi">1365</span>         <span class="k">return</span> <span class="n">area</span><span class="p">;</span>
+</span><span class='line'><span class="mi">1366</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-01-23T00:00:00+08:00'><span class='date'><span class='date-month'>Jan</span> <span class='date-day'>23</span><span class='date-suffix'>rd</span>, <span class='date-year'>2013</span></span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/memory/'>memory</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2012/11/10/get-delete-xfrm-policy/" title="Previous Post: Get or Delete Xfrm Policy">&laquo; Get or Delete Xfrm Policy</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/02/12/html2markdown-in-ubuntu/" title="Next Post: Install html2markdown in Ubuntu(12.10)">Install html2markdown in Ubuntu(12.10) &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

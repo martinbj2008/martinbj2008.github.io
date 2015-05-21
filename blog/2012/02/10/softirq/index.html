@@ -1,0 +1,501 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Softirq - My Octopress Blog</title>
+  <meta name="author" content="Your Name">
+
+  
+  <meta name="description" content="为什么需要软中断 引入软中断的目的是为了中断要尽快返回。 把一些不紧急的工作放到下半部里执行。 软中断是下半部的一种实现方式。其他的还有tasklet和workqueue。 软中断特点 软中断特点是可以同时运行在CPU上，而tasklet则是整个系统中只有一个。 软中断和tasklet都不允许睡眠 &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://martinbj2008.github.io/blog/2012/02/10/softirq/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="My Octopress Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+<!-- link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css" -->
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">My Octopress Blog</a></h1>
+  
+    <h2>A blogging framework for hackers.</h2>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="martinbj2008.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Softirq</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-10T00:00:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2012</span></span> <span class='time'>12:00 am</span></time>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2>为什么需要软中断</h2>
+
+<p>  引入软中断的目的是为了中断要尽快返回。 把一些不紧急的工作放到下半部里执行。 软中断是下半部的一种实现方式。其他的还有tasklet和workqueue。</p>
+
+<h2>软中断特点</h2>
+
+<p>  软中断特点是可以同时运行在CPU上，而tasklet则是整个系统中只有一个。 软中断和tasklet都不允许睡眠，因此必须避免执行引发睡眠的操作。 workqueue则允许睡眠。</p>
+
+<!-- more -->
+
+
+<h2>软中断原理</h2>
+
+<h3>原理</h3>
+
+<pre><code>每个cpu有一标志位，硬中断产生时候就将这个标志位置1， 之后硬中断就退出。 CPU调度后，执行软中断，以网卡收报为例。软中断将对应的包处理完成， 然后清除相应的标志位。
+</code></pre>
+
+<h3>潜在的问题：</h3>
+
+<pre><code>在cpuA上触发了硬中断，那么就会在cpuA执行软中断。 如果一个网卡接受到大量的数据包，那么就会导致该CPU利用率非常高， 而其他的cpux却相对比较空闲。
+</code></pre>
+
+<h3>应对方法</h3>
+
+<pre><code>1. 软件实现
+    goolge patch：将收到的包按流hash，然后分配到不同的cpuB的软中断队列里，并激发cpuB的软中断。
+
+2. 硬件实现
+    高端的网卡： 如ixgbe 网卡， xlr/xlp的nae等专用平台：网卡（或nae）本身通过参数设置，可以让不同的数据包分别在不同的cpu上触发硬中断上。从而达到将网络包交给到个cpu处理，避免单个cpu过于繁忙。
+</code></pre>
+
+<h2>软中断在内核的实现</h2>
+
+<p>软中断的数据结构:</p>
+
+<h3>软中断的类型</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">enum</span>
+</span><span class='line'><span class="p">{</span>
+</span><span class='line'>    <span class="n">HI_SOFTIRQ</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+</span><span class='line'>    <span class="n">TIMER_SOFTIRQ</span><span class="p">,</span>
+</span><span class='line'>    <span class="n">NET_TX_SOFTIRQ</span><span class="p">,</span>
+</span><span class='line'>    <span class="n">NET_RX_SOFTIRQ</span><span class="p">,</span>
+</span><span class='line'>    <span class="n">BLOCK_SOFTIRQ</span><span class="p">,</span>
+</span><span class='line'>    <span class="n">BLOCK_IOPOLL_SOFTIRQ</span><span class="p">,</span>
+</span><span class='line'>    <span class="n">TASKLET_SOFTIRQ</span><span class="p">,</span>
+</span><span class='line'>    <span class="n">SCHED_SOFTIRQ</span><span class="p">,</span>
+</span><span class='line'>    <span class="n">HRTIMER_SOFTIRQ</span><span class="p">,</span>
+</span><span class='line'>    <span class="n">RCU_SOFTIRQ</span><span class="p">,</span> <span class="cm">/* Preferable RCU should always be the last softirq */</span>
+</span><span class='line'>    <span class="n">NR_SOFTIRQS</span>
+</span><span class='line'><span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>每个软中断有一个对应的处理函数。</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="k">static</span> <span class="k">struct</span> <span class="n">softirq_action</span> <span class="n">softirq_vec</span><span class="p">[</span><span class="n">NR_SOFTIRQS</span><span class="p">]</span> <span class="n">__cacheline_aligned_in_smp</span><span class="p">;</span>
+</span><span class='line'>    <span class="k">struct</span> <span class="n">softirq_action</span> <span class="p">{</span>
+</span><span class='line'>    <span class="kt">void</span><span class="p">(</span><span class="o">*</span><span class="n">action</span><span class="p">)(</span><span class="k">struct</span> <span class="n">softirq_action</span> <span class="o">*</span><span class="p">);</span>
+</span><span class='line'>    <span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>percpu的变量<code>local_softirq_pending()</code>, 其每一位对应一个软中断类型。</h3>
+
+<p>X86 和mips存储方式略有不同。</p>
+
+<ol>
+<li>X86</li>
+</ol>
+
+
+<p>  In the file: include/linux/interrupt.h</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'>  <span class="mi">7</span> <span class="k">typedef</span> <span class="k">struct</span> <span class="p">{</span>
+</span><span class='line'>  <span class="mi">8</span>         <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">__softirq_pending</span><span class="p">;</span>
+</span><span class='line'>  <span class="mi">9</span>         <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">__nmi_count</span><span class="p">;</span>       <span class="cm">/* arch dependent */</span>
+</span><span class='line'> <span class="mi">10</span>         <span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">irq0_irqs</span><span class="p">;</span>
+</span><span class='line'><span class="p">...</span>
+</span><span class='line'> <span class="mi">30</span> <span class="p">}</span> <span class="n">____cacheline_aligned</span> <span class="kt">irq_cpustat_t</span><span class="p">;</span>
+</span><span class='line'> <span class="p">...</span>
+</span><span class='line'> <span class="mi">32</span> <span class="n">DECLARE_PER_CPU_SHARED_ALIGNED</span><span class="p">(</span><span class="kt">irq_cpustat_t</span><span class="p">,</span> <span class="n">irq_stat</span><span class="p">);</span>
+</span><span class='line'> <span class="p">...</span>
+</span><span class='line'> <span class="mi">41</span> <span class="err">#</span><span class="n">define</span> <span class="n">local_softirq_pending</span><span class="p">()</span> <span class="n">percpu_read</span><span class="p">(</span><span class="n">irq_stat</span><span class="p">.</span><span class="n">__softirq_pending</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<ol>
+<li>mips</li>
+</ol>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#define local_softirq_pending()         (local_cpu_data-&gt;softirq_pending)</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>In the file: include/linux/interrupt.h</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="cp">#ifndef __ARCH_SET_SOFTIRQ_PENDING &lt;=== only defined for X86.</span>
+</span><span class='line'><span class="cp">#define set_softirq_pending(x) (local_softirq_pending() = (x))</span>
+</span><span class='line'><span class="cp">#define or_softirq_pending(x)  (local_softirq_pending() |= (x))</span>
+</span><span class='line'><span class="cp">#endif</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>include/linux/irq_cpustat.h</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'>  <span class="cm">/* arch independent irq_stat fields */</span>
+</span><span class='line'><span class="cp">#define local_softirq_pending() \</span>
+</span><span class='line'><span class="cp">        __IRQ_STAT(smp_processor_id(), __softirq_pending)</span>
+</span><span class='line'>
+</span><span class='line'> <span class="mi">19</span> <span class="err">#</span><span class="n">ifndef</span> <span class="n">__ARCH_IRQ_STAT</span>
+</span><span class='line'> <span class="mi">20</span> <span class="k">extern</span> <span class="kt">irq_cpustat_t</span> <span class="n">irq_stat</span><span class="p">[];</span>                <span class="cm">/* defined in asm/hardirq.h */</span>
+</span><span class='line'> <span class="mi">21</span> <span class="err">#</span><span class="n">define</span> <span class="n">__IRQ_STAT</span><span class="p">(</span><span class="n">cpu</span><span class="p">,</span> <span class="n">member</span><span class="p">)</span> <span class="p">(</span><span class="n">irq_stat</span><span class="p">[</span><span class="n">cpu</span><span class="p">].</span><span class="n">member</span><span class="p">)</span>
+</span><span class='line'> <span class="mi">22</span> <span class="err">#</span><span class="n">endif</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<p>kernel/softirq.c</p>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'> <span class="mi">50</span> <span class="err">#</span><span class="n">ifndef</span> <span class="n">__ARCH_IRQ_STAT</span>
+</span><span class='line'> <span class="mi">51</span> <span class="kt">irq_cpustat_t</span> <span class="n">irq_stat</span><span class="p">[</span><span class="n">NR_CPUS</span><span class="p">]</span> <span class="n">____cacheline_aligned</span><span class="p">;</span>
+</span><span class='line'> <span class="mi">52</span> <span class="nf">EXPORT_SYMBOL</span><span class="p">(</span><span class="n">irq_stat</span><span class="p">);</span>
+</span><span class='line'> <span class="mi">53</span> <span class="err">#</span><span class="n">endif</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<h3>softirq init:</h3>
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">719</span> <span class="kt">void</span> <span class="n">__init</span> <span class="n">softirq_init</span><span class="p">(</span><span class="kt">void</span><span class="p">)</span>
+</span><span class='line'><span class="mi">720</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">721</span>         <span class="kt">int</span> <span class="n">cpu</span><span class="p">;</span>
+</span><span class='line'><span class="mi">722</span>
+</span><span class='line'><span class="mi">723</span>         <span class="nf">for_each_possible_cpu</span><span class="p">(</span><span class="n">cpu</span><span class="p">)</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">724</span>                 <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+</span><span class='line'><span class="mi">725</span>
+</span><span class='line'><span class="mi">726</span>                 <span class="n">per_cpu</span><span class="p">(</span><span class="n">tasklet_vec</span><span class="p">,</span> <span class="n">cpu</span><span class="p">).</span><span class="n">tail</span> <span class="o">=</span>
+</span><span class='line'><span class="mi">727</span>                         <span class="o">&amp;</span><span class="n">per_cpu</span><span class="p">(</span><span class="n">tasklet_vec</span><span class="p">,</span> <span class="n">cpu</span><span class="p">).</span><span class="n">head</span><span class="p">;</span>
+</span><span class='line'><span class="mi">728</span>                 <span class="n">per_cpu</span><span class="p">(</span><span class="n">tasklet_hi_vec</span><span class="p">,</span> <span class="n">cpu</span><span class="p">).</span><span class="n">tail</span> <span class="o">=</span>
+</span><span class='line'><span class="mi">729</span>                         <span class="o">&amp;</span><span class="n">per_cpu</span><span class="p">(</span><span class="n">tasklet_hi_vec</span><span class="p">,</span> <span class="n">cpu</span><span class="p">).</span><span class="n">head</span><span class="p">;</span>
+</span><span class='line'><span class="mi">730</span>                 <span class="k">for</span> <span class="p">(</span><span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">NR_SOFTIRQS</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
+</span><span class='line'><span class="mi">731</span>                         <span class="n">INIT_LIST_HEAD</span><span class="p">(</span><span class="o">&amp;</span><span class="n">per_cpu</span><span class="p">(</span><span class="n">softirq_work_list</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">cpu</span><span class="p">));</span>
+</span><span class='line'><span class="mi">732</span>         <span class="p">}</span>
+</span><span class='line'><span class="mi">733</span>
+</span><span class='line'><span class="mi">734</span>         <span class="nf">register_hotcpu_notifier</span><span class="p">(</span><span class="o">&amp;</span><span class="n">remote_softirq_cpu_notifier</span><span class="p">);</span>
+</span><span class='line'><span class="mi">735</span>
+</span><span class='line'><span class="mi">736</span>         <span class="nf">open_softirq</span><span class="p">(</span><span class="n">TASKLET_SOFTIRQ</span><span class="p">,</span> <span class="n">tasklet_action</span><span class="p">);</span>
+</span><span class='line'><span class="mi">737</span>         <span class="nf">open_softirq</span><span class="p">(</span><span class="n">HI_SOFTIRQ</span><span class="p">,</span> <span class="n">tasklet_hi_action</span><span class="p">);</span>
+</span><span class='line'><span class="mi">738</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">388</span> <span class="kt">void</span> <span class="n">open_softirq</span><span class="p">(</span><span class="kt">int</span> <span class="n">nr</span><span class="p">,</span> <span class="kt">void</span> <span class="p">(</span><span class="o">*</span><span class="n">action</span><span class="p">)(</span><span class="k">struct</span> <span class="n">softirq_action</span> <span class="o">*</span><span class="p">))</span>
+</span><span class='line'><span class="mi">389</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">390</span>         <span class="n">softirq_vec</span><span class="p">[</span><span class="n">nr</span><span class="p">].</span><span class="n">action</span> <span class="o">=</span> <span class="n">action</span><span class="p">;</span>
+</span><span class='line'><span class="mi">391</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">379</span> <span class="kt">void</span> <span class="n">raise_softirq</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">nr</span><span class="p">)</span>
+</span><span class='line'><span class="mi">380</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">381</span>         <span class="kt">unsigned</span> <span class="kt">long</span> <span class="n">flags</span><span class="p">;</span>
+</span><span class='line'><span class="mi">382</span>
+</span><span class='line'><span class="mi">383</span>         <span class="nf">local_irq_save</span><span class="p">(</span><span class="n">flags</span><span class="p">);</span>
+</span><span class='line'><span class="mi">384</span>         <span class="nf">raise_softirq_irqoff</span><span class="p">(</span><span class="n">nr</span><span class="p">);</span>
+</span><span class='line'><span class="mi">385</span>         <span class="nf">local_irq_restore</span><span class="p">(</span><span class="n">flags</span><span class="p">);</span>
+</span><span class='line'><span class="mi">386</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+
+
+
+<figure class='code'><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+</pre></td><td class='code'><pre><code class='c'><span class='line'><span class="mi">362</span> <span class="kr">inline</span> <span class="kt">void</span> <span class="nf">raise_softirq_irqoff</span><span class="p">(</span><span class="kt">unsigned</span> <span class="kt">int</span> <span class="n">nr</span><span class="p">)</span>
+</span><span class='line'><span class="mi">363</span> <span class="p">{</span>
+</span><span class='line'><span class="mi">364</span>         <span class="n">__raise_softirq_irqoff</span><span class="p">(</span><span class="n">nr</span><span class="p">);</span>
+</span><span class='line'><span class="mi">365</span>
+</span><span class='line'><span class="mi">366</span>         <span class="cm">/*</span>
+</span><span class='line'><span class="cm">367          * If we&#39;re in an interrupt or softirq, we&#39;re done</span>
+</span><span class='line'><span class="cm">368          * (this also catches softirq-disabled code). We will</span>
+</span><span class='line'><span class="cm">369          * actually run the softirq once we return from</span>
+</span><span class='line'><span class="cm">370          * the irq or softirq.</span>
+</span><span class='line'><span class="cm">371          *</span>
+</span><span class='line'><span class="cm">372          * Otherwise we wake up ksoftirqd to make sure we</span>
+</span><span class='line'><span class="cm">373          * schedule the softirq soon.</span>
+</span><span class='line'><span class="cm">374          */</span>
+</span><span class='line'><span class="mi">375</span>         <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">in_interrupt</span><span class="p">())</span>
+</span><span class='line'><span class="mi">376</span>                 <span class="n">wakeup_softirqd</span><span class="p">();</span>
+</span><span class='line'><span class="mi">377</span> <span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">Your Name</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2012-02-10T00:00:00+08:00'><span class='date'><span class='date-month'>Feb</span> <span class='date-day'>10</span><span class='date-suffix'>th</span>, <span class='date-year'>2012</span></span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/irqs/'>irqs</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2011/10/07/mem-init/" title="Previous Post: the mem_init on mips(octean)">&laquo; the mem_init on mips(octean)</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2012/02/10/xfrm-dump-sa/" title="Next Post: xfrm dump sa">xfrm dump sa &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2014/10/21/ftrace-study/">Ftrace Study</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/17/netdevice-watchdog-cause-tx-queue-schedule/">Netdevice Watchdog Cause Tx Queue Schedule</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/16/ixgbe-queue-index/">How Does Ixgbe Use Queue Index</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/09/14/tcpdump-work-with-bonding-interface/">Tcpdump Work With Bonding Interface</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2014/07/31/how-to-select-source-ip-for-a-tcp-socket/">How to Select Source Ip for a Tcp Socket</a>
+      </li>
+    
+  </ul>
+</section>
+
+<section>
+  <h1>GitHub Repos</h1>
+  <ul id="gh_repos">
+    <li class="loading">Status updating...</li>
+  </ul>
+  
+  <a href="https://github.com/martinbj2008@gmail.com">@martinbj2008@gmail.com</a> on GitHub
+  
+  <script type="text/javascript">
+    $(document).ready(function(){
+        if (!window.jXHR){
+            var jxhr = document.createElement('script');
+            jxhr.type = 'text/javascript';
+            jxhr.src = '/javascripts/libs/jXHR.js';
+            var s = document.getElementsByTagName('script')[0];
+            s.parentNode.insertBefore(jxhr, s);
+        }
+
+        github.showRepos({
+            user: 'martinbj2008@gmail.com',
+            count: 3,
+            skip_forks: true,
+            target: '#gh_repos'
+        });
+    });
+  </script>
+  <script src="/javascripts/github.js" type="text/javascript"> </script>
+</section>
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2015 - Your Name -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>
