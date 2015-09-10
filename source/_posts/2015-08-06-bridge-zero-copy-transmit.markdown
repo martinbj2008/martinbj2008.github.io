@@ -9,7 +9,7 @@ tags: [kvm, vhost]
 
 #### redhat 7 full support it
 [How redhat 7 said](https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Virtualization_Tuning_and_Optimization_Guide/sect-Virtualization_Tuning_Optimization_Guide-Networking-Techniques.html)
-
+```
 5.5.1. Bridge Zero Copy Transmit
 
 Zero copy transmit mode is effective on large packet sizes. It typically reduces the host CPU overhead by up to 15% when transmitting large packets between a guest network and an external network, without affecting throughput.
@@ -18,24 +18,27 @@ Bridge zero copy transmit is fully supported on Red Hat Enterprise Linux 7 virtu
 NOTE
 An additional data copy is normally created during transmit as a threat mitigation technique against denial of service and information leak attacks. Enabling zero copy transmit disables this threat mitigation technique.
 If performance regression is observed, or if host CPU utilization is not a concern, zero copy transmit mode can be disabled by setting experimental_zcopytx to 0.
+```
+
 <!-- more -->
 
-
 ### related source
-
 set flags
 ```
-> handle_tx
-> > tun_sendmsg
-> > > tun_get_user <=== set destructor_arg as "struct ubuf_info *ubuf;", and set SKBTX_DEV_ZEROCOPY
+  handle_tx
+    tun_sendmsg
+      tun_get_user ** set destructor_arg as "struct ubuf_info *ubuf;", and set SKBTX_DEV_ZEROCOPY
 ```
+
+### related source
+set flags
 callback
 
 ```
-> __kfree_skb
-> > skb_release_all
-> > > skb_release_data
-> > > > shinfo->destructor_arg <==="struct ubuf_info *ubuf;" and ubuf->callback is called.
+  __kfree_skb
+    skb_release_all
+      skb_release_data
+        shinfo->destructor_arg ** "struct ubuf_info *ubuf;" and ubuf->callback is called.
 ```
 
 ```
@@ -111,6 +114,7 @@ callback
  675 }
  676 EXPORT_SYMBOL(__kfree_skb);
 ```
+
 ```
  654 /* Free everything but the sk_buff shell. */
  655 static void skb_release_all(struct sk_buff *skb)
@@ -161,10 +165,10 @@ clear the flag and copy data from userspace.
 #### where `skb_orphan_frags` is used?
 ##### call trace
 ```
-> __netif_receive_skb_core
-> > deliver_ptype_list_skb
-> > > deliver_skb
-> > > > skb_orphan_frags
+  __netif_receive_skb_core
+    deliver_ptype_list_skb
+      deliver_skb
+        skb_orphan_frags
 ```
 
 As it is known:  `__netif_receive_skb_core` is the entry of network stack.
