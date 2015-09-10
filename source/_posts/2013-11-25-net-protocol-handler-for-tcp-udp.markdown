@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "How IPV4/6 process input tcp/udp packet"
+title: "How does IPV4/6 process input tcp/udp packet"
 date: 2013-11-25 10:54
 comments: true
 categories: [socket] 

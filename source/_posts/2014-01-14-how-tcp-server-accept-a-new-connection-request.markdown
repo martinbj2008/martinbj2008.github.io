@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "how tcp server accept a new connection request"
+title: "how does tcp server accept a new connection request"
 date: 2014-01-14 16:01
 comments: true
 categories: [socket]
