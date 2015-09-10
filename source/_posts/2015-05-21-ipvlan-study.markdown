@@ -3,25 +3,21 @@ layout: post
 title: "ipvlan study"
 date: 2015-05-21 17:31:57 +0800
 comments: true
-categories: [net]
-tags: [ftrace]
+categories: [route]
+tags: [ipvlan]
 ---
 
-### test case
-
-<!-- more -->
-### xmit direction
-
-##### L2 mode
-###### XMIT packet
-1. xmit a normal pkt to other phy machine
+#### L2 mode
+##### xmit packet
+###### xmit a normal pkt to other phy machine
 ```c
 ==> ipvlan_start_xmit
 ==> ==> ipvlan_xmit_mode_l2
 ==> ==> ==> skb->dev = ipvlan->phy_dev;
 ==> ==> ==> return dev_queue_xmit(skb);
 ```
-2. xmit a normal pkt to other namespace
+
+######  xmit a normal pkt to other namespace
 ```c
 ==> ipvlan_start_xmit
 ==> ==> ipvlan_xmit_mode_l2
@@ -33,7 +29,7 @@ tags: [ftrace]
 ==> ==> ==> ==> ==> return __dev_forward_skb(dev, skb) ?: netif_rx_internal(skb);
 ==> ==> ==> ==> ==> ==> enqueue_to_backlog(skb, get_cpu(), &qtail);
 ```
-3. xmit a mutlicast pkt
+###### xmit a mutlicast pkt
 ```c
 ==> ipvlan_start_xmit
 ==> ==> ipvlan_xmit_mode_l2
@@ -42,10 +38,11 @@ tags: [ftrace]
 ==> ==> ==> ==> list_for_each_entry(ipvlan, &port->ipvlans, pnode)
 ==> ==> ==> ==> ==> dev_forward_skb or netif_rx(nskb);
 ```
-##### RECV packet 
-All the packet are get by the rx_handler, ipvlan_handle_frame.
+##### recv packet 
+All the packet are get by the `rx_handler`, `ipvlan_handle_frame`.
 
-1. unicast packet: lookup the dest ipvlan port(net_device)
+###### unicast packet
+lookup the dest ipvlan port(net_device)
 by the dst IPv4/6 address, and send to it.
 
 ```c
@@ -55,7 +52,7 @@ by the dst IPv4/6 address, and send to it.
 ==>  ==> ==> ==> skb->dev = dev;
 ==> ==> ==> ==> dev_forward_skb or ret = RX_HANDLER_ANOTHER;
 ```
-2. multicast packet.
+###### multicast packet.
 ```c
 ==> ipvlan_handle_frame
 ==> ==> ipvlan_handle_mode_l2
@@ -65,7 +62,7 @@ by the dst IPv4/6 address, and send to it.
 ==> ==>  ==> ==> ==> ipvlan_multicast_frame(port, skb, NULL, false);
 ```
 
-##### l3 mode
+#### l3 mode
 ```c
 ipvlan_start_xmit
 ```
@@ -85,7 +82,6 @@ ipvlan_start_xmit
 319         .ndo_vlan_rx_kill_vid   = ipvlan_vlan_rx_kill_vid,
 320 };
 ```
-
 
 ```c
 495 int ipvlan_queue_xmit(struct sk_buff *skb, struct net_device *dev)

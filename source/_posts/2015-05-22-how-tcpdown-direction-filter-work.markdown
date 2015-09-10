@@ -3,7 +3,8 @@ layout: post
 title: "how tcpdown direction filter work"
 date: 2015-05-22 11:51:57 +0800
 comments: true
-categories: 
+categories: [netcore]
+tags: [tcpdump]
 ---
 
 ## tcpudmp对 direction的支持。
@@ -19,6 +20,7 @@ categories:
  27 #define PACKET_OTHERHOST        3               /* To someone else      */
  28 #define PACKET_OUTGOING         4               /* Outgoing of any type */
 ```
+<!-- more -->
 
 kernel 里对网络包的抓去分别在收方两个方向做分析。
 #### 收方向
