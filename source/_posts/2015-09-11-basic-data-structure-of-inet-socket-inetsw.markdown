@@ -22,6 +22,7 @@ inet有些例外，因为inet支持的类型太过复杂(maybe), 所以引入了
 `inetsw`是一个链表头的数据，每个链表是具有相同的type的, 具体见[socket type](#socketType).    
 每个节点是一个`struct inet_protosw`. 每个节点是通过[`net_register_protosw`](#registerProtoNode)
 插入到其type对应的链表里的。
+<!-- more -->
 
 #### `struct inet_protosw`
 ```

@@ -50,4 +50,30 @@ Every `xsock` has parent sock as its first filed.
 ...
 ```
 
+
+#### 转换函数：
+
+##### sk to `inet_sock`
+```
+213 static inline struct inet_sock *inet_sk(const struct sock *sk)
+214 {
+215         return (struct inet_sock *)sk;
+216 }
+```
+
+##### sk to `inet_connection_sock`
+```
+145 static inline struct inet_connection_sock *inet_csk(const struct sock *sk)
+146 {
+147         return (struct inet_connection_sock *)sk;
+148 }
+```
+
+##### sk to `tcp_sk`
+```
+351 static inline struct tcp_sock *tcp_sk(const struct sock *sk)
+352 {
+353         return (struct tcp_sock *)sk;
+354 }
+```
 ![Inherit](/images/sock/tcpsock.jpg)
