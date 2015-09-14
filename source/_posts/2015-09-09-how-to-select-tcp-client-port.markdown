@@ -8,6 +8,26 @@ tags: [socket]
 ---
 
 upstream source v4.2+(commit ID:a794b4f).
+```
+
+#### key var
+##### tcp_death_row
+```
+  97 struct inet_hashinfo tcp_hashinfo;
+```
+#### callback
+```
+> connect syscall
+> > sock->ops->connect
+==> tcp_v4_connect
+> > > inet_hash_connect
+> > > > port_offset = inet_sk_port_offset(sk);
+> > > > __inet_hash_connect
+> > > > > inet_get_local_port_range
+> > > > > for each port in range: start with port_offset.
+> > > > > > inet_is_local_reserved_port //skip the reserved ports.
+> > > > > >
+
 There is a important data struct `struct inet_hashinfo`
 其对应的变量是 `tcp_hashinfo`.
 
@@ -71,25 +91,6 @@ There is a important data struct `struct inet_hashinfo`
 148         struct inet_listen_hashbucket   listening_hash[INET_LHTABLE_SIZE]
 149                                         ____cacheline_aligned_in_smp;
 150 };
-```
-
-#### key var
-##### tcp_death_row
-```
-  97 struct inet_hashinfo tcp_hashinfo;
-```
-#### callback
-```
-> connect syscall
-> > sock->ops->connect
-==> tcp_v4_connect
-> > > inet_hash_connect
-> > > > port_offset = inet_sk_port_offset(sk);
-> > > > __inet_hash_connect
-> > > > > inet_get_local_port_range
-> > > > > for each port in range: start with port_offset.
-> > > > > > inet_is_local_reserved_port //skip the reserved ports.
-> > > > > > 
 ```
 
 ##### system call connect
