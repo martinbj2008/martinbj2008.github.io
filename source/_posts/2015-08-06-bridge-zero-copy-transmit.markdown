@@ -3,7 +3,7 @@ layout: post
 title: "bridge zero copy transmit"
 date: 2015-06-26 16:42:00 +0800
 comments: true
-categories: [vhost]
+categories: [virtnet]
 tags: [kvm, vhost]
 ---
 
