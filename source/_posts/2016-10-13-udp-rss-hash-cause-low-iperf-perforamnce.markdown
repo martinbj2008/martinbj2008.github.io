@@ -83,5 +83,5 @@ ifperf server端看到softirqd压力分不到了4个cpu上(cpu2,6,8,10)
 
 Packet Flow的图片
 
-:http://2.bp.blogspot.com/-WRpAha4DF68/Ul9-j0IPCgI/AAAAAAAABjs/uHU5UuKrfnw/s1600/osi_layers+(6).png)
 ![RSS 介绍](http://balodeamit.blogspot.com/2013/10/receive-side-scaling-and-receive-packet.html)
+http://2.bp.blogspot.com/-WRpAha4DF68/Ul9-j0IPCgI/AAAAAAAABjs/uHU5UuKrfnw/s1600/osi_layers+(6).png)
