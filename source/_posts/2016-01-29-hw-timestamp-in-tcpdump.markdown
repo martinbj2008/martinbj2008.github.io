@@ -12,6 +12,9 @@ categories:
 
 #### tcpudmp use -j option
 tcpdump main function
+
+<!-- more -->
+
 ```
 1296 #ifdef HAVE_PCAP_SET_TSTAMP_TYPE
 1297                 if (jflag != -1) {

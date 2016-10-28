@@ -18,6 +18,8 @@ tcp的处理分为了的总入口函数是`tcp_v4_rcv`,
 
 其他的像拥塞控制，乱序调整等都在`tcp_v4_do_rcv`之前被做掉了。
 
+<!-- more -->
+
 ```
 1506 static const struct net_protocol tcp_protocol = {
 1507         .early_demux    =       tcp_v4_early_demux,

@@ -7,6 +7,7 @@ categories:
 ---
 
 [tcpdump help](http://www.tcpdump.org/manpages/pcap-tstamp.7.html)
+<!-- more -->
 
 ### case1: timestamp is get by ioctl (-j/J is not used)
 

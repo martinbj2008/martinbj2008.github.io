@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "udp rss hash cause low iperf perforamnce"
-date: 2016-10-13 11:47:45 +0800
+date: 2016-10-26 11:47:45 +0800
 comments: true
 categories: [netcore]
 tags: [vxlan, rss, udp]
@@ -78,3 +78,10 @@ ifperf server端看到softirqd压力分不到了4个cpu上(cpu2,6,8,10)
 ![图5](/images/udp_hash/udp_hash_5.png)
 总的带宽达到8.38Gb/s.
 ![图6](/images/udp_hash/udp_hash_6.png)
+
+### 关于RSS可以参考这个图片及相应的解释
+
+Packet Flow的图片
+
+:http://2.bp.blogspot.com/-WRpAha4DF68/Ul9-j0IPCgI/AAAAAAAABjs/uHU5UuKrfnw/s1600/osi_layers+(6).png)
+![RSS 介绍](http://balodeamit.blogspot.com/2013/10/receive-side-scaling-and-receive-packet.html)
