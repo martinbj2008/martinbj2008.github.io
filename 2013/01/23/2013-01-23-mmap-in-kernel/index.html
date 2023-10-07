@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>mmap in kernel | Kernel study</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="call trace1234567&gt; vmalloc&gt; &gt; __vmalloc_node_flags&gt; &gt; &gt; __vmalloc_node&gt; &gt; &gt; &gt; __vmalloc_node_range&gt; &gt; &gt; &gt; &gt; get_vm_area_node&gt; &gt; &gt; &gt; &gt; vmallo">
+<meta property="og:type" content="article">
+<meta property="og:title" content="mmap in kernel">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/01/23/2013-01-23-mmap-in-kernel/index.html">
+<meta property="og:site_name" content="Kernel study">
+<meta property="og:description" content="call trace1234567&gt; vmalloc&gt; &gt; __vmalloc_node_flags&gt; &gt; &gt; __vmalloc_node&gt; &gt; &gt; &gt; __vmalloc_node_range&gt; &gt; &gt; &gt; &gt; get_vm_area_node&gt; &gt; &gt; &gt; &gt; vmallo">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2013-01-23T00:00:00.000Z">
+<meta property="article:modified_time" content="2023-10-07T03:29:55.078Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="kernel">
+<meta property="article:tag" content="memory">
+<meta property="article:tag" content="mmap">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel study" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel study</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-2013-01-23-mmap-in-kernel" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2013/01/23/2013-01-23-mmap-in-kernel/" class="article-date">
+  <time class="dt-published" datetime="2013-01-23T00:00:00.000Z" itemprop="datePublished">2013-01-23</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/memory/">memory</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      mmap in kernel
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="call-trace"><a href="#call-trace" class="headerlink" title="call trace"></a>call trace</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">&gt; vmalloc</span><br><span class="line">&gt; &gt; __vmalloc_node_flags</span><br><span class="line">&gt; &gt; &gt; __vmalloc_node</span><br><span class="line">&gt; &gt; &gt; &gt; __vmalloc_node_range</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; get_vm_area_node</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; vmalloc_area_node</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; insert_vmalloc_vmlist</span><br></pre></td></tr></table></figure>
+<span id="more"></span>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1731</span> <span class="type">void</span> *<span class="title function_">vmalloc</span><span class="params">(<span class="type">unsigned</span> <span class="type">long</span> size)</span></span><br><span class="line">1732 &#123;</span><br><span class="line"><span class="number">1733</span>         <span class="keyword">return</span> __vmalloc_node_flags(size, <span class="number">-1</span>, GFP_KERNEL | __GFP_HIGHMEM);</span><br><span class="line"><span class="number">1734</span> &#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1715</span> <span class="type">static</span> <span class="keyword">inline</span> <span class="type">void</span> *__vmalloc_node_flags(<span class="type">unsigned</span> <span class="type">long</span> size,</span><br><span class="line"><span class="number">1716</span>                                         <span class="type">int</span> node, <span class="type">gfp_t</span> flags)</span><br><span class="line"><span class="number">1717</span> &#123;</span><br><span class="line"><span class="number">1718</span>         <span class="keyword">return</span> __vmalloc_node(size, <span class="number">1</span>, flags, PAGE_KERNEL,</span><br><span class="line"><span class="number">1719</span>                                         node, __builtin_return_address(<span class="number">0</span>));</span><br><span class="line"><span class="number">1720</span> &#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1700</span> <span class="type">static</span> <span class="type">void</span> *__vmalloc_node(<span class="type">unsigned</span> <span class="type">long</span> size, <span class="type">unsigned</span> <span class="type">long</span> align,</span><br><span class="line"><span class="number">1701</span>                             <span class="type">gfp_t</span> gfp_mask, <span class="type">pgprot_t</span> prot,</span><br><span class="line"><span class="number">1702</span>                             <span class="type">int</span> node, <span class="type">void</span> *caller)</span><br><span class="line"><span class="number">1703</span> &#123;</span><br><span class="line"><span class="number">1704</span>         <span class="keyword">return</span> __vmalloc_node_range(size, align, VMALLOC_START, VMALLOC_END,</span><br><span class="line"><span class="number">1705</span>                                 gfp_mask, prot, node, caller);</span><br><span class="line"><span class="number">1706</span> &#125;</span><br></pre></td></tr></table></figure>
+
+<p>相当于调用</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">__vmalloc_node_range(size, <span class="number">1</span>, VMALLOC_START, VMALLOC_END, GFP_KERNEL | __GFP_HIGHMEM,PAGE_KERNEL, <span class="number">-1</span>, __builtin_return_address(<span class="number">0</span>));</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1644</span> <span class="type">void</span> *__vmalloc_node_range(<span class="type">unsigned</span> <span class="type">long</span> size, <span class="type">unsigned</span> <span class="type">long</span> align,</span><br><span class="line"><span class="number">1645</span>                         <span class="type">unsigned</span> <span class="type">long</span> start, <span class="type">unsigned</span> <span class="type">long</span> end, <span class="type">gfp_t</span> gfp_mask,</span><br><span class="line"><span class="number">1646</span>                         <span class="type">pgprot_t</span> prot, <span class="type">int</span> node, <span class="type">void</span> *caller)</span><br><span class="line"><span class="number">1647</span> &#123;</span><br><span class="line"><span class="number">1648</span>         <span class="class"><span class="keyword">struct</span> <span class="title">vm_struct</span> *<span class="title">area</span>;</span></span><br><span class="line"><span class="number">1649</span>         <span class="type">void</span> *addr;</span><br><span class="line"><span class="number">1650</span>         <span class="type">unsigned</span> <span class="type">long</span> real_size = size;</span><br><span class="line"><span class="number">1651</span></span><br><span class="line"><span class="number">1652</span>         size = PAGE_ALIGN(size);</span><br><span class="line"><span class="number">1653</span>         <span class="keyword">if</span> (!size || (size &gt;&gt; PAGE_SHIFT) &gt; totalram_pages)</span><br><span class="line"><span class="number">1654</span>                 <span class="keyword">goto</span> fail;</span><br><span class="line"><span class="number">1655</span></span><br><span class="line"><span class="number">1656</span>         area = __get_vm_area_node(size, align, VM_ALLOC | VM_UNLIST,</span><br><span class="line"><span class="number">1657</span>                                   start, end, node, gfp_mask, caller);</span><br><span class="line"><span class="number">1658</span>         <span class="keyword">if</span> (!area)</span><br><span class="line"><span class="number">1659</span>                 <span class="keyword">goto</span> fail;</span><br><span class="line"><span class="number">1660</span></span><br><span class="line"><span class="number">1661</span>         addr = __vmalloc_area_node(area, gfp_mask, prot, node, caller);</span><br><span class="line"><span class="number">1662</span>         <span class="keyword">if</span> (!addr)</span><br><span class="line"><span class="number">1663</span>                 <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line"><span class="number">1664</span></span><br><span class="line"><span class="number">1665</span>         <span class="comment">/*</span></span><br><span class="line"><span class="comment">1666          * In this function, newly allocated vm_struct is not added</span></span><br><span class="line"><span class="comment">1667          * to vmlist at __get_vm_area_node(). so, it is added here.</span></span><br><span class="line"><span class="comment">1668          */</span></span><br><span class="line"><span class="number">1669</span>         insert_vmalloc_vmlist(area);</span><br><span class="line"><span class="number">1670</span></span><br><span class="line"><span class="number">1671</span>         <span class="comment">/*</span></span><br><span class="line"><span class="comment">1672          * A ref_count = 3 is needed because the vm_struct and vmap_area</span></span><br><span class="line"><span class="comment">1673          * structures allocated in the __get_vm_area_node() function contain</span></span><br><span class="line"><span class="comment">1674          * references to the virtual address of the vmalloc&#x27;ed block.</span></span><br><span class="line"><span class="comment">1675          */</span></span><br><span class="line"><span class="number">1676</span>         kmemleak_alloc(addr, real_size, <span class="number">3</span>, gfp_mask);</span><br><span class="line"><span class="number">1677</span></span><br><span class="line"><span class="number">1678</span>         <span class="keyword">return</span> addr;</span><br><span class="line"><span class="number">1679</span></span><br><span class="line"><span class="number">1680</span> fail:</span><br><span class="line"><span class="number">1681</span>         warn_alloc_failed(gfp_mask, <span class="number">0</span>,</span><br><span class="line"><span class="number">1682</span>                           <span class="string">&quot;vmalloc: allocation failure: %lu bytes\n&quot;</span>,</span><br><span class="line"><span class="number">1683</span>                           real_size);</span><br><span class="line"><span class="number">1684</span>         <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line"><span class="number">1685</span> &#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1315</span> <span class="type">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">vm_struct</span> *__<span class="title">get_vm_area_node</span>(<span class="title">unsigned</span> <span class="title">long</span> <span class="title">size</span>,</span></span><br><span class="line"><span class="class">1316                 <span class="title">unsigned</span> <span class="title">long</span> <span class="title">align</span>, <span class="title">unsigned</span> <span class="title">long</span> <span class="title">flags</span>, <span class="title">unsigned</span> <span class="title">long</span> <span class="title">start</span>,</span></span><br><span class="line"><span class="class">1317                 <span class="title">unsigned</span> <span class="title">long</span> <span class="title">end</span>, <span class="title">int</span> <span class="title">node</span>, <span class="title">gfp_t</span> <span class="title">gfp_mask</span>, <span class="title">void</span> *<span class="title">caller</span>)</span></span><br><span class="line"><span class="class">1318 &#123;</span></span><br><span class="line"><span class="number">1319</span>         <span class="class"><span class="keyword">struct</span> <span class="title">vmap_area</span> *<span class="title">va</span>;</span></span><br><span class="line"><span class="number">1320</span>         <span class="class"><span class="keyword">struct</span> <span class="title">vm_struct</span> *<span class="title">area</span>;</span></span><br><span class="line"><span class="number">1321</span></span><br><span class="line"><span class="number">1322</span>         BUG_ON(in_interrupt());</span><br><span class="line"><span class="number">1323</span>         <span class="keyword">if</span> (flags &amp; VM_IOREMAP) &#123;</span><br><span class="line"><span class="number">1324</span>                 <span class="type">int</span> bit = fls(size);</span><br><span class="line"><span class="number">1325</span></span><br><span class="line"><span class="number">1326</span>                 <span class="keyword">if</span> (bit &gt; IOREMAP_MAX_ORDER)</span><br><span class="line"><span class="number">1327</span>                         bit = IOREMAP_MAX_ORDER;</span><br><span class="line"><span class="number">1328</span>                 <span class="keyword">else</span> <span class="keyword">if</span> (bit &lt; PAGE_SHIFT)</span><br><span class="line"><span class="number">1329</span>                         bit = PAGE_SHIFT;</span><br><span class="line"><span class="number">1330</span></span><br><span class="line"><span class="number">1331</span>                 align = <span class="number">1ul</span> &lt;&lt; bit;</span><br><span class="line"><span class="number">1332</span>         &#125;</span><br><span class="line"><span class="number">1333</span></span><br><span class="line"><span class="number">1334</span>         size = PAGE_ALIGN(size);</span><br><span class="line"><span class="number">1335</span>         <span class="keyword">if</span> (unlikely(!size))</span><br><span class="line"><span class="number">1336</span>                 <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line"><span class="number">1337</span></span><br><span class="line"><span class="number">1338</span>         area = kzalloc_node(<span class="keyword">sizeof</span>(*area), gfp_mask &amp; GFP_RECLAIM_MASK, node);</span><br><span class="line"><span class="number">1339</span>         <span class="keyword">if</span> (unlikely(!area))</span><br><span class="line"><span class="number">1340</span>                 <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line"><span class="number">1341</span></span><br><span class="line"><span class="number">1342</span>         <span class="comment">/*</span></span><br><span class="line"><span class="comment">1343          * We always allocate a guard page.</span></span><br><span class="line"><span class="comment">1344          */</span></span><br><span class="line"><span class="number">1345</span>         size += PAGE_SIZE;</span><br><span class="line"><span class="number">1346</span></span><br><span class="line"><span class="number">1347</span>         va = alloc_vmap_area(size, align, start, end, node, gfp_mask);</span><br><span class="line"><span class="number">1348</span>         <span class="keyword">if</span> (IS_ERR(va)) &#123;</span><br><span class="line"><span class="number">1349</span>                 kfree(area);</span><br><span class="line"><span class="number">1350</span>                 <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line"><span class="number">1351</span>         &#125;</span><br><span class="line"><span class="number">1352</span></span><br><span class="line"><span class="number">1353</span>         <span class="comment">/*</span></span><br><span class="line"><span class="comment">1354          * When this function is called from __vmalloc_node_range,</span></span><br><span class="line"><span class="comment">1355          * we do not add vm_struct to vmlist here to avoid</span></span><br><span class="line"><span class="comment">1356          * accessing uninitialized members of vm_struct such as</span></span><br><span class="line"><span class="comment">1357          * pages and nr_pages fields. They will be set later.</span></span><br><span class="line"><span class="comment">1358          * To distinguish it from others, we use a VM_UNLIST flag.</span></span><br><span class="line"><span class="comment">1359          */</span></span><br><span class="line"><span class="number">1360</span>         <span class="keyword">if</span> (flags &amp; VM_UNLIST)</span><br><span class="line"><span class="number">1361</span>                 setup_vmalloc_vm(area, va, flags, caller);</span><br><span class="line"><span class="number">1362</span>         <span class="keyword">else</span></span><br><span class="line"><span class="number">1363</span>                 insert_vmalloc_vm(area, va, flags, caller);</span><br><span class="line"><span class="number">1364</span></span><br><span class="line"><span class="number">1365</span>         <span class="keyword">return</span> area;</span><br><span class="line"><span class="number">1366</span> &#125;</span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2013/01/23/2013-01-23-mmap-in-kernel/" data-id="clnfhasl90011e0mh3n5eb3kn" data-title="mmap in kernel" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/mmap/" rel="tag">mmap</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2013/02/12/2013-06-22-html2markdown-in-ubuntu/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          Install html2markdown in Ubuntu(12.10)
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2012/11/10/2012-11-10-add-update-xfrm-polciy/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">Add or Udpate Xfrm Policy</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IRQs/">IRQs</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/make/">make</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netcore/">netcore</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/virtnet/">virtnet</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IRQ/" rel="tag">IRQ</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SP/" rel="tag">SP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TCPDUMP/" rel="tag">TCPDUMP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/arg/" rel="tag">arg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bash/" rel="tag">bash</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/beep/" rel="tag">beep</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bootmem/" rel="tag">bootmem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/cacahe/" rel="tag">cacahe</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/dump-sa/" rel="tag">dump sa</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ftrace/" rel="tag">ftrace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/glibc/" rel="tag">glibc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gtk/" rel="tag">gtk</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2markdown/" rel="tag">html2markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2text/" rel="tag">html2text</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet/" rel="tag">inet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet-socket/" rel="tag">inet socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv4/" rel="tag">ipv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipvlan/" rel="tag">ipvlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kenel/" rel="tag">kenel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/km/" rel="tag">km</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kthread/" rel="tag">kthread</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kvm/" rel="tag">kvm</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/lc-trie/" rel="tag">lc-trie</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/makefile/" rel="tag">makefile</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mannual/" rel="tag">mannual</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/manpages-dev/" rel="tag">manpages-dev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/marco/" rel="tag">marco</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/markdown/" rel="tag">markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mem/" rel="tag">mem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/minivnc/" rel="tag">minivnc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mmap/" rel="tag">mmap</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/net/" rel="tag">net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/network/" rel="tag">network</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octean/" rel="tag">octean</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octopress/" rel="tag">octopress</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/page/" rel="tag">page</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pernet/" rel="tag">pernet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pfn/" rel="tag">pfn</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/policy/" rel="tag">policy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/qdisc/" rel="tag">qdisc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/reg/" rel="tag">reg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/rss/" rel="tag">rss</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/schedule/" rel="tag">schedule</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sock/" rel="tag">sock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/softirq/" rel="tag">softirq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/subst/" rel="tag">subst</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/summary/" rel="tag">summary</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sunrise/" rel="tag">sunrise</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/system-call/" rel="tag">system call</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/terminal/" rel="tag">terminal</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/timezone/" rel="tag">timezone</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/toolchain/" rel="tag">toolchain</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ubuntu/" rel="tag">ubuntu</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/udp/" rel="tag">udp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/usb/" rel="tag">usb</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/variant/" rel="tag">variant</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vhost/" rel="tag">vhost</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vimdiff/" rel="tag">vimdiff</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vxlan/" rel="tag">vxlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/watchdog/" rel="tag">watchdog</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/workqueue/" rel="tag">workqueue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 16.25px;">IPv4</a> <a href="/tags/IRQ/" style="font-size: 12.5px;">IRQ</a> <a href="/tags/SP/" style="font-size: 10px;">SP</a> <a href="/tags/TCPDUMP/" style="font-size: 10px;">TCPDUMP</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 11.25px;">address</a> <a href="/tags/arg/" style="font-size: 10px;">arg</a> <a href="/tags/bash/" style="font-size: 10px;">bash</a> <a href="/tags/beep/" style="font-size: 10px;">beep</a> <a href="/tags/bh/" style="font-size: 10px;">bh</a> <a href="/tags/bootmem/" style="font-size: 10px;">bootmem</a> <a href="/tags/cacahe/" style="font-size: 10px;">cacahe</a> <a href="/tags/checksum/" style="font-size: 11.25px;">checksum</a> <a href="/tags/debug/" style="font-size: 10px;">debug</a> <a href="/tags/dump-sa/" style="font-size: 10px;">dump sa</a> <a href="/tags/fib/" style="font-size: 13.75px;">fib</a> <a href="/tags/ftrace/" style="font-size: 10px;">ftrace</a> <a href="/tags/gcc/" style="font-size: 13.75px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/glibc/" style="font-size: 10px;">glibc</a> <a href="/tags/gtk/" style="font-size: 10px;">gtk</a> <a href="/tags/html2markdown/" style="font-size: 10px;">html2markdown</a> <a href="/tags/html2text/" style="font-size: 10px;">html2text</a> <a href="/tags/inet/" style="font-size: 10px;">inet</a> <a href="/tags/inet-socket/" style="font-size: 10px;">inet socket</a> <a href="/tags/ipv4/" style="font-size: 11.25px;">ipv4</a> <a href="/tags/ipv6/" style="font-size: 11.25px;">ipv6</a> <a href="/tags/ipvlan/" style="font-size: 10px;">ipvlan</a> <a href="/tags/irq/" style="font-size: 10px;">irq</a> <a href="/tags/kenel/" style="font-size: 10px;">kenel</a> <a href="/tags/kernel/" style="font-size: 20px;">kernel</a> <a href="/tags/km/" style="font-size: 10px;">km</a> <a href="/tags/kthread/" style="font-size: 10px;">kthread</a> <a href="/tags/kvm/" style="font-size: 10px;">kvm</a> <a href="/tags/lc-trie/" style="font-size: 10px;">lc-trie</a> <a href="/tags/makefile/" style="font-size: 10px;">makefile</a> <a href="/tags/mannual/" style="font-size: 10px;">mannual</a> <a href="/tags/manpages-dev/" style="font-size: 10px;">manpages-dev</a> <a href="/tags/marco/" style="font-size: 10px;">marco</a> <a href="/tags/markdown/" style="font-size: 10px;">markdown</a> <a href="/tags/mem/" style="font-size: 10px;">mem</a> <a href="/tags/memory/" style="font-size: 12.5px;">memory</a> <a href="/tags/minivnc/" style="font-size: 10px;">minivnc</a> <a href="/tags/mmap/" style="font-size: 10px;">mmap</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/net/" style="font-size: 13.75px;">net</a> <a href="/tags/netdev/" style="font-size: 11.25px;">netdev</a> <a href="/tags/netlink/" style="font-size: 15px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/octean/" style="font-size: 10px;">octean</a> <a href="/tags/octopress/" style="font-size: 10px;">octopress</a> <a href="/tags/page/" style="font-size: 10px;">page</a> <a href="/tags/pernet/" style="font-size: 10px;">pernet</a> <a href="/tags/pfn/" style="font-size: 10px;">pfn</a> <a href="/tags/policy/" style="font-size: 10px;">policy</a> <a href="/tags/qdisc/" style="font-size: 11.25px;">qdisc</a> <a href="/tags/reg/" style="font-size: 10px;">reg</a> <a href="/tags/route/" style="font-size: 17.5px;">route</a> <a href="/tags/rss/" style="font-size: 10px;">rss</a> <a href="/tags/sched/" style="font-size: 13.75px;">sched</a> <a href="/tags/schedule/" style="font-size: 10px;">schedule</a> <a href="/tags/sock/" style="font-size: 10px;">sock</a> <a href="/tags/socket/" style="font-size: 18.75px;">socket</a> <a href="/tags/softirq/" style="font-size: 12.5px;">softirq</a> <a href="/tags/subst/" style="font-size: 10px;">subst</a> <a href="/tags/summary/" style="font-size: 10px;">summary</a> <a href="/tags/sunrise/" style="font-size: 10px;">sunrise</a> <a href="/tags/system-call/" style="font-size: 10px;">system call</a> <a href="/tags/tcp/" style="font-size: 10px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 10px;">tcpdump</a> <a href="/tags/terminal/" style="font-size: 10px;">terminal</a> <a href="/tags/timezone/" style="font-size: 10px;">timezone</a> <a href="/tags/toolchain/" style="font-size: 11.25px;">toolchain</a> <a href="/tags/ubuntu/" style="font-size: 11.25px;">ubuntu</a> <a href="/tags/udp/" style="font-size: 10px;">udp</a> <a href="/tags/usb/" style="font-size: 10px;">usb</a> <a href="/tags/variant/" style="font-size: 10px;">variant</a> <a href="/tags/vhost/" style="font-size: 11.25px;">vhost</a> <a href="/tags/vim/" style="font-size: 11.25px;">vim</a> <a href="/tags/vimdiff/" style="font-size: 10px;">vimdiff</a> <a href="/tags/vxlan/" style="font-size: 10px;">vxlan</a> <a href="/tags/watchdog/" style="font-size: 10px;">watchdog</a> <a href="/tags/workqueue/" style="font-size: 13.75px;">workqueue</a> <a href="/tags/xfrm/" style="font-size: 16.25px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/02/">February 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2020/03/25/2020-03-25-kern-ovs-data-struct/">内核OVS的学习总结</a>
+          </li>
+        
+          <li>
+            <a href="/2020/03/15/2020-03-15-net-rx-drop-1/">net rx drop(续)</a>
+          </li>
+        
+          <li>
+            <a href="/2020/03/15/2020-03-15-net-rx-drop/">net rx drop</a>
+          </li>
+        
+          <li>
+            <a href="/2017/05/15/2017-05-15-slabinfo-cause-delay/">slabinfo 惹的祸</a>
+          </li>
+        
+          <li>
+            <a href="/2016/11/23/2016-11-23-what-is-tfo/">WHAT is TFO</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2023 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

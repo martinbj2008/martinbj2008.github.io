@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>vhost net study | Kernel study</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="vhost net 的目的是为了避免在host kerne上做一次qemu的调度，提升性能。xmit: 让vm的数据报在 host的内核就把报文发送出去。rcv： 核心数据结构vhost_poll是vhost里最关键的一个数据结构。1234567891027 &#x2F;* Pol&gt; &gt; file (eventfd or socket) *&#x2F;28 &#x2F;* Note: there&amp;#x27;s no">
+<meta property="og:type" content="article">
+<meta property="og:title" content="vhost net study">
+<meta property="og:url" content="https://martinbj2008.github.io/2015/05/21/2015-05-21-vhost-net-study/index.html">
+<meta property="og:site_name" content="Kernel study">
+<meta property="og:description" content="vhost net 的目的是为了避免在host kerne上做一次qemu的调度，提升性能。xmit: 让vm的数据报在 host的内核就把报文发送出去。rcv： 核心数据结构vhost_poll是vhost里最关键的一个数据结构。1234567891027 &#x2F;* Pol&gt; &gt; file (eventfd or socket) *&#x2F;28 &#x2F;* Note: there&amp;#x27;s no">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2015-05-21T09:41:07.000Z">
+<meta property="article:modified_time" content="2023-10-07T03:29:55.082Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="vhost">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel study" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel study</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-2015-05-21-vhost-net-study" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2015/05/21/2015-05-21-vhost-net-study/" class="article-date">
+  <time class="dt-published" datetime="2015-05-21T09:41:07.000Z" itemprop="datePublished">2015-05-21</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/virtnet/">virtnet</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      vhost net study
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>vhost net 的目的是为了避免在host kerne上做一次qemu的调度，提升性能。<br>xmit: 让vm的数据报在 host的内核就把报文发送出去。<br>rcv：</p>
+<h3 id="核心数据结构"><a href="#核心数据结构" class="headerlink" title="核心数据结构"></a>核心数据结构</h3><h4 id="vhost-poll是vhost里最关键的一个数据结构。"><a href="#vhost-poll是vhost里最关键的一个数据结构。" class="headerlink" title="vhost_poll是vhost里最关键的一个数据结构。"></a><code>vhost_poll</code>是vhost里最关键的一个数据结构。</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">27 /* Pol&gt; &gt; file (eventfd or socket) */</span><br><span class="line">28 /* Note: there&#x27;s nothing vhost specific about this structure. */</span><br><span class="line">29 struct vhost_poll &#123;</span><br><span class="line">3&gt; &gt; &gt; &gt;   poll_tabl&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt;  table;</span><br><span class="line">3&gt; &gt; &gt; &gt;   wait_queue_head_&gt; &gt; &gt; &gt;  *wqh;</span><br><span class="line">3&gt; &gt; &gt; &gt;   wait_queue_&gt; &gt; &gt; &gt; &gt; &gt;    wait;</span><br><span class="line">3&gt; &gt; &gt; &gt;   struct vhost_wor&gt; &gt; &gt; &gt;   work;</span><br><span class="line">3&gt; &gt; &gt; &gt;   unsigned lon&gt; &gt; &gt; &gt; &gt; &gt;   mask;</span><br><span class="line">3&gt; &gt; &gt; &gt;   struct vhost_de&gt; &gt; &gt; &gt;   *dev;</span><br><span class="line">36 &#125;;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>table:每次负责把wait域放倒wqh里。vhost_net_open将它的执行函数vhost_poll_func</li>
+<li>wqh：它的wqh被初始化指向一个eventfd的ctx，</li>
+<li>wait：每次把wait放倒这个wqh链表里，当guest vm的发送报文时，wait被摘下，<br>并执行其对应的func,vhost_net_open将该func被初始化为vhost_poll_wakeup。<br>vhost_poll_wakeup负责将work放入对应vhost_dev下的work_list链表中。</li>
+<li>work: 每个vhost_dev有一个thread，负责从work_list链表里的摘除work节点，<br>并执行work节点对应的fn. fn是真正干活的的函数。<br>  对于rx vhost_virqueue, vhost_net_open将该fn初始化为handle_rx_kick<br>  对于tx vhost_virqueue, vhost_net_open将该fn初始化为handle_tx_kick<br>  对于rx vhost_virqueue, vhost_net_open将该fn初始化为<br>handle_rx_kick.</li>
+<li>mask:是需要监听的eventfd的事件集合</li>
+<li>dev: 该vhost_poll对应的vhost_dev;</li>
+</ul>
+<span id="more"></span>
+<p>以guest VM发送一个报文为例</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">file: drivers/net/virtio_net.c</span><br><span class="line">&gt; .ndo_start_xmi&gt; &gt;  &gt; &gt; start_xmit,</span><br><span class="line">&gt; &gt;  static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)</span><br><span class="line">&gt; &gt; &gt; er&gt; &gt; xmit_skb(sq, skb);</span><br><span class="line">&gt; &gt; &gt; &gt; return virtqueue_add_outbuf(sq-&gt;vq, sq-&gt;sg, num_sg, skb, GFP_ATOMIC);</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; return virtqueue_add(vq, &amp;sg, num, 1, 0, data, gfp);</span><br><span class="line">&gt; &gt; &gt; virtqueue_kick(sq-&gt;vq);</span><br><span class="line">&gt; &gt; &gt; &gt; virtqueue_notify(vq);</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; vq-&gt;notify(_vq)</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt;  iowrite16(vq-&gt;index, (void __iomem *)vq-&gt;priv);</span><br></pre></td></tr></table></figure>
+
+<p>前端驱动最终guest vm因io操作造成vm exit. host vm 调用</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">vmx_handle_exit</span><br></pre></td></tr></table></figure>
+
+<p>处理这个io 请求。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">static int vmx_handle_exit(struct kvm_vcpu *vcpu)</span><br><span class="line">kvm_vmx_exit_handlers[exit_reason](vcpu);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">&gt; &gt; &gt; kvm_vmx_exit_handlers:  [EXIT_REASON_IO_INSTRUCTION&gt; &gt; &gt; &gt;  &gt; &gt; handle_io,</span><br><span class="line">&gt; &gt; &gt;  static int handle_io(struct kvm_vcpu *vcpu)</span><br><span class="line">&gt; &gt; &gt; &gt;  return kvm_fast_pio_out(vcpu, size, port);</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; static int emulator_pio_out_emulated(struct x86_emulate_ctxt *ctxt, int size, unsigned short port, const void *val, unsigned int count)</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; emulator_pio_in_out</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; kernel_pio(struct kvm_vcpu *vcpu, void *pd)</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; &gt; int kvm_io_bus_write(struct kvm_vcpu *vcpu, enum kvm_bus bus_idx, gpa_t addr,</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; __kvm_io_bus_write</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; dev-&gt;ops-&gt;write(vcpu, dev, addr, l, v) </span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; dev-&gt;ops is ioeventfd_ops 相当ioeventfd_write</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; eventfd_signal(p-&gt;eventfd, 1);</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; wake_up_locked_poll(&amp;ctx-&gt;wqh, POLLIN);</span><br></pre></td></tr></table></figure>
+
+<p>vhost net init </p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">vhost_net_open</span><br><span class="line">. vhost_dev_init</span><br><span class="line">&gt; &gt; vhost_poll_init(&amp;vq-&gt;poll, vq-&gt;handle_kick, POLLIN, dev);</span><br><span class="line">&gt; &gt; . init_waitqueue_func_entry(&amp;poll-&gt;wait, vhost_poll_wakeup);</span><br><span class="line">&gt; &gt; . init_poll_funcptr(&amp;poll-&gt;table, vhost_poll_func);</span><br><span class="line">&gt; &gt; . vhost_work_init(&amp;poll-&gt;work, fn);</span><br><span class="line">. vhost_poll_init(n-&gt;pol&gt; &gt; VHOST_NET_VQ_TX, handle_tx_net, POLLOUT, dev);</span><br><span class="line">. vhost_poll_init(n-&gt;pol&gt; &gt; VHOST_NET_VQ_RX, handle_rx_net, POLLIN, dev);</span><br><span class="line">. f-&gt;private_dat&gt; &gt; n;</span><br></pre></td></tr></table></figure>
+
+<h4 id="vhost-worker"><a href="#vhost-worker" class="headerlink" title="vhost_worker"></a><code>vhost_worker</code></h4><p>vhost set owner: 为每个vhost_dev,启动一个进程，该进程函数是vhost_worker，<br>它反复从该dev下的work_list链上取一个节点下来，<br>（该节点类型是vhost_work), 执行该节点下的fn函数。<br>每个dev下有个双向链work_list, 链中的每个节点是一个vhost_work<br><code>vhost_worker</code>顺序摘下一个节点，执行这个节点下的fn函数。<br>对于vhost_virtqueue RX&#x2F;TX来说，这个fn就是&#96;handle_rx_kick,handle_tx_kick.</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">&gt; vhost_net_set_owner</span><br><span class="line">&gt; &gt; vhost_dev_set_owner</span><br><span class="line">&gt; &gt; &gt; worke&gt; &gt; kthread_create(vhost_worker, dev, &quot;vhost-%d&quot;, current-&gt;pid);</span><br><span class="line">&gt; &gt; &gt; dev-&gt;worke&gt; &gt; worker;</span><br><span class="line">&gt; &gt; &gt; wake_up_process(worker);</span><br></pre></td></tr></table></figure>
+
+<p>每个vhost_virqueue下有一个vhost_poll。<br>VHOST_SET_VRING_KICK，将vhost_poll下的wqh(wait_queue_head_t类型)指向eventf下对应<br>的wqh，并将vhost_poll下的wait挂在wqh下。</p>
+<h4 id="poll-wqh被赋值指向-eventfd对应的eventfd-ctx下的wqh-这样一个virqueue下的poll就跟eventfd关联上了"><a href="#poll-wqh被赋值指向-eventfd对应的eventfd-ctx下的wqh-这样一个virqueue下的poll就跟eventfd关联上了" class="headerlink" title="poll-&gt;wqh被赋值指向 eventfd对应的eventfd_ctx下的wqh, 这样一个virqueue下的poll就跟eventfd关联上了!!!"></a>poll-&gt;wqh被赋值指向 eventfd对应的eventfd_ctx下的wqh, 这样一个virqueue下的poll就跟eventfd关联上了!!!</h4><p>最终poll的wait被放入到了eventfd的wqh链表里。</p>
+<p><code>vhost_net_ioctl VHOST_SET_VRING_KICK</code> </p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">vhost_vring_ioctl</span><br><span class="line">. case VHOST_SET_VRING_KICK:</span><br><span class="line">&gt; &gt; eventf&gt; &gt; f.fd == -&gt; &gt; NUL&gt; &gt; eventfd_fget(f.fd);</span><br><span class="line">&gt; &gt; vq-&gt;kic&gt; &gt; eventfp</span><br><span class="line">&gt; &gt; vhost_poll_start(&amp;vq-&gt;poll, vq-&gt;kick);</span><br><span class="line">&gt; &gt; . mas&gt; &gt; file-&gt;f_op-&gt;poll(file, &amp;poll-&gt;table); 此处file是vq-&gt;kick, 即vq对应的eventfd</span><br><span class="line">&gt; &gt; . 所以相当于调用 eventfd_poll</span><br><span class="line">&gt; &gt; &gt; &gt; poll_wait(file, &amp;ctx-&gt;wqh, wait);</span><br><span class="line">&gt; &gt; . vhost_poll_wakeup(&amp;poll-&gt;wait, 0, 0, (void *)mask);</span><br><span class="line">&gt; &gt; &gt; &gt; vhost_poll_queue(poll);</span><br><span class="line">&gt; &gt; &gt; &gt; . vhost_work_queue(poll-&gt;dev, &amp;poll-&gt;work);</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; list_add_tail(&amp;work-&gt;node, &amp;dev-&gt;work_list);</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; wake_up_process(dev-&gt;worker);</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; . static int vhost_worker(void *data)</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; wor&gt; &gt; list_first_entry(&amp;dev-&gt;work_list, struct vhost_work, node);</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; work-&gt;fn(work);</span><br></pre></td></tr></table></figure>
+
+<p>eventfd在vhost net里被用来处理从vm发出的报文。<br>以vhost_dev_net 下的rx virqueue为例。<br>poll是该virqueue下的poll。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">eventfd_poll(struct file *file, poll_table *wait) file:vrqueue使用的eventfd. wait virqueue下的tx poll对应的poll_table</span><br><span class="line">. poll_wait(file, &amp;ctx-&gt;wqh, wait); </span><br><span class="line">&gt; &gt;  p-&gt;_qproc(filp, wait_address, p); </span><br><span class="line">&gt; &gt; 相当于 vhost_poll_func(filp, wait_address, p)</span><br><span class="line">p为poll table。</span><br><span class="line"> _qproc: 是vhost_poll_func。通过vhost_dev_init入口，被init_poll_funcptr(&amp;poll-&gt;table, vhost_poll_func);  </span><br><span class="line">wait_address: </span><br></pre></td></tr></table></figure>
+<p>vhost_poll_func:每次都将vhost_poll下的wait放倒vhost_poll下的wqh链表里（即evetnfd下的ctx的wqh链表里）。<br>以为它被初始化为vhost_poll下的poll_table的函数指针，因此对vhost_poll下的poll_table调用poll_wait的时候，<br>相当于对vhost_poll调用vhost_poll_func。</p>
+<p>vhost_poll_wakeup 将传入的wait转换为一个vhost poll<br>将该poll下work挂在到poll对应的vhost_dev.</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">vhost_poll_wakeup</span><br><span class="line">&gt; vhost_poll_queue(poll);</span><br><span class="line">&gt; &gt; vhost_work_queue(poll-&gt;dev, &amp;poll-&gt;work);</span><br><span class="line">&gt; &gt; &gt; list_add_tail(&amp;work-&gt;node, &amp;dev-&gt;work_list);</span><br><span class="line">&gt; &gt; &gt; wake_up_process(dev-&gt;worker);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">117 static unsigned int eventfd_poll(struct file *file, poll_table *wait)</span><br><span class="line">118 &#123;</span><br><span class="line">11&gt; &gt; &gt; &gt;   struct eventfd_ctx *ct&gt; &gt; file-&gt;private_data;</span><br><span class="line">12&gt; &gt; &gt; &gt;   unsigned int event&gt; &gt; 0;</span><br><span class="line">12&gt; &gt; &gt; &gt;   u64 count;</span><br><span class="line">122</span><br><span class="line">12&gt; &gt; &gt; &gt;   poll_wait(file, &amp;ctx-&gt;wqh, wait);</span><br><span class="line">12&gt; &gt; &gt; &gt;   smp_rmb();</span><br><span class="line">12&gt; &gt; &gt; &gt;   coun&gt; &gt; ctx-&gt;count;</span><br><span class="line">126</span><br><span class="line">12&gt; &gt; &gt; &gt;   if (coun&gt; &gt; 0)</span><br><span class="line">12&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt;   events |= POLLIN;</span><br><span class="line">12&gt; &gt; &gt; &gt;   if (count == ULLONG_MAX)</span><br><span class="line">13&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt;   events |= POLLERR;</span><br><span class="line">13&gt; &gt; &gt; &gt;   if (ULLONG_MA&gt; &gt; &gt; &gt; count)</span><br><span class="line">13&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt;   events |= POLLOUT;</span><br><span class="line">133</span><br><span class="line">13&gt; &gt; &gt; &gt;   return events;</span><br><span class="line">135 &#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">42 static inline void poll_wait(struct fil&gt; &gt; filp, wait_queue_head_&gt; &gt; wait_address, poll_table *p)</span><br><span class="line">43 &#123;</span><br><span class="line">4&gt; &gt; &gt; &gt;   if (p &amp;&amp; p-&gt;_qproc &amp;&amp; wait_address)</span><br><span class="line">4&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt;   p-&gt;_qproc(filp, wait_address, p);</span><br><span class="line">46 &#125;</span><br></pre></td></tr></table></figure>
+
+<p>TODO1: Why <code>vp-&gt;notify</code> is <code>vp_notify</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">drivers/virtio/virtio_pci_modern.c</span><br><span class="line">315 static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,</span><br><span class="line">31&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; struct virtio_pci_vq_info *info,</span><br><span class="line">31&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; unsigned index,</span><br><span class="line">31&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; void (*callback)(struct virtqueue *vq),</span><br><span class="line">31&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; const char *name,</span><br><span class="line">32&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; u16 msix_vec)</span><br><span class="line">...</span><br><span class="line">35&gt; &gt; &gt; &gt;   /* create the vring */</span><br><span class="line">35&gt; &gt; &gt; &gt;   v&gt; &gt; vring_new_virtqueue(index, info-&gt;num,</span><br><span class="line">35&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt;    SMP_CACHE_BYTES, &amp;vp_dev-&gt;vdev,</span><br><span class="line">35&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt;    true, info-&gt;queue, vp_notify, callback, name);</span><br></pre></td></tr></table></figure>
+
+<p>TODO2: why vm exit call <code>vmx_handle_exit</code></p>
+<p>TODO3: why dev-&gt;ops-&gt;write 相当</p>
+<p>TODO4: “wake_up_locked_poll add_wait_queue 为例说明wait list的使用。<br>__wake_up_common “</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">wake_up_locked_poll</span><br><span class="line">&gt; __wake_up_locked_key</span><br><span class="line">&gt; &gt;  list_for_each_entry_safe(curr, next, &amp;q-&gt;task_list, task_list) &#123;</span><br><span class="line">&gt; &gt; &gt; curr-&gt;func(curr, mode, wake_flags, key)</span><br></pre></td></tr></table></figure>
+
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2015/05/21/2015-05-21-vhost-net-study/" data-id="clnfhassw00cle0mham2wfs8a" data-title="vhost net study" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/vhost/" rel="tag">vhost</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2015/05/22/2015-05-22-how-tcpdown-direction-filter-work/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          how tcpdown direction filter work
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2015/05/21/2015-05-21-ipvlan-study/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">ipvlan study</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IRQs/">IRQs</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/make/">make</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netcore/">netcore</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/virtnet/">virtnet</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IRQ/" rel="tag">IRQ</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SP/" rel="tag">SP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TCPDUMP/" rel="tag">TCPDUMP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/arg/" rel="tag">arg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bash/" rel="tag">bash</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/beep/" rel="tag">beep</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bootmem/" rel="tag">bootmem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/cacahe/" rel="tag">cacahe</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/dump-sa/" rel="tag">dump sa</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ftrace/" rel="tag">ftrace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/glibc/" rel="tag">glibc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gtk/" rel="tag">gtk</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2markdown/" rel="tag">html2markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2text/" rel="tag">html2text</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet/" rel="tag">inet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet-socket/" rel="tag">inet socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv4/" rel="tag">ipv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipvlan/" rel="tag">ipvlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kenel/" rel="tag">kenel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/km/" rel="tag">km</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kthread/" rel="tag">kthread</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kvm/" rel="tag">kvm</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/lc-trie/" rel="tag">lc-trie</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/makefile/" rel="tag">makefile</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mannual/" rel="tag">mannual</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/manpages-dev/" rel="tag">manpages-dev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/marco/" rel="tag">marco</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/markdown/" rel="tag">markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mem/" rel="tag">mem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/minivnc/" rel="tag">minivnc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mmap/" rel="tag">mmap</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/net/" rel="tag">net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/network/" rel="tag">network</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octean/" rel="tag">octean</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octopress/" rel="tag">octopress</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/page/" rel="tag">page</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pernet/" rel="tag">pernet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pfn/" rel="tag">pfn</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/policy/" rel="tag">policy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/qdisc/" rel="tag">qdisc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/reg/" rel="tag">reg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/rss/" rel="tag">rss</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/schedule/" rel="tag">schedule</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sock/" rel="tag">sock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/softirq/" rel="tag">softirq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/subst/" rel="tag">subst</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/summary/" rel="tag">summary</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sunrise/" rel="tag">sunrise</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/system-call/" rel="tag">system call</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/terminal/" rel="tag">terminal</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/timezone/" rel="tag">timezone</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/toolchain/" rel="tag">toolchain</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ubuntu/" rel="tag">ubuntu</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/udp/" rel="tag">udp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/usb/" rel="tag">usb</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/variant/" rel="tag">variant</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vhost/" rel="tag">vhost</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vimdiff/" rel="tag">vimdiff</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vxlan/" rel="tag">vxlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/watchdog/" rel="tag">watchdog</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/workqueue/" rel="tag">workqueue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 16.25px;">IPv4</a> <a href="/tags/IRQ/" style="font-size: 12.5px;">IRQ</a> <a href="/tags/SP/" style="font-size: 10px;">SP</a> <a href="/tags/TCPDUMP/" style="font-size: 10px;">TCPDUMP</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 11.25px;">address</a> <a href="/tags/arg/" style="font-size: 10px;">arg</a> <a href="/tags/bash/" style="font-size: 10px;">bash</a> <a href="/tags/beep/" style="font-size: 10px;">beep</a> <a href="/tags/bh/" style="font-size: 10px;">bh</a> <a href="/tags/bootmem/" style="font-size: 10px;">bootmem</a> <a href="/tags/cacahe/" style="font-size: 10px;">cacahe</a> <a href="/tags/checksum/" style="font-size: 11.25px;">checksum</a> <a href="/tags/debug/" style="font-size: 10px;">debug</a> <a href="/tags/dump-sa/" style="font-size: 10px;">dump sa</a> <a href="/tags/fib/" style="font-size: 13.75px;">fib</a> <a href="/tags/ftrace/" style="font-size: 10px;">ftrace</a> <a href="/tags/gcc/" style="font-size: 13.75px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/glibc/" style="font-size: 10px;">glibc</a> <a href="/tags/gtk/" style="font-size: 10px;">gtk</a> <a href="/tags/html2markdown/" style="font-size: 10px;">html2markdown</a> <a href="/tags/html2text/" style="font-size: 10px;">html2text</a> <a href="/tags/inet/" style="font-size: 10px;">inet</a> <a href="/tags/inet-socket/" style="font-size: 10px;">inet socket</a> <a href="/tags/ipv4/" style="font-size: 11.25px;">ipv4</a> <a href="/tags/ipv6/" style="font-size: 11.25px;">ipv6</a> <a href="/tags/ipvlan/" style="font-size: 10px;">ipvlan</a> <a href="/tags/irq/" style="font-size: 10px;">irq</a> <a href="/tags/kenel/" style="font-size: 10px;">kenel</a> <a href="/tags/kernel/" style="font-size: 20px;">kernel</a> <a href="/tags/km/" style="font-size: 10px;">km</a> <a href="/tags/kthread/" style="font-size: 10px;">kthread</a> <a href="/tags/kvm/" style="font-size: 10px;">kvm</a> <a href="/tags/lc-trie/" style="font-size: 10px;">lc-trie</a> <a href="/tags/makefile/" style="font-size: 10px;">makefile</a> <a href="/tags/mannual/" style="font-size: 10px;">mannual</a> <a href="/tags/manpages-dev/" style="font-size: 10px;">manpages-dev</a> <a href="/tags/marco/" style="font-size: 10px;">marco</a> <a href="/tags/markdown/" style="font-size: 10px;">markdown</a> <a href="/tags/mem/" style="font-size: 10px;">mem</a> <a href="/tags/memory/" style="font-size: 12.5px;">memory</a> <a href="/tags/minivnc/" style="font-size: 10px;">minivnc</a> <a href="/tags/mmap/" style="font-size: 10px;">mmap</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/net/" style="font-size: 13.75px;">net</a> <a href="/tags/netdev/" style="font-size: 11.25px;">netdev</a> <a href="/tags/netlink/" style="font-size: 15px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/octean/" style="font-size: 10px;">octean</a> <a href="/tags/octopress/" style="font-size: 10px;">octopress</a> <a href="/tags/page/" style="font-size: 10px;">page</a> <a href="/tags/pernet/" style="font-size: 10px;">pernet</a> <a href="/tags/pfn/" style="font-size: 10px;">pfn</a> <a href="/tags/policy/" style="font-size: 10px;">policy</a> <a href="/tags/qdisc/" style="font-size: 11.25px;">qdisc</a> <a href="/tags/reg/" style="font-size: 10px;">reg</a> <a href="/tags/route/" style="font-size: 17.5px;">route</a> <a href="/tags/rss/" style="font-size: 10px;">rss</a> <a href="/tags/sched/" style="font-size: 13.75px;">sched</a> <a href="/tags/schedule/" style="font-size: 10px;">schedule</a> <a href="/tags/sock/" style="font-size: 10px;">sock</a> <a href="/tags/socket/" style="font-size: 18.75px;">socket</a> <a href="/tags/softirq/" style="font-size: 12.5px;">softirq</a> <a href="/tags/subst/" style="font-size: 10px;">subst</a> <a href="/tags/summary/" style="font-size: 10px;">summary</a> <a href="/tags/sunrise/" style="font-size: 10px;">sunrise</a> <a href="/tags/system-call/" style="font-size: 10px;">system call</a> <a href="/tags/tcp/" style="font-size: 10px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 10px;">tcpdump</a> <a href="/tags/terminal/" style="font-size: 10px;">terminal</a> <a href="/tags/timezone/" style="font-size: 10px;">timezone</a> <a href="/tags/toolchain/" style="font-size: 11.25px;">toolchain</a> <a href="/tags/ubuntu/" style="font-size: 11.25px;">ubuntu</a> <a href="/tags/udp/" style="font-size: 10px;">udp</a> <a href="/tags/usb/" style="font-size: 10px;">usb</a> <a href="/tags/variant/" style="font-size: 10px;">variant</a> <a href="/tags/vhost/" style="font-size: 11.25px;">vhost</a> <a href="/tags/vim/" style="font-size: 11.25px;">vim</a> <a href="/tags/vimdiff/" style="font-size: 10px;">vimdiff</a> <a href="/tags/vxlan/" style="font-size: 10px;">vxlan</a> <a href="/tags/watchdog/" style="font-size: 10px;">watchdog</a> <a href="/tags/workqueue/" style="font-size: 13.75px;">workqueue</a> <a href="/tags/xfrm/" style="font-size: 16.25px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/02/">February 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2020/03/25/2020-03-25-kern-ovs-data-struct/">内核OVS的学习总结</a>
+          </li>
+        
+          <li>
+            <a href="/2020/03/15/2020-03-15-net-rx-drop-1/">net rx drop(续)</a>
+          </li>
+        
+          <li>
+            <a href="/2020/03/15/2020-03-15-net-rx-drop/">net rx drop</a>
+          </li>
+        
+          <li>
+            <a href="/2017/05/15/2017-05-15-slabinfo-cause-delay/">slabinfo 惹的祸</a>
+          </li>
+        
+          <li>
+            <a href="/2016/11/23/2016-11-23-what-is-tfo/">WHAT is TFO</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2023 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

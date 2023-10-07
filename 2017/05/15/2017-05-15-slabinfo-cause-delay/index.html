@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>slabinfo 惹的祸 | Kernel study</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="mysql访问延迟问题分析 问题背景收到数据库同学的问题排查的请求，同一个数据中心里，dbproxy到mysql的连接失败率偏高，其tcp connect调用的超时时间是20ms+。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="slabinfo 惹的祸">
+<meta property="og:url" content="https://martinbj2008.github.io/2017/05/15/2017-05-15-slabinfo-cause-delay/index.html">
+<meta property="og:site_name" content="Kernel study">
+<meta property="og:description" content="mysql访问延迟问题分析 问题背景收到数据库同学的问题排查的请求，同一个数据中心里，dbproxy到mysql的连接失败率偏高，其tcp connect调用的超时时间是20ms+。">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/slabinfo-delay-tcp.png">
+<meta property="article:published_time" content="2017-05-15T10:56:08.000Z">
+<meta property="article:modified_time" content="2023-10-07T03:29:55.082Z">
+<meta property="article:author" content="Martinbj2008">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/slabinfo-delay-tcp.png">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel study" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel study</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-2017-05-15-slabinfo-cause-delay" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2017/05/15/2017-05-15-slabinfo-cause-delay/" class="article-date">
+  <time class="dt-published" datetime="2017-05-15T10:56:08.000Z" itemprop="datePublished">2017-05-15</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      slabinfo 惹的祸
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>mysql访问延迟问题分析</p>
+<h2 id="问题背景"><a href="#问题背景" class="headerlink" title="问题背景"></a>问题背景</h2><p>收到数据库同学的问题排查的请求，<br>同一个数据中心里，dbproxy到mysql的连接失败率偏高，其tcp connect调用的超时时间是20ms+。</p>
+<span id="more"></span>
+
+<h2 id="分析过程"><a href="#分析过程" class="headerlink" title="分析过程"></a>分析过程</h2><h2 id="通过tcpdump在两端服务器上抓包，发现tcpdump抓包数据"><a href="#通过tcpdump在两端服务器上抓包，发现tcpdump抓包数据" class="headerlink" title="通过tcpdump在两端服务器上抓包，发现tcpdump抓包数据"></a>通过tcpdump在两端服务器上抓包，<br>发现<br>tcpdump抓包数据<br><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">（缺另外一侧数据）</span><br><span class="line">2017-04-27 16:01:09.403569 IP 100.69.103.13.50969 &gt; 100.69.110.11.3306: Flags [S], seq 3051956561, win 14600, options [mss 1460,sackOK,TS val 1801758554 ecr 0,nop,wscale 7], length 0</span><br><span class="line">2017-04-27 16:01:09.430687 IP 100.69.110.11.3306 &gt; 100.69.103.13.50969: Flags [S.], seq 3148283284, ack 3051956562, win 14480, options [mss 1460,sackOK,TS val 3143621189 ecr 1801758554,nop,wscale 7], length 0</span><br><span class="line"></span><br></pre></td></tr></table></figure></h2><p>TCPDUMP数据分析<br><img src="/images/slabinfo-delay-tcp.png"><br>四个时间点分别即为<code>t1</code>,<code>t2</code>,<code>t3</code>,<code>t4</code>：</p>
+<ul>
+<li>t1: syn报文在clieint端抓取的时间</li>
+<li>t2: syn报文在server端抓取的时间</li>
+<li>t3: syn+ack报文在server端抓取的时间</li>
+<li>t4: syn+ack报文在client端抓取的时间</li>
+</ul>
+<p>观察发现两类case：</p>
+<ul>
+<li><code>t1</code> 比<code>t2</code>早20ms+， 而<code>t2</code>, <code>t3</code>, t4的时间点相差不到2ms</li>
+<li>t4 比<code>t3</code>晚20ms+， 而<code>t1</code>, <code>t2</code>, <code>t3</code>的时间点相差不到2ms<br>因为我们的服务器上都部署了ntp服务，所以服务器之间的时间偏差控制的非常好，可以保证偏差在1ms左右（甚至更低）。<br>所以上面的四个时间点可以认为以同一个时间轴上的。<br>因次，可确定是报文数据被延迟了。</li>
+</ul>
+<p>该问题不是出现在单台服务器上，mysql的好多台服务器都存在不同程度的延迟。<br>因此延迟的怀疑对象有:</p>
+<ul>
+<li>物理传输网络（交换机及网线）</li>
+<li>服务器<br>根据历史经验判断交换机丢包的可疑点最大，因此找交换机同学寻求帮助，并建议进行交换机上的端口镜像抓包。</li>
+</ul>
+<h3 id="交换机网络排查"><a href="#交换机网络排查" class="headerlink" title="交换机网络排查"></a>交换机网络排查</h3><hr>
+<p>网络的同学提供了一个很好的检测工具，hping。<br>通过hping我们可以很容易的判断单台服务器是否存在报文延迟。<br>期间经过网络同学的尝试，得到一些测试信息（包含了同学们的血泪史）：</p>
+<ul>
+<li>数据库mysql服务停止，问题依然存在。</li>
+<li>更换服务器端的网线，问题依然存在。</li>
+<li>更换tor交换机的上联网线，问题依然存在。</li>
+<li>使用装机模板重新安装服务器，问题消失。</li>
+<li>重装后的服务器启用老的内核和网卡驱动，问题消失。</li>
+<li>reboot服务器，问题消失</li>
+<li>最终通过端口镜像，锁定该问题不是物理传输网络的问题，重新回到服务器端进行排查。</li>
+</ul>
+<h3 id="服务器端问题排查"><a href="#服务器端问题排查" class="headerlink" title="服务器端问题排查"></a>服务器端问题排查</h3><hr>
+<p>因为我们最开始的排查时候，已经使用tcpdump命令，锁定了这个问题是网络报文传输延迟。<br>现在排除服务器端网络报文延迟的可能后，<br>因为tcpdump抓包位置是在内核协议栈的入口<code>netif_receive_skb</code>里，通过<code>ptye_all</code>这个钩子链表，<br>捕获到报文的，整个过程是在内核软中断（确切说是RX softirq）里做的，<br>因此可以排除应用程序的干扰的可能。</p>
+<p>最值得怀疑的是：</p>
+<ul>
+<li>服务器端的网卡硬件</li>
+<li>网卡驱动</li>
+<li>其他可能</li>
+</ul>
+<p>那么接下来的任务及时进一步锁定排查的范围，</p>
+<p>首先从软硬件的角度去排查：<br>我们出问题的机器上使用的网卡是intel的x540万兆网卡, 硬件和驱动在圈里的口碑很不错的。<br>为此我们也跟intel的网卡同学进行了沟通，<br>尽管我们服务器上的网络配置存在瑕疵，但是不足以导致出现有1ms以上的报文延迟。</p>
+<p>受限于我们没有复现问题的手段，我们只能够从目前出问题的10+台服务器身上寻找突破。<br>同时，之前的排查也表明，这个问题在服务器重启之后就会消失，而且无法复现。</p>
+<h3 id="HPING测试结果再分析"><a href="#HPING测试结果再分析" class="headerlink" title="HPING测试结果再分析"></a>HPING测试结果再分析</h3><hr>
+<p>我们手头的测试数据除了tcpdump，就只有hping测试结果可用，<br>因此只能在hping测试结果上，做文章。</p>
+<p>测试结果里出现了最大19ms+的延迟，</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251230 win=0 rtt=19.2 ms</span><br></pre></td></tr></table></figure>
+<p>这是一个hping的测试结果</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><span class="line">[mailto:root@gs-event2-mysql04.gz01:~$]root@gs-event2-mysql04.gz01:~$ !gre</span><br><span class="line">grep 251230 -B 100 -C 20 B --color</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251294 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251295 win=0 rtt=0.0 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251296 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251297 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251298 win=0 rtt=0.0 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251299 win=0 rtt=0.0 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251300 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251301 win=0 rtt=0.0 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251302 win=0 rtt=0.0 ms​</span><br><span class="line">....(为方便讨论省略部分记录)</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251391 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251392 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251393 win=0 rtt=0.0 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251394 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251395 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251396 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251397 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251398 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251230 win=0 rtt=19.2 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251239 win=0 rtt=18.2 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251249 win=0 rtt=17.2 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251244 win=0 rtt=17.7 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251266 win=0 rtt=15.2 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251259 win=0 rtt=16.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251288 win=0 rtt=12.8 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251277 win=0 rtt=14.0 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251355 win=0 rtt=5.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251362 win=0 rtt=4.3 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251373 win=0 rtt=3.0 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251384 win=0 rtt=1.7 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251390 win=0 rtt=1.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251399 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251400 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251401 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251402 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251403 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251404 win=0 rtt=0.0 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251405 win=0 rtt=0.1 ms</span><br><span class="line">len=46 ip=100.69.110.41 ttl=64 DF id=0 sport=0 flags=RA seq=251406 win=0 rtt=0.0 ms</span><br></pre></td></tr></table></figure>
+<p>把出问题的前100个和后20个报文打印，我们发现</p>
+<p>只是部分报文被延迟，其他报文是正常的。<br>打印下各个报文的， 发现序列号每增加1个，延迟大概降低100us，正好匹配发包时间间隔。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">      序列号   延迟ms</span><br><span class="line">1    251230 19.2</span><br><span class="line">2    251239 18.2</span><br><span class="line">3    251249 17.2</span><br><span class="line">4    251244 17.7</span><br><span class="line">5    251266 15.2</span><br><span class="line">6    251259 16.1</span><br><span class="line">7    251288 12.8</span><br><span class="line">8    251277 14.0</span><br><span class="line">9    251355 5.1</span><br><span class="line">10   251362 4.3</span><br><span class="line">11   251373 3.0</span><br></pre></td></tr></table></figure>
+
+<p>相对第一个报文的序列号偏移， 延迟差值</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">1	9 -1</span><br><span class="line">2	19 -2</span><br><span class="line">3	14 -1.5</span><br><span class="line">4	36 -4</span><br><span class="line">5	29 -3.1</span><br><span class="line">6	58 -6.4</span><br><span class="line">7	47 -5.2</span><br><span class="line">8	125 -14.1</span><br><span class="line">9	132 -14.9</span><br><span class="line">10	143 -16.2</span><br></pre></td></tr></table></figure>
+
+<p>通过上面分析我们可以确定：</p>
+<ul>
+<li>网络有问题: <code>部分报文被延迟了</code></li>
+<li>网络没问题: <code>不是全部报文被延迟</code><br>哈哈哈，<code>部分报文被延迟了， 但是不是全部报文</code>.</li>
+</ul>
+<h3 id="寻找被延迟的报文"><a href="#寻找被延迟的报文" class="headerlink" title="寻找被延迟的报文"></a>寻找被延迟的报文</h3><hr>
+<p>根据hping的分析，我们看到部分报文被延迟了，那么接下来需要排查下这个延迟是什么时候发生的，如果能够得到问题现场，<br>缩小排查的范围（比如硬件问题， 驱动问题，或者其他）。<br>经过考虑，设计一个测试场景，</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">1 启用hping报文的时间戳（timestamp）选项，让hping报文携带上client段的时间点（单位ms），</span><br><span class="line">2 在服务器端（tcp server）增加一个直接编写的网桥KO，</span><br><span class="line">3 网桥KO，检查hping报文的时间点跟服务器内核里的`tcp timestamp`的偏移</span><br><span class="line">4 如果时间偏移超过预设值（10ms+），那么可以判定该报文已经产生延迟了。</span><br></pre></td></tr></table></figure>
+
+<h2 id="通过新编写的内核网桥测试模块，-我们获取到了出问题时候，内核的一些场景信息："><a href="#通过新编写的内核网桥测试模块，-我们获取到了出问题时候，内核的一些场景信息：" class="headerlink" title="通过新编写的内核网桥测试模块， 我们获取到了出问题时候，内核的一些场景信息："></a>通过新编写的内核网桥测试模块， 我们获取到了出问题时候，内核的一些场景信息：<br><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line">1	Pid: 6579, comm: ss Not tainted 2.6.32-573.18.1.el6.toav2.x86_64 #1	</span><br><span class="line">2	Call Trace:</span><br><span class="line">3	[] ? netdev_frame_hook+0x183/0x1ac [hook]</span><br><span class="line">4	[] ? __netif_receive_skb+0x1c7/0x570</span><br><span class="line">5	[] ? netif_receive_skb+0x58/0x60</span><br><span class="line">6	[] ? napi_skb_finish+0x50/0x70</span><br><span class="line">7	[] ? napi_gro_receive+0x39/0x50</span><br><span class="line">8	[] ? ixgbe_clean_rx_irq+0x26a/0xc70 [ixgbe]</span><br><span class="line">9	[] ? ixgbe_poll+0x40a/0x760 [ixgbe]</span><br><span class="line">10	[] ? net_rx_action+0x103/0x2f0</span><br><span class="line">11	[] ? __do_softirq+0xc1/0x1e0</span><br><span class="line">12	[] ? tick_program_event+0x2f/0x40</span><br><span class="line">13	[] ? call_softirq+0x1c/0x30</span><br><span class="line">14	[] ? do_softirq+0x65/0xa0</span><br><span class="line">15	[] ? irq_exit+0x85/0x90</span><br><span class="line">16	[] ? smp_apic_timer_interrupt+0x4a/0x60</span><br><span class="line">17	[] ? apic_timer_interrupt+0x13/0x20</span><br><span class="line">18	[] ? s_show+0x1ad/0x330</span><br><span class="line">19	[] ? s_show+0xa7/0x330</span><br><span class="line">20	[] ? seq_read+0x289/0x400</span><br><span class="line">21	[] ? proc_reg_read+0x7e/0xc0</span><br><span class="line">22	[] ? vfs_read+0xb5/0x1a0</span><br><span class="line">23	[] ? fget_light_pos+0x16/0x50</span><br><span class="line">24	[] ? sys_read+0x51/0xb0</span><br><span class="line">25	[] ? system_call_fastpath+0x16/0x1b</span><br></pre></td></tr></table></figure></h2><p>这里搜集到两个有用的信息：</p>
+<ul>
+<li>出问题的时候都是在ss命令的上下文里。</li>
+<li>出问题的时候都是在每个cpu的本地时钟中断里，而不是网卡中断里。<br>这两个信息对我们后续的排查起了很大的引导作用。</li>
+</ul>
+<p>SS命令的尝试</p>
+<ul>
+<li>跟数据库同学协调，在一个停了服务的机器上，删除了ss命令，问题消失。yeah！<br>因为断定SS命令会是问题的触发点。<br>期间，根据intel同学的建议，把网卡的亲和性做了调整，关闭掉irqbalance，发现问题依然存在。<br>但是问题出现的频率有所降低。</li>
+<li>根据出问题时候，cpu的调用栈没有在网卡中断的handler里，判定要么网卡中断被阻塞（关闭了），<br>要么是网卡本身就没有产生中断。<br>期间进行如下实验，但是失败了。</li>
+</ul>
+<p>尝试使jprobe去抓取网卡中断去处理函数失败。</p>
+<ul>
+<li>怀疑下半部被禁止了， 抓取bh的enable和disable的调用时间，未见异常。</li>
+<li>不停的跑ss命令20+分钟，未能复现问题。</li>
+<li>猜测这个问题是某个cpu出问题，卡顿了一下。同时，ss命令又跟问题触发条件相关。</li>
+</ul>
+<p>进行了一个实验：</p>
+<ul>
+<li>把ss运行的核跟网卡中断的核分割开，1问题消失了。ss不再导致报文延迟了。</li>
+<li>反向试验，ss命令强制跟网卡中断在一个cpu上，问题必现。<br>后续的测试试验，使用ss命令跟cpu在一个核上。</li>
+</ul>
+<h3 id="走弯路，掉进INET-DIAG坑里"><a href="#走弯路，掉进INET-DIAG坑里" class="headerlink" title="走弯路，掉进INET_DIAG坑里"></a>走弯路，掉进INET_DIAG坑里</h3><hr>
+<p>ss命令是用来dump 内核里的tcp的链接的。<br>其使用tcp diag和inet diag连个模块，通过netlink跟内核进行交互，<br>从而获取内核里的tcp socket的状态。<br>查看两个ko的代码，发现有基础bh相关的操作。<br>这是怀疑跟bh有关系， 虽然之前bh统计未见异常（疑神疑鬼哈哈哈——）</p>
+<p>把tcp diag和inetdiag重新加载，问题仍然存在<br>把tcp diag 和inet diag重新编译，并加入debug，发现bh前后工作很正常<br>结合网桥debug未发现异常</p>
+<h3 id="再次分析SS命令"><a href="#再次分析SS命令" class="headerlink" title="再次分析SS命令"></a>再次分析SS命令</h3><p>下载ss命令代码，研究ss命令的实现<br>发现关闭ss所有tcp socket dump的功能后，问题依然存在。<br>最后把一个不起眼的<code>读/proc/slabinfo的操作关闭后，问题消失了</code>！！！</p>
+<p>编写一个单独的程序读取&#x2F;proc&#x2F;slabinfo的程序，<br>发现一旦读的数据超过特定长度12000+，问题基本必现，只是延迟大小有些不同而已。</p>
+<h3 id="PROC-SLABINFO分析"><a href="#PROC-SLABINFO分析" class="headerlink" title="&#x2F;PROC&#x2F;SLABINFO分析"></a>&#x2F;PROC&#x2F;SLABINFO分析</h3><p>分析内核&#x2F;proc&#x2F;slabinfo代码发现， 其实现的代码里正好跟网桥debug时候输出的调用<code>s_show</code>重合。<br>其<code>s_show</code>的函数里会执行关闭irq的操作。<br>写一个内核debug ko，模拟了<code>s_show</code>做相同的操作，成功复现了ss相同的现象。报文延迟20+ms</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">1    show_kmem_cache: 1494580765:721875 &lt;--- 1494580765:723446, ext4_inode_cache: node0, full:16612, partial:22, free:0</span><br><span class="line">2    show_kmem_cache: 1494580765:726766 &lt;--- 1494580765:728612, dentry: node0, full:18756, partial:72, free:0</span><br><span class="line">3    show_kmem_cache: 1494580765:729015 &lt;--- 1494580765:732834, radix_tree_node: node0, full:29923, partial:10315, free:0</span><br><span class="line">4    show_kmem_cache: 1494580765:733024 &lt;--- 1494580765:738746, radix_tree_node: node1, full:995, partial:39315, free:0</span><br><span class="line">5    show_kmem_cache: 1494580765:738960 &lt;--- 1494580765:757472, buffer_head: node0, full:48009, partial:148216, free:0</span><br><span class="line">6    show_kmem_cache: 1494580765:758144 &lt;--- 1494580765:815435, buffer_head: node1, full:1143, partial:402863, free:0</span><br></pre></td></tr></table></figure>
+
+<p>感谢隔壁老王对这个问题的技术指导，感谢数据库和网络兄弟团队的支持。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2017/05/15/2017-05-15-slabinfo-cause-delay/" data-id="clnfhaspa006ke0mheztkd6ts" data-title="slabinfo 惹的祸" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2020/03/15/2020-03-15-net-rx-drop/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          net rx drop
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2016/11/23/2016-11-23-what-is-tfo/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">WHAT is TFO</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IRQs/">IRQs</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/make/">make</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netcore/">netcore</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/virtnet/">virtnet</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IRQ/" rel="tag">IRQ</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SP/" rel="tag">SP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TCPDUMP/" rel="tag">TCPDUMP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/arg/" rel="tag">arg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bash/" rel="tag">bash</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/beep/" rel="tag">beep</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bootmem/" rel="tag">bootmem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/cacahe/" rel="tag">cacahe</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/dump-sa/" rel="tag">dump sa</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ftrace/" rel="tag">ftrace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/glibc/" rel="tag">glibc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gtk/" rel="tag">gtk</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2markdown/" rel="tag">html2markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2text/" rel="tag">html2text</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet/" rel="tag">inet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet-socket/" rel="tag">inet socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv4/" rel="tag">ipv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipvlan/" rel="tag">ipvlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kenel/" rel="tag">kenel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/km/" rel="tag">km</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kthread/" rel="tag">kthread</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kvm/" rel="tag">kvm</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/lc-trie/" rel="tag">lc-trie</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/makefile/" rel="tag">makefile</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mannual/" rel="tag">mannual</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/manpages-dev/" rel="tag">manpages-dev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/marco/" rel="tag">marco</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/markdown/" rel="tag">markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mem/" rel="tag">mem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/minivnc/" rel="tag">minivnc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mmap/" rel="tag">mmap</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/net/" rel="tag">net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/network/" rel="tag">network</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octean/" rel="tag">octean</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octopress/" rel="tag">octopress</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/page/" rel="tag">page</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pernet/" rel="tag">pernet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pfn/" rel="tag">pfn</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/policy/" rel="tag">policy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/qdisc/" rel="tag">qdisc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/reg/" rel="tag">reg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/rss/" rel="tag">rss</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/schedule/" rel="tag">schedule</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sock/" rel="tag">sock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/softirq/" rel="tag">softirq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/subst/" rel="tag">subst</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/summary/" rel="tag">summary</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sunrise/" rel="tag">sunrise</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/system-call/" rel="tag">system call</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/terminal/" rel="tag">terminal</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/timezone/" rel="tag">timezone</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/toolchain/" rel="tag">toolchain</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ubuntu/" rel="tag">ubuntu</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/udp/" rel="tag">udp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/usb/" rel="tag">usb</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/variant/" rel="tag">variant</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vhost/" rel="tag">vhost</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vimdiff/" rel="tag">vimdiff</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vxlan/" rel="tag">vxlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/watchdog/" rel="tag">watchdog</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/workqueue/" rel="tag">workqueue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 16.25px;">IPv4</a> <a href="/tags/IRQ/" style="font-size: 12.5px;">IRQ</a> <a href="/tags/SP/" style="font-size: 10px;">SP</a> <a href="/tags/TCPDUMP/" style="font-size: 10px;">TCPDUMP</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 11.25px;">address</a> <a href="/tags/arg/" style="font-size: 10px;">arg</a> <a href="/tags/bash/" style="font-size: 10px;">bash</a> <a href="/tags/beep/" style="font-size: 10px;">beep</a> <a href="/tags/bh/" style="font-size: 10px;">bh</a> <a href="/tags/bootmem/" style="font-size: 10px;">bootmem</a> <a href="/tags/cacahe/" style="font-size: 10px;">cacahe</a> <a href="/tags/checksum/" style="font-size: 11.25px;">checksum</a> <a href="/tags/debug/" style="font-size: 10px;">debug</a> <a href="/tags/dump-sa/" style="font-size: 10px;">dump sa</a> <a href="/tags/fib/" style="font-size: 13.75px;">fib</a> <a href="/tags/ftrace/" style="font-size: 10px;">ftrace</a> <a href="/tags/gcc/" style="font-size: 13.75px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/glibc/" style="font-size: 10px;">glibc</a> <a href="/tags/gtk/" style="font-size: 10px;">gtk</a> <a href="/tags/html2markdown/" style="font-size: 10px;">html2markdown</a> <a href="/tags/html2text/" style="font-size: 10px;">html2text</a> <a href="/tags/inet/" style="font-size: 10px;">inet</a> <a href="/tags/inet-socket/" style="font-size: 10px;">inet socket</a> <a href="/tags/ipv4/" style="font-size: 11.25px;">ipv4</a> <a href="/tags/ipv6/" style="font-size: 11.25px;">ipv6</a> <a href="/tags/ipvlan/" style="font-size: 10px;">ipvlan</a> <a href="/tags/irq/" style="font-size: 10px;">irq</a> <a href="/tags/kenel/" style="font-size: 10px;">kenel</a> <a href="/tags/kernel/" style="font-size: 20px;">kernel</a> <a href="/tags/km/" style="font-size: 10px;">km</a> <a href="/tags/kthread/" style="font-size: 10px;">kthread</a> <a href="/tags/kvm/" style="font-size: 10px;">kvm</a> <a href="/tags/lc-trie/" style="font-size: 10px;">lc-trie</a> <a href="/tags/makefile/" style="font-size: 10px;">makefile</a> <a href="/tags/mannual/" style="font-size: 10px;">mannual</a> <a href="/tags/manpages-dev/" style="font-size: 10px;">manpages-dev</a> <a href="/tags/marco/" style="font-size: 10px;">marco</a> <a href="/tags/markdown/" style="font-size: 10px;">markdown</a> <a href="/tags/mem/" style="font-size: 10px;">mem</a> <a href="/tags/memory/" style="font-size: 12.5px;">memory</a> <a href="/tags/minivnc/" style="font-size: 10px;">minivnc</a> <a href="/tags/mmap/" style="font-size: 10px;">mmap</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/net/" style="font-size: 13.75px;">net</a> <a href="/tags/netdev/" style="font-size: 11.25px;">netdev</a> <a href="/tags/netlink/" style="font-size: 15px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/octean/" style="font-size: 10px;">octean</a> <a href="/tags/octopress/" style="font-size: 10px;">octopress</a> <a href="/tags/page/" style="font-size: 10px;">page</a> <a href="/tags/pernet/" style="font-size: 10px;">pernet</a> <a href="/tags/pfn/" style="font-size: 10px;">pfn</a> <a href="/tags/policy/" style="font-size: 10px;">policy</a> <a href="/tags/qdisc/" style="font-size: 11.25px;">qdisc</a> <a href="/tags/reg/" style="font-size: 10px;">reg</a> <a href="/tags/route/" style="font-size: 17.5px;">route</a> <a href="/tags/rss/" style="font-size: 10px;">rss</a> <a href="/tags/sched/" style="font-size: 13.75px;">sched</a> <a href="/tags/schedule/" style="font-size: 10px;">schedule</a> <a href="/tags/sock/" style="font-size: 10px;">sock</a> <a href="/tags/socket/" style="font-size: 18.75px;">socket</a> <a href="/tags/softirq/" style="font-size: 12.5px;">softirq</a> <a href="/tags/subst/" style="font-size: 10px;">subst</a> <a href="/tags/summary/" style="font-size: 10px;">summary</a> <a href="/tags/sunrise/" style="font-size: 10px;">sunrise</a> <a href="/tags/system-call/" style="font-size: 10px;">system call</a> <a href="/tags/tcp/" style="font-size: 10px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 10px;">tcpdump</a> <a href="/tags/terminal/" style="font-size: 10px;">terminal</a> <a href="/tags/timezone/" style="font-size: 10px;">timezone</a> <a href="/tags/toolchain/" style="font-size: 11.25px;">toolchain</a> <a href="/tags/ubuntu/" style="font-size: 11.25px;">ubuntu</a> <a href="/tags/udp/" style="font-size: 10px;">udp</a> <a href="/tags/usb/" style="font-size: 10px;">usb</a> <a href="/tags/variant/" style="font-size: 10px;">variant</a> <a href="/tags/vhost/" style="font-size: 11.25px;">vhost</a> <a href="/tags/vim/" style="font-size: 11.25px;">vim</a> <a href="/tags/vimdiff/" style="font-size: 10px;">vimdiff</a> <a href="/tags/vxlan/" style="font-size: 10px;">vxlan</a> <a href="/tags/watchdog/" style="font-size: 10px;">watchdog</a> <a href="/tags/workqueue/" style="font-size: 13.75px;">workqueue</a> <a href="/tags/xfrm/" style="font-size: 16.25px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/02/">February 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2020/03/25/2020-03-25-kern-ovs-data-struct/">内核OVS的学习总结</a>
+          </li>
+        
+          <li>
+            <a href="/2020/03/15/2020-03-15-net-rx-drop-1/">net rx drop(续)</a>
+          </li>
+        
+          <li>
+            <a href="/2020/03/15/2020-03-15-net-rx-drop/">net rx drop</a>
+          </li>
+        
+          <li>
+            <a href="/2017/05/15/2017-05-15-slabinfo-cause-delay/">slabinfo 惹的祸</a>
+          </li>
+        
+          <li>
+            <a href="/2016/11/23/2016-11-23-what-is-tfo/">WHAT is TFO</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2023 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

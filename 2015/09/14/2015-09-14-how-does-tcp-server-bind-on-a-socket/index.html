@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>how does tcp server bind on a socket | Kernel study</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="bind的port是通过tcp_hashinfo里的bhash管理的。跟tcp client的端口号管理有一样。 注：bind 系统调用时，还不会把当前的socket挂载到listen队列上，需要等待listen系统调用。bind系统调用只是把对应的这个端口給占用上了， 其他程序没发bind。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="how does tcp server bind on a socket">
+<meta property="og:url" content="https://martinbj2008.github.io/2015/09/14/2015-09-14-how-does-tcp-server-bind-on-a-socket/index.html">
+<meta property="og:site_name" content="Kernel study">
+<meta property="og:description" content="bind的port是通过tcp_hashinfo里的bhash管理的。跟tcp client的端口号管理有一样。 注：bind 系统调用时，还不会把当前的socket挂载到listen队列上，需要等待listen系统调用。bind系统调用只是把对应的这个端口給占用上了， 其他程序没发bind。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2015-09-14T02:10:13.000Z">
+<meta property="article:modified_time" content="2023-10-07T03:29:55.082Z">
+<meta property="article:author" content="Martinbj2008">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel study" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel study</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-2015-09-14-how-does-tcp-server-bind-on-a-socket" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2015/09/14/2015-09-14-how-does-tcp-server-bind-on-a-socket/" class="article-date">
+  <time class="dt-published" datetime="2015-09-14T02:10:13.000Z" itemprop="datePublished">2015-09-14</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/socket/">socket</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      how does tcp server bind on a socket
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>bind的port是通过<code>tcp_hashinfo</code>里的bhash管理的。<br>跟tcp client的端口号管理有一样。</p>
+<p>注：bind 系统调用时，还不会把当前的socket挂载到listen队列上，需要等待listen系统调用。<br>bind系统调用只是把对应的这个端口給占用上了， 其他程序没发bind。</p>
+<span id="more"></span>
+
+<h5 id="call-trace"><a href="#call-trace" class="headerlink" title="call trace"></a>call trace</h5><p>case1: 如果是第一次bind，并且没有client占用这个port。<br>在<a href="">inet_csk_get_port</a>遍历bhash里对应的hash链表，<br>因为首次bind，所以tb没有找到。<br>[inet_bind_bucket_create]创建tb并挂载到bhash的链表里。<br>[inet_bind_hash]将socket挂载到tb对应的ownerlist上。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">system call bind</span><br><span class="line">  inet_bind</span><br><span class="line">    sk-&gt;sk_prot-&gt;get_port 相当于 inet_csk_get_port</span><br><span class="line">      inet_bind_bucket_create</span><br><span class="line">      inet_bind_hash</span><br></pre></td></tr></table></figure>
+
+<p>case 2: bind+reuseport。close socket后再次bind一个新的soket到同一个port<br>通过<code>inet_csk_bind_conflict</code>保证port之间冲突的检查。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">system call bind</span><br><span class="line">  inet_bind</span><br><span class="line">    sk-&gt;sk_prot-&gt;get_port 相当于 inet_csk_get_port</span><br><span class="line">      inet_csk(sk)-&gt;icsk_af_ops-&gt;bind_conflict 相当于inet_csk_bind_conflict</span><br></pre></td></tr></table></figure>
+
+<p>case 3: 如果bind的port，之前已经有client使用了。<br>那么对应tb的<code>fastreuse</code>应该是-1,所以可以重用。<br>这个复用是有条件的，需要两个socket都设置为reuse才可以。<br>原理：<br>    每个client socket在创建时候，都会在bhash的下挂载一个port占用信息。<br>    listen socket在调用bind之前，会做检查，如果bhash下有socket占用了，<br>    则绑定失败。</p>
+<h4 id=""><a href="#" class="headerlink" title=""></a></h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">1361 /*</span><br><span class="line">1362  *      Bind a name to a socket. Nothing much to do here since it&#x27;s</span><br><span class="line">1363  *      the protocol&#x27;s responsibility to handle the local address.</span><br><span class="line">1364  *</span><br><span class="line">1365  *      We move the socket address to kernel space before we call</span><br><span class="line">1366  *      the protocol layer (having also checked the address is ok).</span><br><span class="line">1367  */</span><br><span class="line">1368</span><br><span class="line">1369 SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)</span><br><span class="line">1370 &#123;</span><br><span class="line">...</span><br><span class="line">1383                                 err = sock-&gt;ops-&gt;bind(sock,</span><br><span class="line">1384                                                       (struct sockaddr *)</span><br><span class="line">1385                                                       &amp;address, addrlen);</span><br><span class="line">...</span><br><span class="line">1390 &#125;</span><br></pre></td></tr></table></figure>
+<h4 id="-1"><a href="#-1" class="headerlink" title=""></a></h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">901 const struct proto_ops inet_stream_ops = &#123;</span><br><span class="line">902         .family            = PF_INET,</span><br><span class="line">903         .owner             = THIS_MODULE,</span><br><span class="line">904         .release           = inet_release,</span><br><span class="line">905         .bind              = inet_bind,</span><br></pre></td></tr></table></figure>
+
+<span id="inetBind">
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br></pre></td><td class="code"><pre><span class="line">423 int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)</span><br><span class="line">424 &#123;</span><br><span class="line">425         struct sockaddr_in *addr = (struct sockaddr_in *)uaddr;</span><br><span class="line">426         struct sock *sk = sock-&gt;sk;</span><br><span class="line">427         struct inet_sock *inet = inet_sk(sk);</span><br><span class="line">428         struct net *net = sock_net(sk);</span><br><span class="line">429         unsigned short snum;</span><br><span class="line">430         int chk_addr_ret;</span><br><span class="line">431         u32 tb_id = RT_TABLE_LOCAL;</span><br><span class="line">432         int err;</span><br><span class="line">433</span><br><span class="line">434         /* If the socket has its own bind function then use it. (RAW) */</span><br><span class="line">435         if (sk-&gt;sk_prot-&gt;bind) &#123;</span><br><span class="line">436                 err = sk-&gt;sk_prot-&gt;bind(sk, uaddr, addr_len);</span><br><span class="line">437                 goto out;</span><br><span class="line">438         &#125;</span><br><span class="line">439         err = -EINVAL;</span><br><span class="line">440         if (addr_len &lt; sizeof(struct sockaddr_in))</span><br><span class="line">441                 goto out;</span><br><span class="line">442</span><br><span class="line">443         if (addr-&gt;sin_family != AF_INET) &#123;</span><br><span class="line">444                 /* Compatibility games : accept AF_UNSPEC (mapped to AF_INET)</span><br><span class="line">445                  * only if s_addr is INADDR_ANY.</span><br><span class="line">446                  */</span><br><span class="line">447                 err = -EAFNOSUPPORT;</span><br><span class="line">448                 if (addr-&gt;sin_family != AF_UNSPEC ||</span><br><span class="line">449                     addr-&gt;sin_addr.s_addr != htonl(INADDR_ANY))</span><br><span class="line">450                         goto out;</span><br><span class="line">451         &#125;</span><br><span class="line">452</span><br><span class="line">453         tb_id = vrf_dev_table_ifindex(net, sk-&gt;sk_bound_dev_if) ? : tb_id;</span><br><span class="line">454         chk_addr_ret = inet_addr_type_table(net, addr-&gt;sin_addr.s_addr, tb_id);</span><br><span class="line">455</span><br><span class="line">456         /* Not specified by any standard per-se, however it breaks too</span><br><span class="line">457          * many applications when removed.  It is unfortunate since</span><br><span class="line">458          * allowing applications to make a non-local bind solves</span><br><span class="line">459          * several problems with systems using dynamic addressing.</span><br><span class="line">460          * (ie. your servers still start up even if your ISDN link</span><br><span class="line">461          *  is temporarily down)</span><br><span class="line">462          */</span><br><span class="line">463         err = -EADDRNOTAVAIL;</span><br><span class="line">464         if (!net-&gt;ipv4.sysctl_ip_nonlocal_bind &amp;&amp;</span><br><span class="line">465             !(inet-&gt;freebind || inet-&gt;transparent) &amp;&amp;</span><br><span class="line">466             addr-&gt;sin_addr.s_addr != htonl(INADDR_ANY) &amp;&amp;</span><br><span class="line">467             chk_addr_ret != RTN_LOCAL &amp;&amp;</span><br><span class="line">468             chk_addr_ret != RTN_MULTICAST &amp;&amp;</span><br><span class="line">469             chk_addr_ret != RTN_BROADCAST)</span><br><span class="line">470                 goto out;</span><br><span class="line">471</span><br><span class="line">472         snum = ntohs(addr-&gt;sin_port);</span><br><span class="line">473         err = -EACCES;</span><br><span class="line">474         if (snum &amp;&amp; snum &lt; PROT_SOCK &amp;&amp;</span><br><span class="line">475             !ns_capable(net-&gt;user_ns, CAP_NET_BIND_SERVICE))</span><br><span class="line">476                 goto out;</span><br><span class="line">477</span><br><span class="line">478         /*      We keep a pair of addresses. rcv_saddr is the one</span><br><span class="line">479          *      used by hash lookups, and saddr is used for transmit.</span><br><span class="line">480          *</span><br><span class="line">481          *      In the BSD API these are the same except where it</span><br><span class="line">482          *      would be illegal to use them (multicast/broadcast) in</span><br><span class="line">483          *      which case the sending device address is used.</span><br><span class="line">484          */</span><br><span class="line">485         lock_sock(sk);</span><br><span class="line">486</span><br><span class="line">487         /* Check these errors (active socket, double bind). */</span><br><span class="line">488         err = -EINVAL;</span><br><span class="line">489         if (sk-&gt;sk_state != TCP_CLOSE || inet-&gt;inet_num)</span><br><span class="line">490                 goto out_release_sock;</span><br><span class="line">491</span><br><span class="line">492         inet-&gt;inet_rcv_saddr = inet-&gt;inet_saddr = addr-&gt;sin_addr.s_addr;</span><br><span class="line">493         if (chk_addr_ret == RTN_MULTICAST || chk_addr_ret == RTN_BROADCAST)</span><br><span class="line">494                 inet-&gt;inet_saddr = 0;  /* Use device */</span><br><span class="line">495</span><br><span class="line">496         /* Make sure we are allowed to bind here. */</span><br><span class="line">497         if ((snum || !inet-&gt;bind_address_no_port) &amp;&amp;</span><br><span class="line">498             sk-&gt;sk_prot-&gt;get_port(sk, snum)) &#123;</span><br><span class="line">499                 inet-&gt;inet_saddr = inet-&gt;inet_rcv_saddr = 0;</span><br><span class="line">500                 err = -EADDRINUSE;</span><br><span class="line">501                 goto out_release_sock;</span><br><span class="line">502         &#125;</span><br><span class="line">503</span><br><span class="line">504         if (inet-&gt;inet_rcv_saddr)</span><br><span class="line">505                 sk-&gt;sk_userlocks |= SOCK_BINDADDR_LOCK;</span><br><span class="line">506         if (snum)</span><br><span class="line">507                 sk-&gt;sk_userlocks |= SOCK_BINDPORT_LOCK;</span><br><span class="line">508         inet-&gt;inet_sport = htons(inet-&gt;inet_num);</span><br><span class="line">509         inet-&gt;inet_daddr = 0;</span><br><span class="line">510         inet-&gt;inet_dport = 0;</span><br><span class="line">511         sk_dst_reset(sk);</span><br><span class="line">512         err = 0;</span><br><span class="line">513 out_release_sock:</span><br><span class="line">514         release_sock(sk);</span><br><span class="line">515 out:</span><br><span class="line">516         return err;</span><br><span class="line">517 &#125;</span><br><span class="line">518 EXPORT_SYMBOL(inet_bind);</span><br></pre></td></tr></table></figure>
+</span>
+
+<h4 id="inet-csk-get-port"><a href="#inet-csk-get-port" class="headerlink" title="&#96;&#96;inet_csk_get_port&#96;"></a>&#96;&#96;inet_csk_get_port&#96;</h4><span id="inetCSKgetPort">
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br></pre></td><td class="code"><pre><span class="line"> 90 /* Obtain a reference to a local port for the given sock,</span><br><span class="line"> 91  * if snum is zero it means select any available local port.</span><br><span class="line"> 92  */</span><br><span class="line"> 93 int inet_csk_get_port(struct sock *sk, unsigned short snum)</span><br><span class="line"> 94 &#123;</span><br><span class="line"> 95         struct inet_hashinfo *hashinfo = sk-&gt;sk_prot-&gt;h.hashinfo;</span><br><span class="line"> 96         struct inet_bind_hashbucket *head;</span><br><span class="line"> 97         struct inet_bind_bucket *tb;</span><br><span class="line"> 98         int ret, attempts = 5;</span><br><span class="line"> 99         struct net *net = sock_net(sk);</span><br><span class="line">100         int smallest_size = -1, smallest_rover;</span><br><span class="line">101         kuid_t uid = sock_i_uid(sk);</span><br><span class="line">102         int attempt_half = (sk-&gt;sk_reuse == SK_CAN_REUSE) ? 1 : 0;</span><br><span class="line">103</span><br><span class="line">104         local_bh_disable();</span><br><span class="line">105         if (!snum) &#123; </span><br><span class="line">...     //bind传入固定的port值，snum不会为零，所以忽略自动分配port的情况，</span><br><span class="line">177         &#125; else &#123;</span><br><span class="line">178 have_snum:</span><br><span class="line">179                 head = &amp;hashinfo-&gt;bhash[inet_bhashfn(net, snum,</span><br><span class="line">180                                 hashinfo-&gt;bhash_size)];</span><br><span class="line">181                 spin_lock(&amp;head-&gt;lock);</span><br><span class="line">182                 inet_bind_bucket_for_each(tb, &amp;head-&gt;chain)</span><br><span class="line">183                         if (net_eq(ib_net(tb), net) &amp;&amp; tb-&gt;port == snum)</span><br><span class="line">184                                 goto tb_found;</span><br><span class="line">185         &#125;</span><br><span class="line">186         tb = NULL;</span><br><span class="line">187         goto tb_not_found;</span><br><span class="line">188 tb_found:</span><br><span class="line">189         if (!hlist_empty(&amp;tb-&gt;owners)) &#123;</span><br><span class="line">190                 if (sk-&gt;sk_reuse == SK_FORCE_REUSE)</span><br><span class="line">191                         goto success;</span><br><span class="line">192</span><br><span class="line">193                 if (((tb-&gt;fastreuse &gt; 0 &amp;&amp;</span><br><span class="line">194                       sk-&gt;sk_reuse &amp;&amp; sk-&gt;sk_state != TCP_LISTEN) ||</span><br><span class="line">195                      (tb-&gt;fastreuseport &gt; 0 &amp;&amp;</span><br><span class="line">196                       sk-&gt;sk_reuseport &amp;&amp; uid_eq(tb-&gt;fastuid, uid))) &amp;&amp;</span><br><span class="line">197                     smallest_size == -1) &#123;</span><br><span class="line">198                         goto success;</span><br><span class="line">199                 &#125; else &#123;</span><br><span class="line">200                         ret = 1;</span><br><span class="line">201                         if (inet_csk(sk)-&gt;icsk_af_ops-&gt;bind_conflict(sk, tb, true)) &#123;</span><br><span class="line">202                                 if (((sk-&gt;sk_reuse &amp;&amp; sk-&gt;sk_state != TCP_LISTEN) ||</span><br><span class="line">203                                      (tb-&gt;fastreuseport &gt; 0 &amp;&amp;</span><br><span class="line">204                                       sk-&gt;sk_reuseport &amp;&amp; uid_eq(tb-&gt;fastuid, uid))) &amp;&amp;</span><br><span class="line">205                                     smallest_size != -1 &amp;&amp; --attempts &gt;= 0) &#123;</span><br><span class="line">206                                         spin_unlock(&amp;head-&gt;lock);</span><br><span class="line">207                                         goto again;</span><br><span class="line">208                                 &#125;</span><br><span class="line">209</span><br><span class="line">210                                 goto fail_unlock;</span><br><span class="line">211                         &#125;</span><br><span class="line">212                 &#125;</span><br><span class="line">213         &#125;</span><br><span class="line">214 tb_not_found:</span><br><span class="line">215         ret = 1;</span><br><span class="line">216         if (!tb &amp;&amp; (tb = inet_bind_bucket_create(hashinfo-&gt;bind_bucket_cachep,</span><br><span class="line">217                                         net, head, snum)) == NULL)</span><br><span class="line">218                 goto fail_unlock;</span><br><span class="line">219         if (hlist_empty(&amp;tb-&gt;owners)) &#123;</span><br><span class="line">220                 if (sk-&gt;sk_reuse &amp;&amp; sk-&gt;sk_state != TCP_LISTEN)</span><br><span class="line">221                         tb-&gt;fastreuse = 1;</span><br><span class="line">222                 else</span><br><span class="line">223                         tb-&gt;fastreuse = 0;</span><br><span class="line">224                 if (sk-&gt;sk_reuseport) &#123;</span><br><span class="line">225                         tb-&gt;fastreuseport = 1;</span><br><span class="line">226                         tb-&gt;fastuid = uid;</span><br><span class="line">227                 &#125; else</span><br><span class="line">228                         tb-&gt;fastreuseport = 0;</span><br><span class="line">229         &#125; else &#123;</span><br><span class="line">230                 if (tb-&gt;fastreuse &amp;&amp;</span><br><span class="line">231                     (!sk-&gt;sk_reuse || sk-&gt;sk_state == TCP_LISTEN))</span><br><span class="line">232                         tb-&gt;fastreuse = 0;</span><br><span class="line">233                 if (tb-&gt;fastreuseport &amp;&amp;</span><br><span class="line">234                     (!sk-&gt;sk_reuseport || !uid_eq(tb-&gt;fastuid, uid)))</span><br><span class="line">235                         tb-&gt;fastreuseport = 0;</span><br><span class="line">236         &#125;</span><br><span class="line">237 success:</span><br><span class="line">238         if (!inet_csk(sk)-&gt;icsk_bind_hash)</span><br><span class="line">239                 inet_bind_hash(sk, tb, snum);</span><br><span class="line">240         WARN_ON(inet_csk(sk)-&gt;icsk_bind_hash != tb);</span><br><span class="line">241         ret = 0;</span><br><span class="line">242</span><br><span class="line">243 fail_unlock:</span><br><span class="line">244         spin_unlock(&amp;head-&gt;lock);</span><br><span class="line">245 fail:</span><br><span class="line">246         local_bh_enable();</span><br><span class="line">247         return ret;</span><br><span class="line">248 &#125;</span><br><span class="line">249 EXPORT_SYMBOL_GPL(inet_csk_get_port);</span><br></pre></td></tr></table></figure>
+</span>
+
+<h4 id="inet-bind-bucket-create"><a href="#inet-bind-bucket-create" class="headerlink" title="inet_bind_bucket_create"></a><code>inet_bind_bucket_create</code></h4><span id="inetBindBucketCreate">
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">57 /*</span><br><span class="line">58  * Allocate and initialize a new local port bind bucket.</span><br><span class="line">59  * The bindhash mutex for snum&#x27;s hash chain must be held here.</span><br><span class="line">60  */</span><br><span class="line">61 struct inet_bind_bucket *inet_bind_bucket_create(struct kmem_cache *cachep,</span><br><span class="line">62                                                  struct net *net,</span><br><span class="line">63                                                  struct inet_bind_hashbucket *head,</span><br><span class="line">64                                                  const unsigned short snum)</span><br><span class="line">65 &#123;</span><br><span class="line">66         struct inet_bind_bucket *tb = kmem_cache_alloc(cachep, GFP_ATOMIC);</span><br><span class="line">67</span><br><span class="line">68         if (tb) &#123;</span><br><span class="line">69                 write_pnet(&amp;tb-&gt;ib_net, net);</span><br><span class="line">70                 tb-&gt;port      = snum;</span><br><span class="line">71                 tb-&gt;fastreuse = 0;</span><br><span class="line">72                 tb-&gt;fastreuseport = 0;</span><br><span class="line">73                 tb-&gt;num_owners = 0;</span><br><span class="line">74                 INIT_HLIST_HEAD(&amp;tb-&gt;owners);</span><br><span class="line">75                 hlist_add_head(&amp;tb-&gt;node, &amp;head-&gt;chain);</span><br><span class="line">76         &#125;</span><br><span class="line">77         return tb;</span><br><span class="line">78 &#125;</span><br></pre></td></tr></table></figure>
+</span>
+
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2015/09/14/2015-09-14-how-does-tcp-server-bind-on-a-socket/" data-id="clnfhasov005we0mhaxhafaq3" data-title="how does tcp server bind on a socket" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2015/09/14/2015-09-14-how-does-tcp-socket-listen/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          how does tcp socket listen
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2015/09/11/2015-09-11-basic-data-structure-of-inet-socket-inetsw/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">basic data structure of inet socket: inetsw</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IRQs/">IRQs</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/make/">make</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netcore/">netcore</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/virtnet/">virtnet</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IRQ/" rel="tag">IRQ</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SP/" rel="tag">SP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TCPDUMP/" rel="tag">TCPDUMP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/arg/" rel="tag">arg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bash/" rel="tag">bash</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/beep/" rel="tag">beep</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bootmem/" rel="tag">bootmem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/cacahe/" rel="tag">cacahe</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/dump-sa/" rel="tag">dump sa</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ftrace/" rel="tag">ftrace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/glibc/" rel="tag">glibc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gtk/" rel="tag">gtk</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2markdown/" rel="tag">html2markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2text/" rel="tag">html2text</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet/" rel="tag">inet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet-socket/" rel="tag">inet socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv4/" rel="tag">ipv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipvlan/" rel="tag">ipvlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kenel/" rel="tag">kenel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/km/" rel="tag">km</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kthread/" rel="tag">kthread</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kvm/" rel="tag">kvm</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/lc-trie/" rel="tag">lc-trie</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/makefile/" rel="tag">makefile</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mannual/" rel="tag">mannual</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/manpages-dev/" rel="tag">manpages-dev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/marco/" rel="tag">marco</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/markdown/" rel="tag">markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mem/" rel="tag">mem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/minivnc/" rel="tag">minivnc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mmap/" rel="tag">mmap</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/net/" rel="tag">net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/network/" rel="tag">network</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octean/" rel="tag">octean</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octopress/" rel="tag">octopress</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/page/" rel="tag">page</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pernet/" rel="tag">pernet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pfn/" rel="tag">pfn</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/policy/" rel="tag">policy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/qdisc/" rel="tag">qdisc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/reg/" rel="tag">reg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/rss/" rel="tag">rss</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/schedule/" rel="tag">schedule</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sock/" rel="tag">sock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/softirq/" rel="tag">softirq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/subst/" rel="tag">subst</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/summary/" rel="tag">summary</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sunrise/" rel="tag">sunrise</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/system-call/" rel="tag">system call</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/terminal/" rel="tag">terminal</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/timezone/" rel="tag">timezone</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/toolchain/" rel="tag">toolchain</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ubuntu/" rel="tag">ubuntu</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/udp/" rel="tag">udp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/usb/" rel="tag">usb</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/variant/" rel="tag">variant</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vhost/" rel="tag">vhost</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vimdiff/" rel="tag">vimdiff</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vxlan/" rel="tag">vxlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/watchdog/" rel="tag">watchdog</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/workqueue/" rel="tag">workqueue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 16.25px;">IPv4</a> <a href="/tags/IRQ/" style="font-size: 12.5px;">IRQ</a> <a href="/tags/SP/" style="font-size: 10px;">SP</a> <a href="/tags/TCPDUMP/" style="font-size: 10px;">TCPDUMP</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 11.25px;">address</a> <a href="/tags/arg/" style="font-size: 10px;">arg</a> <a href="/tags/bash/" style="font-size: 10px;">bash</a> <a href="/tags/beep/" style="font-size: 10px;">beep</a> <a href="/tags/bh/" style="font-size: 10px;">bh</a> <a href="/tags/bootmem/" style="font-size: 10px;">bootmem</a> <a href="/tags/cacahe/" style="font-size: 10px;">cacahe</a> <a href="/tags/checksum/" style="font-size: 11.25px;">checksum</a> <a href="/tags/debug/" style="font-size: 10px;">debug</a> <a href="/tags/dump-sa/" style="font-size: 10px;">dump sa</a> <a href="/tags/fib/" style="font-size: 13.75px;">fib</a> <a href="/tags/ftrace/" style="font-size: 10px;">ftrace</a> <a href="/tags/gcc/" style="font-size: 13.75px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/glibc/" style="font-size: 10px;">glibc</a> <a href="/tags/gtk/" style="font-size: 10px;">gtk</a> <a href="/tags/html2markdown/" style="font-size: 10px;">html2markdown</a> <a href="/tags/html2text/" style="font-size: 10px;">html2text</a> <a href="/tags/inet/" style="font-size: 10px;">inet</a> <a href="/tags/inet-socket/" style="font-size: 10px;">inet socket</a> <a href="/tags/ipv4/" style="font-size: 11.25px;">ipv4</a> <a href="/tags/ipv6/" style="font-size: 11.25px;">ipv6</a> <a href="/tags/ipvlan/" style="font-size: 10px;">ipvlan</a> <a href="/tags/irq/" style="font-size: 10px;">irq</a> <a href="/tags/kenel/" style="font-size: 10px;">kenel</a> <a href="/tags/kernel/" style="font-size: 20px;">kernel</a> <a href="/tags/km/" style="font-size: 10px;">km</a> <a href="/tags/kthread/" style="font-size: 10px;">kthread</a> <a href="/tags/kvm/" style="font-size: 10px;">kvm</a> <a href="/tags/lc-trie/" style="font-size: 10px;">lc-trie</a> <a href="/tags/makefile/" style="font-size: 10px;">makefile</a> <a href="/tags/mannual/" style="font-size: 10px;">mannual</a> <a href="/tags/manpages-dev/" style="font-size: 10px;">manpages-dev</a> <a href="/tags/marco/" style="font-size: 10px;">marco</a> <a href="/tags/markdown/" style="font-size: 10px;">markdown</a> <a href="/tags/mem/" style="font-size: 10px;">mem</a> <a href="/tags/memory/" style="font-size: 12.5px;">memory</a> <a href="/tags/minivnc/" style="font-size: 10px;">minivnc</a> <a href="/tags/mmap/" style="font-size: 10px;">mmap</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/net/" style="font-size: 13.75px;">net</a> <a href="/tags/netdev/" style="font-size: 11.25px;">netdev</a> <a href="/tags/netlink/" style="font-size: 15px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/octean/" style="font-size: 10px;">octean</a> <a href="/tags/octopress/" style="font-size: 10px;">octopress</a> <a href="/tags/page/" style="font-size: 10px;">page</a> <a href="/tags/pernet/" style="font-size: 10px;">pernet</a> <a href="/tags/pfn/" style="font-size: 10px;">pfn</a> <a href="/tags/policy/" style="font-size: 10px;">policy</a> <a href="/tags/qdisc/" style="font-size: 11.25px;">qdisc</a> <a href="/tags/reg/" style="font-size: 10px;">reg</a> <a href="/tags/route/" style="font-size: 17.5px;">route</a> <a href="/tags/rss/" style="font-size: 10px;">rss</a> <a href="/tags/sched/" style="font-size: 13.75px;">sched</a> <a href="/tags/schedule/" style="font-size: 10px;">schedule</a> <a href="/tags/sock/" style="font-size: 10px;">sock</a> <a href="/tags/socket/" style="font-size: 18.75px;">socket</a> <a href="/tags/softirq/" style="font-size: 12.5px;">softirq</a> <a href="/tags/subst/" style="font-size: 10px;">subst</a> <a href="/tags/summary/" style="font-size: 10px;">summary</a> <a href="/tags/sunrise/" style="font-size: 10px;">sunrise</a> <a href="/tags/system-call/" style="font-size: 10px;">system call</a> <a href="/tags/tcp/" style="font-size: 10px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 10px;">tcpdump</a> <a href="/tags/terminal/" style="font-size: 10px;">terminal</a> <a href="/tags/timezone/" style="font-size: 10px;">timezone</a> <a href="/tags/toolchain/" style="font-size: 11.25px;">toolchain</a> <a href="/tags/ubuntu/" style="font-size: 11.25px;">ubuntu</a> <a href="/tags/udp/" style="font-size: 10px;">udp</a> <a href="/tags/usb/" style="font-size: 10px;">usb</a> <a href="/tags/variant/" style="font-size: 10px;">variant</a> <a href="/tags/vhost/" style="font-size: 11.25px;">vhost</a> <a href="/tags/vim/" style="font-size: 11.25px;">vim</a> <a href="/tags/vimdiff/" style="font-size: 10px;">vimdiff</a> <a href="/tags/vxlan/" style="font-size: 10px;">vxlan</a> <a href="/tags/watchdog/" style="font-size: 10px;">watchdog</a> <a href="/tags/workqueue/" style="font-size: 13.75px;">workqueue</a> <a href="/tags/xfrm/" style="font-size: 16.25px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/02/">February 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2020/03/25/2020-03-25-kern-ovs-data-struct/">内核OVS的学习总结</a>
+          </li>
+        
+          <li>
+            <a href="/2020/03/15/2020-03-15-net-rx-drop-1/">net rx drop(续)</a>
+          </li>
+        
+          <li>
+            <a href="/2020/03/15/2020-03-15-net-rx-drop/">net rx drop</a>
+          </li>
+        
+          <li>
+            <a href="/2017/05/15/2017-05-15-slabinfo-cause-delay/">slabinfo 惹的祸</a>
+          </li>
+        
+          <li>
+            <a href="/2016/11/23/2016-11-23-what-is-tfo/">WHAT is TFO</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2023 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

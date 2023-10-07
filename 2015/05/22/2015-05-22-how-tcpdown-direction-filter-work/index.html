@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>how tcpdown direction filter work | Kernel study</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="tcpudmp对 direction的支持。内核代码有一个关键数据结构：skb的pkt_type字段。在收发路径这个域被赋值为PACKET_OUTGOING或者其他。这个值被传递到往用户空间，libpcap根据它判断报文的方向是否是期望的。 pkt_type的可能取值1234524 #define PACKET_HOST             0               &#x2F;* To us">
+<meta property="og:type" content="article">
+<meta property="og:title" content="how tcpdown direction filter work">
+<meta property="og:url" content="https://martinbj2008.github.io/2015/05/22/2015-05-22-how-tcpdown-direction-filter-work/index.html">
+<meta property="og:site_name" content="Kernel study">
+<meta property="og:description" content="tcpudmp对 direction的支持。内核代码有一个关键数据结构：skb的pkt_type字段。在收发路径这个域被赋值为PACKET_OUTGOING或者其他。这个值被传递到往用户空间，libpcap根据它判断报文的方向是否是期望的。 pkt_type的可能取值1234524 #define PACKET_HOST             0               &#x2F;* To us">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2015-05-22T03:51:57.000Z">
+<meta property="article:modified_time" content="2023-10-07T03:29:55.082Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="tcpdump">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel study" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel study</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-2015-05-22-how-tcpdown-direction-filter-work" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2015/05/22/2015-05-22-how-tcpdown-direction-filter-work/" class="article-date">
+  <time class="dt-published" datetime="2015-05-22T03:51:57.000Z" itemprop="datePublished">2015-05-22</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/netcore/">netcore</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      how tcpdown direction filter work
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="tcpudmp对-direction的支持。"><a href="#tcpudmp对-direction的支持。" class="headerlink" title="tcpudmp对 direction的支持。"></a>tcpudmp对 direction的支持。</h2><p>内核代码有一个关键数据结构：skb的pkt_type字段。<br>在收发路径这个域被赋值为PACKET_OUTGOING或者其他。<br>这个值被传递到往用户空间，libpcap根据它判断报文的方向是否是期望的。</p>
+<h3 id="pkt-type的可能取值"><a href="#pkt-type的可能取值" class="headerlink" title="pkt_type的可能取值"></a>pkt_type的可能取值</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">24 #define PACKET_HOST             0               /* To us                */</span><br><span class="line">25 #define PACKET_BROADCAST        1               /* To all               */</span><br><span class="line">26 #define PACKET_MULTICAST        2               /* To group             */</span><br><span class="line">27 #define PACKET_OTHERHOST        3               /* To someone else      */</span><br><span class="line">28 #define PACKET_OUTGOING         4               /* Outgoing of any type */</span><br></pre></td></tr></table></figure>
+<span id="more"></span>
+
+<p>kernel 里对网络包的抓去分别在收方两个方向做分析。</p>
+<h4 id="收方向"><a href="#收方向" class="headerlink" title="收方向"></a>收方向</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">&gt; netif_receive_skb</span><br><span class="line">&gt; &gt; netif_receive_skb_internal</span><br><span class="line">&gt; &gt; &gt; __netif_receive_skb</span><br><span class="line">&gt; &gt; &gt; &gt; __netif_receive_skb_core</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; list_for_each_entry_rcu(ptype, &amp;ptype_all, list) &#123;</span><br></pre></td></tr></table></figure>
+
+<h3 id="发方向-dev-queue-xmit-nit-具体调用关系如下"><a href="#发方向-dev-queue-xmit-nit-具体调用关系如下" class="headerlink" title="发方向 :dev_queue_xmit_nit 具体调用关系如下"></a>发方向 :dev_queue_xmit_nit 具体调用关系如下</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">&gt; dev_hard_start_xmit(struct</span><br><span class="line">&gt; &gt; xmit_one</span><br><span class="line">&gt; &gt;  &gt; dev_queue_xmit_nit</span><br><span class="line">&gt; &gt; &gt; &gt; list_for_each_entry_rcu(ptype, ptype_list, list)</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; skb2-&gt;pkt_type = PACKET_OUTGOING;</span><br></pre></td></tr></table></figure>
+
+<h4 id="tcpudmp注册hook函数到ptye-all里的"><a href="#tcpudmp注册hook函数到ptye-all里的" class="headerlink" title="tcpudmp注册hook函数到ptye_all里的"></a>tcpudmp注册hook函数到ptye_all里的</h4><p>packet socket在创建时候已经制定了处理函数为packet_rcv，并注册到ptype_all里。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">2808 static int packet_create(struct net *net, struct socket *sock, int protocol,</span><br><span class="line">...</span><br><span class="line">2868         po-&gt;prot_hook.func = packet_rcv;</span><br><span class="line">2869</span><br><span class="line">2870         if (sock-&gt;type == SOCK_PACKET)</span><br><span class="line">2871                 po-&gt;prot_hook.func = packet_rcv_spkt;</span><br><span class="line">2872</span><br><span class="line">2873         po-&gt;prot_hook.af_packet_priv = sk;</span><br><span class="line">2874</span><br><span class="line">2875         if (proto) &#123;</span><br><span class="line">2876                 po-&gt;prot_hook.type = proto;</span><br><span class="line">2877                 register_prot_hook(sk);</span><br><span class="line">2878         &#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">337 static void register_prot_hook(struct sock *sk)</span><br><span class="line">338 &#123;</span><br><span class="line">339         struct packet_sock *po = pkt_sk(sk);</span><br><span class="line">340</span><br><span class="line">341         if (!po-&gt;running) &#123;</span><br><span class="line">342                 if (po-&gt;fanout)</span><br><span class="line">343                         __fanout_link(sk, po);</span><br><span class="line">344                 else</span><br><span class="line">345                         dev_add_pack(&amp;po-&gt;prot_hook);</span><br><span class="line">346</span><br><span class="line">347                 sock_hold(sk);</span><br><span class="line">348                 po-&gt;running = 1;</span><br><span class="line">349         &#125;</span><br><span class="line">350 &#125;</span><br></pre></td></tr></table></figure>
+
+<h4 id="hook函数｀packet-rcv-会将pkt-type传递到用户空间"><a href="#hook函数｀packet-rcv-会将pkt-type传递到用户空间" class="headerlink" title="hook函数｀packet_rcv&#96;会将pkt_type传递到用户空间"></a>hook函数｀packet_rcv&#96;会将pkt_type传递到用户空间</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">1766 static int packet_rcv(struct sk_buff *skb, struct net_device *dev,</span><br><span class="line">1767                       struct packet_type *pt, struct net_device *orig_dev)</span><br><span class="line">1768 &#123;</span><br><span class="line">...</span><br><span class="line">1831         sll-&gt;sll_pkttype = skb-&gt;pkt_type;</span><br></pre></td></tr></table></figure>
+
+<h4 id="libpcap根据pkt-type／sll-pkttype的数值判断方向是否合法。"><a href="#libpcap根据pkt-type／sll-pkttype的数值判断方向是否合法。" class="headerlink" title="libpcap根据pkt_type／sll_pkttype的数值判断方向是否合法。"></a>libpcap根据pkt_type／sll_pkttype的数值判断方向是否合法。</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line">1433 static inline int</span><br><span class="line">1434 linux_check_direction(const pcap_t *handle, const struct sockaddr_ll *sll)</span><br><span class="line">1435 &#123;</span><br><span class="line">1436         struct pcap_linux       *handlep = handle-&gt;priv;</span><br><span class="line">1437</span><br><span class="line">1438         if (sll-&gt;sll_pkttype == PACKET_OUTGOING) &#123;</span><br><span class="line">1439                 /*</span><br><span class="line">1440                  * Outgoing packet.</span><br><span class="line">1441                  * If this is from the loopback device, reject it;</span><br><span class="line">1442                  * we&#x27;ll see the packet as an incoming packet as well,</span><br><span class="line">1443                  * and we don&#x27;t want to see it twice.</span><br><span class="line">1444                  */</span><br><span class="line">1445                 if (sll-&gt;sll_ifindex == handlep-&gt;lo_ifindex)</span><br><span class="line">1446                         return 0;</span><br><span class="line">1447</span><br><span class="line">1448                 /*</span><br><span class="line">1449                  * If the user only wants incoming packets, reject it.</span><br><span class="line">1450                  */</span><br><span class="line">1451                 if (handle-&gt;direction == PCAP_D_IN)</span><br><span class="line">1452                         return 0;</span><br><span class="line">1453         &#125; else &#123;</span><br><span class="line">1454                 /*</span><br><span class="line">1455                  * Incoming packet.</span><br><span class="line">1456                  * If the user only wants outgoing packets, reject it.</span><br><span class="line">1457                  */</span><br><span class="line">1458                 if (handle-&gt;direction == PCAP_D_OUT)</span><br><span class="line">1459                         return 0;</span><br><span class="line">1460         &#125;</span><br><span class="line">1461         return 1;</span><br><span class="line">1462 &#125;</span><br></pre></td></tr></table></figure>
+
+
+<h4 id="注-upstream的内核开始支持per-netdevice的type-chain"><a href="#注-upstream的内核开始支持per-netdevice的type-chain" class="headerlink" title="注:upstream的内核开始支持per netdevice的type chain"></a>注:upstream的内核开始支持per netdevice的type chain</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">dev: add per net_device packet type chains </span><br><span class="line">commit 7866a621043fbaca3d7389e9b9f69dd1a2e5a855</span><br><span class="line">Author: Salam Noureddine &lt;noureddine@arista.com&gt;</span><br><span class="line">Date:   Tue Jan 27 11:35:48 2015 -0800</span><br><span class="line"></span><br><span class="line">    dev: add per net_device packet type chains</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">packet_do_bind</span><br><span class="line">&gt; static int packet_do_bind(struct sock *sk, struct net_device *dev, __be16 proto)</span><br><span class="line">&gt;  &gt; register_prot_hook(sk);</span><br><span class="line">&gt;  &gt;  &gt;  dev_add_pack(&amp;po-&gt;prot_hook);</span><br><span class="line">&gt;  &gt;  &gt;  &gt; struct list_head *head = ptype_head(pt); &lt;== return the ptye._all 或者对应设备的ptye-all</span><br><span class="line">&gt;  &gt;  &gt;  &gt;  398         list_add_rcu(&amp;pt-&gt;list, head);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">371 static inline struct list_head *ptype_head(const struct packet_type *pt)</span><br><span class="line">372 &#123;</span><br><span class="line">373         if (pt-&gt;type == htons(ETH_P_ALL))</span><br><span class="line">374                 return pt-&gt;dev ? &amp;pt-&gt;dev-&gt;ptype_all : &amp;ptype_all;</span><br><span class="line">375         else</span><br><span class="line">376                 return pt-&gt;dev ? &amp;pt-&gt;dev-&gt;ptype_specific :</span><br><span class="line">377                                  &amp;ptype_base[ntohs(pt-&gt;type) &amp; PTYPE_HASH_MASK];</span><br><span class="line">378 &#125;</span><br></pre></td></tr></table></figure>
+
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2015/05/22/2015-05-22-how-tcpdown-direction-filter-work/" data-id="clnfhassx00coe0mhe0j82nbl" data-title="how tcpdown direction filter work" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2015/06/26/2015-08-06-bridge-zero-copy-transmit/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          bridge zero copy transmit
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2015/05/21/2015-05-21-vhost-net-study/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">vhost net study</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IRQs/">IRQs</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/make/">make</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netcore/">netcore</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/virtnet/">virtnet</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IRQ/" rel="tag">IRQ</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SP/" rel="tag">SP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TCPDUMP/" rel="tag">TCPDUMP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/arg/" rel="tag">arg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bash/" rel="tag">bash</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/beep/" rel="tag">beep</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bootmem/" rel="tag">bootmem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/cacahe/" rel="tag">cacahe</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/dump-sa/" rel="tag">dump sa</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ftrace/" rel="tag">ftrace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/glibc/" rel="tag">glibc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gtk/" rel="tag">gtk</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2markdown/" rel="tag">html2markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2text/" rel="tag">html2text</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet/" rel="tag">inet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet-socket/" rel="tag">inet socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv4/" rel="tag">ipv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipvlan/" rel="tag">ipvlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kenel/" rel="tag">kenel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/km/" rel="tag">km</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kthread/" rel="tag">kthread</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kvm/" rel="tag">kvm</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/lc-trie/" rel="tag">lc-trie</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/makefile/" rel="tag">makefile</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mannual/" rel="tag">mannual</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/manpages-dev/" rel="tag">manpages-dev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/marco/" rel="tag">marco</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/markdown/" rel="tag">markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mem/" rel="tag">mem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/minivnc/" rel="tag">minivnc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mmap/" rel="tag">mmap</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/net/" rel="tag">net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/network/" rel="tag">network</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octean/" rel="tag">octean</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octopress/" rel="tag">octopress</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/page/" rel="tag">page</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pernet/" rel="tag">pernet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pfn/" rel="tag">pfn</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/policy/" rel="tag">policy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/qdisc/" rel="tag">qdisc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/reg/" rel="tag">reg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/rss/" rel="tag">rss</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/schedule/" rel="tag">schedule</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sock/" rel="tag">sock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/softirq/" rel="tag">softirq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/subst/" rel="tag">subst</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/summary/" rel="tag">summary</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sunrise/" rel="tag">sunrise</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/system-call/" rel="tag">system call</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/terminal/" rel="tag">terminal</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/timezone/" rel="tag">timezone</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/toolchain/" rel="tag">toolchain</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ubuntu/" rel="tag">ubuntu</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/udp/" rel="tag">udp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/usb/" rel="tag">usb</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/variant/" rel="tag">variant</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vhost/" rel="tag">vhost</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vimdiff/" rel="tag">vimdiff</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vxlan/" rel="tag">vxlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/watchdog/" rel="tag">watchdog</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/workqueue/" rel="tag">workqueue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 16.25px;">IPv4</a> <a href="/tags/IRQ/" style="font-size: 12.5px;">IRQ</a> <a href="/tags/SP/" style="font-size: 10px;">SP</a> <a href="/tags/TCPDUMP/" style="font-size: 10px;">TCPDUMP</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 11.25px;">address</a> <a href="/tags/arg/" style="font-size: 10px;">arg</a> <a href="/tags/bash/" style="font-size: 10px;">bash</a> <a href="/tags/beep/" style="font-size: 10px;">beep</a> <a href="/tags/bh/" style="font-size: 10px;">bh</a> <a href="/tags/bootmem/" style="font-size: 10px;">bootmem</a> <a href="/tags/cacahe/" style="font-size: 10px;">cacahe</a> <a href="/tags/checksum/" style="font-size: 11.25px;">checksum</a> <a href="/tags/debug/" style="font-size: 10px;">debug</a> <a href="/tags/dump-sa/" style="font-size: 10px;">dump sa</a> <a href="/tags/fib/" style="font-size: 13.75px;">fib</a> <a href="/tags/ftrace/" style="font-size: 10px;">ftrace</a> <a href="/tags/gcc/" style="font-size: 13.75px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/glibc/" style="font-size: 10px;">glibc</a> <a href="/tags/gtk/" style="font-size: 10px;">gtk</a> <a href="/tags/html2markdown/" style="font-size: 10px;">html2markdown</a> <a href="/tags/html2text/" style="font-size: 10px;">html2text</a> <a href="/tags/inet/" style="font-size: 10px;">inet</a> <a href="/tags/inet-socket/" style="font-size: 10px;">inet socket</a> <a href="/tags/ipv4/" style="font-size: 11.25px;">ipv4</a> <a href="/tags/ipv6/" style="font-size: 11.25px;">ipv6</a> <a href="/tags/ipvlan/" style="font-size: 10px;">ipvlan</a> <a href="/tags/irq/" style="font-size: 10px;">irq</a> <a href="/tags/kenel/" style="font-size: 10px;">kenel</a> <a href="/tags/kernel/" style="font-size: 20px;">kernel</a> <a href="/tags/km/" style="font-size: 10px;">km</a> <a href="/tags/kthread/" style="font-size: 10px;">kthread</a> <a href="/tags/kvm/" style="font-size: 10px;">kvm</a> <a href="/tags/lc-trie/" style="font-size: 10px;">lc-trie</a> <a href="/tags/makefile/" style="font-size: 10px;">makefile</a> <a href="/tags/mannual/" style="font-size: 10px;">mannual</a> <a href="/tags/manpages-dev/" style="font-size: 10px;">manpages-dev</a> <a href="/tags/marco/" style="font-size: 10px;">marco</a> <a href="/tags/markdown/" style="font-size: 10px;">markdown</a> <a href="/tags/mem/" style="font-size: 10px;">mem</a> <a href="/tags/memory/" style="font-size: 12.5px;">memory</a> <a href="/tags/minivnc/" style="font-size: 10px;">minivnc</a> <a href="/tags/mmap/" style="font-size: 10px;">mmap</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/net/" style="font-size: 13.75px;">net</a> <a href="/tags/netdev/" style="font-size: 11.25px;">netdev</a> <a href="/tags/netlink/" style="font-size: 15px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/octean/" style="font-size: 10px;">octean</a> <a href="/tags/octopress/" style="font-size: 10px;">octopress</a> <a href="/tags/page/" style="font-size: 10px;">page</a> <a href="/tags/pernet/" style="font-size: 10px;">pernet</a> <a href="/tags/pfn/" style="font-size: 10px;">pfn</a> <a href="/tags/policy/" style="font-size: 10px;">policy</a> <a href="/tags/qdisc/" style="font-size: 11.25px;">qdisc</a> <a href="/tags/reg/" style="font-size: 10px;">reg</a> <a href="/tags/route/" style="font-size: 17.5px;">route</a> <a href="/tags/rss/" style="font-size: 10px;">rss</a> <a href="/tags/sched/" style="font-size: 13.75px;">sched</a> <a href="/tags/schedule/" style="font-size: 10px;">schedule</a> <a href="/tags/sock/" style="font-size: 10px;">sock</a> <a href="/tags/socket/" style="font-size: 18.75px;">socket</a> <a href="/tags/softirq/" style="font-size: 12.5px;">softirq</a> <a href="/tags/subst/" style="font-size: 10px;">subst</a> <a href="/tags/summary/" style="font-size: 10px;">summary</a> <a href="/tags/sunrise/" style="font-size: 10px;">sunrise</a> <a href="/tags/system-call/" style="font-size: 10px;">system call</a> <a href="/tags/tcp/" style="font-size: 10px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 10px;">tcpdump</a> <a href="/tags/terminal/" style="font-size: 10px;">terminal</a> <a href="/tags/timezone/" style="font-size: 10px;">timezone</a> <a href="/tags/toolchain/" style="font-size: 11.25px;">toolchain</a> <a href="/tags/ubuntu/" style="font-size: 11.25px;">ubuntu</a> <a href="/tags/udp/" style="font-size: 10px;">udp</a> <a href="/tags/usb/" style="font-size: 10px;">usb</a> <a href="/tags/variant/" style="font-size: 10px;">variant</a> <a href="/tags/vhost/" style="font-size: 11.25px;">vhost</a> <a href="/tags/vim/" style="font-size: 11.25px;">vim</a> <a href="/tags/vimdiff/" style="font-size: 10px;">vimdiff</a> <a href="/tags/vxlan/" style="font-size: 10px;">vxlan</a> <a href="/tags/watchdog/" style="font-size: 10px;">watchdog</a> <a href="/tags/workqueue/" style="font-size: 13.75px;">workqueue</a> <a href="/tags/xfrm/" style="font-size: 16.25px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/02/">February 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2020/03/25/2020-03-25-kern-ovs-data-struct/">内核OVS的学习总结</a>
+          </li>
+        
+          <li>
+            <a href="/2020/03/15/2020-03-15-net-rx-drop-1/">net rx drop(续)</a>
+          </li>
+        
+          <li>
+            <a href="/2020/03/15/2020-03-15-net-rx-drop/">net rx drop</a>
+          </li>
+        
+          <li>
+            <a href="/2017/05/15/2017-05-15-slabinfo-cause-delay/">slabinfo 惹的祸</a>
+          </li>
+        
+          <li>
+            <a href="/2016/11/23/2016-11-23-what-is-tfo/">WHAT is TFO</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2023 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

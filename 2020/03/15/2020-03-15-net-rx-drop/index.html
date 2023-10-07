@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>net rx drop | Kernel study</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="问题来源接OP问题报告，监控到部分机器的net rx drop统计值异常，触发报警，需排查具体原因，并确认是否影响业务。 问题分析复现问题跟OP同学确认,通过采集&#x2F;proc&#x2F;net&#x2F;dev下的rx drop。登录到出问题的机器上, 确认内核该统计值确实异常。  异常报文个数不多，大约1s一个左右。 不是所有机器都有异常，有部分机器drop统计为0.  相关内核代码当一个数据报文经过对端设备（交换机">
+<meta property="og:type" content="article">
+<meta property="og:title" content="net rx drop">
+<meta property="og:url" content="https://martinbj2008.github.io/2020/03/15/2020-03-15-net-rx-drop/index.html">
+<meta property="og:site_name" content="Kernel study">
+<meta property="og:description" content="问题来源接OP问题报告，监控到部分机器的net rx drop统计值异常，触发报警，需排查具体原因，并确认是否影响业务。 问题分析复现问题跟OP同学确认,通过采集&#x2F;proc&#x2F;net&#x2F;dev下的rx drop。登录到出问题的机器上, 确认内核该统计值确实异常。  异常报文个数不多，大约1s一个左右。 不是所有机器都有异常，有部分机器drop统计为0.  相关内核代码当一个数据报文经过对端设备（交换机">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2020-03-15T21:16:54.000Z">
+<meta property="article:modified_time" content="2023-10-07T03:29:55.082Z">
+<meta property="article:author" content="Martinbj2008">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel study" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel study</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-2020-03-15-net-rx-drop" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2020/03/15/2020-03-15-net-rx-drop/" class="article-date">
+  <time class="dt-published" datetime="2020-03-15T21:16:54.000Z" itemprop="datePublished">2020-03-15</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      net rx drop
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="问题来源"><a href="#问题来源" class="headerlink" title="问题来源"></a>问题来源</h2><p>接OP问题报告，监控到部分机器的net rx drop统计值异常，触发报警，<br>需排查具体原因，并确认是否影响业务。</p>
+<h2 id="问题分析"><a href="#问题分析" class="headerlink" title="问题分析"></a>问题分析</h2><h3 id="复现问题"><a href="#复现问题" class="headerlink" title="复现问题"></a>复现问题</h3><p>跟OP同学确认,通过采集<code>/proc/net/dev</code>下的rx drop。<br>登录到出问题的机器上, 确认内核该统计值确实异常。</p>
+<ul>
+<li>异常报文个数不多，大约1s一个左右。</li>
+<li>不是所有机器都有异常，有部分机器drop统计为0.</li>
+</ul>
+<h3 id="相关内核代码"><a href="#相关内核代码" class="headerlink" title="相关内核代码"></a>相关内核代码</h3><p>当一个数据报文经过对端设备（交换机或者网卡）传输到本机物理网卡时候，需要经过<br>    <code>网卡-- 网卡驱动-- 网络协议栈</code><br>这几个模块的处理。我们看到的drop统计值在增加，是在网络协议栈的入口处理部分产生异常导致。</p>
+<span id="more"></span>
+
+<h4 id="内核网络协议栈（伪）入口代码："><a href="#内核网络协议栈（伪）入口代码：" class="headerlink" title="内核网络协议栈（伪）入口代码："></a>内核网络协议栈（伪）入口代码：</h4><p>注：本文里使用内核3.10.0-514.16.1代码</p>
+<p><code>net/core/dev.c</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br></pre></td><td class="code"><pre><span class="line">3709 static int __netif_receive_skb_core(struct sk_buff *skb, bool pfmemalloc)</span><br><span class="line">3710 &#123;</span><br><span class="line">....</span><br><span class="line">3753</span><br><span class="line">3754         list_for_each_entry_rcu(ptype, &amp;ptype_all, list) &#123;</span><br><span class="line">3755                 if (!ptype-&gt;dev || ptype-&gt;dev == skb-&gt;dev) &#123;</span><br><span class="line">3756                         if (pt_prev)</span><br><span class="line">3757                                 ret = deliver_skb(skb, pt_prev, orig_dev);</span><br><span class="line">3758                         pt_prev = ptype;</span><br><span class="line">3759                 &#125;</span><br><span class="line">3760         &#125;</span><br><span class="line">3761</span><br><span class="line">....</span><br><span class="line">3814</span><br><span class="line">3815         /* deliver only exact match when indicated */</span><br><span class="line">3816         null_or_dev = deliver_exact ? skb-&gt;dev : NULL;</span><br><span class="line">3817</span><br><span class="line">3818         type = skb-&gt;protocol;</span><br><span class="line">3819         list_for_each_entry_rcu(ptype,</span><br><span class="line">3820                         &amp;ptype_base[ntohs(type) &amp; PTYPE_HASH_MASK], list) &#123;</span><br><span class="line">3821                 if (ptype-&gt;type == type &amp;&amp;</span><br><span class="line">3822                     (ptype-&gt;dev == null_or_dev || ptype-&gt;dev == skb-&gt;dev ||</span><br><span class="line">3823                      ptype-&gt;dev == orig_dev)) &#123;</span><br><span class="line">3824                         if (pt_prev)</span><br><span class="line">3825                                 ret = deliver_skb(skb, pt_prev, orig_dev);</span><br><span class="line">3826                         pt_prev = ptype;</span><br><span class="line">3827                 &#125;</span><br><span class="line">3828         &#125;</span><br><span class="line">3829</span><br><span class="line">3830         if (pt_prev) &#123;</span><br><span class="line">3831                 if (unlikely(skb_orphan_frags(skb, GFP_ATOMIC)))</span><br><span class="line">3832                         goto drop;</span><br><span class="line">3833                 else</span><br><span class="line">3834                         ret = pt_prev-&gt;func(skb, skb-&gt;dev, pt_prev, orig_dev);</span><br><span class="line">3835         &#125; else &#123;</span><br><span class="line">3836 drop:</span><br><span class="line">3837                 if (!deliver_exact)</span><br><span class="line">3838                         atomic_long_inc(&amp;skb-&gt;dev-&gt;rx_dropped);</span><br><span class="line">3839                 else</span><br><span class="line">3840                         atomic_long_inc(&amp;skb-&gt;dev-&gt;rx_nohandler);</span><br><span class="line">3841                 kfree_skb(skb);</span><br><span class="line">3842                 /* Jamal, now you will not able to escape explaining</span><br><span class="line">3843                  * me how you were going to use this. :-)</span><br><span class="line">3844                  */</span><br><span class="line">3845                 ret = NET_RX_DROP;</span><br><span class="line">3846         &#125;</span><br><span class="line">3847</span><br><span class="line">3848 out:</span><br><span class="line">3849         return ret;</span><br><span class="line">3850 &#125;</span><br></pre></td></tr></table></figure>
+<p>有同学可能质疑rx_dropped的统计值不止这一处在修改（增加), 内核里确实不止这一处在增加drop。<br>这里使用perf调试命令，可以确认3838行的增加跟总统计值匹配，而不是其他地方导致增加。<br>具体perf命令的使用见下一节。</p>
+<h3 id="IPv6报文定位"><a href="#IPv6报文定位" class="headerlink" title="IPv6报文定位"></a>IPv6报文定位</h3><p>在使用perf命令查看统计值增长点的时候，我们搂草打兔子，捎带把skb的protocol给打印出来了。<br>截止到目前可以认为protocol的值就是我们收的网络报文的ethernet头里的protocol字段。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">[root@testtest ~]# perf probe -a &quot;__netif_receive_skb_core:129 skb-&gt;protocol&quot;</span><br><span class="line">Added new events:</span><br><span class="line">  probe:__netif_receive_skb_core (on __netif_receive_skb_core:129 with protocol=skb-&gt;protocol)</span><br><span class="line">  probe:__netif_receive_skb_core_1 (on __netif_receive_skb_core:129 with protocol=skb-&gt;protocol)</span><br><span class="line"></span><br><span class="line">You can now use it in all perf tools, such as:</span><br><span class="line"></span><br><span class="line">	perf record -e probe:__netif_receive_skb_core_1 -aR sleep 1</span><br><span class="line"></span><br><span class="line">[root@testtest ~]# perf record -e probe:__netif_receive_skb_core_1 -aR sleep 5</span><br><span class="line">[ perf record: Woken up 1 times to write data ]</span><br><span class="line">[ perf record: Captured and wrote 0.209 MB perf.data (5 samples) ]</span><br><span class="line">[root@testtest ~]#</span><br><span class="line">[root@testtest ~]#</span><br><span class="line">[root@testtest ~]# perf script</span><br><span class="line">         swapper     0 [003] 596928.567038: probe:__netif_receive_skb_core_1: (ffffffff8152afb6) protocol=dd86</span><br><span class="line">         swapper     0 [011] 596929.277293: probe:__netif_receive_skb_core_1: (ffffffff8152afb6) protocol=400</span><br><span class="line">         swapper     0 [001] 596929.431077: probe:__netif_receive_skb_core_1: (ffffffff8152afb6) protocol=dd86</span><br><span class="line">         swapper     0 [008] 596930.073356: probe:__netif_receive_skb_core_1: (ffffffff8152afb6) protocol=dd86</span><br><span class="line">         swapper     0 [011] 596931.278891: probe:__netif_receive_skb_core_1: (ffffffff8152afb6) protocol=400</span><br><span class="line">[root@testtest ~]#</span><br></pre></td></tr></table></figure>
+
+<p>看到<code>protocol=dd86</code>，drop增加的触发原因就找到了（一个）。</p>
+<p>因为我们公司是把内核的IPv6功能禁止的，网络协议栈收到IPv6报文的时候是不做任何处理并丢弃的。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">[root@testtest ~]# cat /proc/cmdline</span><br><span class="line">BOOT_IMAGE=/vmlinuz-3.10.0-327.36.3.el7.x86_64 root=UUID=7918e921-db4e-4652-9938-a38607100a96 ro crashkernel=128M selinux=0 ipv6.disable=1</span><br></pre></td></tr></table></figure>
+
+<p>为了进一步验证分析结果，上一个tcpdump的结果</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">[root@testtest ~]# tcpdump -i eth0 ip6 -c 10</span><br><span class="line">tcpdump: verbose output suppressed, use -v or -vv for full protocol decode</span><br><span class="line">listening on eth0, link-type EN10MB (Ethernet), capture size 65535 bytes</span><br><span class="line">14:15:40.663327 IP6 fe80::6e0b:84ff:fe81:b4d3.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit</span><br><span class="line">14:15:45.334814 IP6 fe80::6e0b:84ff:fed6:c323.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit</span><br><span class="line">14:15:45.403538 IP6 fe80::6e0b:84ff:febd:aef8.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit</span><br><span class="line">14:15:52.542434 IP6 fe80::6e0b:84ff:fe81:b935.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit</span><br><span class="line">14:16:00.186710 IP6 fe80::6e0b:84ff:febd:b27c.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit</span><br><span class="line">14:16:06.397437 IP6 fe80::6e0b:84ff:fe81:ba03.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit</span><br><span class="line">14:16:07.834059 IP6 fe80::6e0b:84ff:febd:b602.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit</span><br><span class="line">14:16:22.138601 IP6 fe80::6e92:bfff:fe2e:616f.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit</span><br><span class="line">14:16:31.827770 IP6 fe80::6e0b:84ff:fed6:c053.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit</span><br><span class="line">14:16:31.882039 IP6 fe80::6e0b:84ff:febd:b798.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit</span><br><span class="line">10 packets captured</span><br><span class="line">10 packets received by filter</span><br><span class="line">0 packets dropped by kernel</span><br><span class="line">[root@testtest ~]#</span><br></pre></td></tr></table></figure>
+
+<p>注：</p>
+<ol>
+<li>这里的截屏是写文章时候去线上测试机抓取的，部分机器上的IPv6问题被修复过一部分。<br>所以，我们看到的IPv6报文个数比当初分析问题的时候，相对要偏少。</li>
+</ol>
+<p>IPv6报文的来源：服务器同学定位是浪潮服务器的网卡主动发出的。</p>
+<h3 id="STP报文定位"><a href="#STP报文定位" class="headerlink" title="STP报文定位"></a>STP报文定位</h3><h4 id="异常报文统计有出入"><a href="#异常报文统计有出入" class="headerlink" title="异常报文统计有出入"></a>异常报文统计有出入</h4><p>在使用perf工具定位IPv6报文后，人肉查看，发现IPv6的个数大约占drop统计值的60%左右，<br>也就是说，还有其他类型的报文导致drop统计值在增加。<br>在硬件厂商修复网卡问题后，观察到大幅降低了drop的增长速度，但没有彻底消除drop的异常统计增长。</p>
+<p>正如perf结果显示还有部分<code>protocol=400</code>的报文，这是些啥报文？</p>
+<p>我们搜集到了如下一些信息：  </p>
+<ul>
+<li>tcpdump全量抓包，也没有看到<code>400</code>的报文。</li>
+<li>查询RFC相关定义，可以发现他们是<code>802.2 LLC</code></li>
+<li>在内核代码里，被网桥的llc模块处理的。</li>
+</ul>
+<h5 id="内核代码"><a href="#内核代码" class="headerlink" title="内核代码"></a>内核代码</h5><p><code>net/llc/llc_core.c</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">110 #define ETH_P_802_2     0x0004          /* 802.2 frames                 */</span><br><span class="line"></span><br><span class="line">135 static struct packet_type llc_packet_type __read_mostly = &#123;</span><br><span class="line">136         .type = cpu_to_be16(ETH_P_802_2),</span><br><span class="line">137         .func = llc_rcv,</span><br><span class="line">138 &#125;;</span><br></pre></td></tr></table></figure>
+
+<p>做一个试验：<br>    手动加载llc模块，加载后drop统计值不再增张了。<br>这个实验侧面验证了，有部分网桥相关的报文被传递到内核网络协议栈了。</p>
+<h5 id="802-2-LLC"><a href="#802-2-LLC" class="headerlink" title="802.2 LLC"></a><code>802.2 LLC</code></h5><p>LLC对应了一大家族的链路协议类型，我们需要定位具体是哪一种类型的报文引起的。<br>这就需要把<code>protocol=400</code>的报文被统计异常的时候，把它当时对应的ethernet头信息打印出来。<br>针对这样的需求，下一节的centos7上的<code>核弹</code>（热补丁）派上用场了。</p>
+<p>注：<br>    LLC对应一大坨的链路层协议，网卡驱动（以ixgbe为例）会借助<code>eth_type_trans</code>函数，<br>    把这些ethernet 协议汇总为<code>802.2 LLC</code>，并存放在<code>skb-&gt;protocol</code>里的。</p>
+<p><code>drivers/net/ethernet/intel/ixgbe/ixgbe_main.c</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line">1665 static void ixgbe_process_skb_fields(struct ixgbe_ring *rx_ring,</span><br><span class="line">1666                                      union ixgbe_adv_rx_desc *rx_desc,</span><br><span class="line">1667                                      struct sk_buff *skb)</span><br><span class="line">1668 &#123;</span><br><span class="line">1669         struct net_device *dev = rx_ring-&gt;netdev;</span><br><span class="line">1670         u32 flags = rx_ring-&gt;q_vector-&gt;adapter-&gt;flags;</span><br><span class="line">1671</span><br><span class="line">1672         ixgbe_update_rsc_stats(rx_ring, skb);</span><br><span class="line">1673</span><br><span class="line">1674         ixgbe_rx_hash(rx_ring, rx_desc, skb);</span><br><span class="line">1675</span><br><span class="line">1676         ixgbe_rx_checksum(rx_ring, rx_desc, skb);</span><br><span class="line">1677</span><br><span class="line">1678         if (unlikely(flags &amp; IXGBE_FLAG_RX_HWTSTAMP_ENABLED))</span><br><span class="line">1679                 ixgbe_ptp_rx_hwtstamp(rx_ring, rx_desc, skb);</span><br><span class="line">1680</span><br><span class="line">1681         if ((dev-&gt;features &amp; NETIF_F_HW_VLAN_CTAG_RX) &amp;&amp;</span><br><span class="line">1682             ixgbe_test_staterr(rx_desc, IXGBE_RXD_STAT_VP)) &#123;</span><br><span class="line">1683                 u16 vid = le16_to_cpu(rx_desc-&gt;wb.upper.vlan);</span><br><span class="line">1684                 __vlan_hwaccel_put_tag(skb, htons(ETH_P_8021Q), vid);</span><br><span class="line">1685         &#125;</span><br><span class="line">1686</span><br><span class="line">1687         skb_record_rx_queue(skb, rx_ring-&gt;queue_index);</span><br><span class="line">1688</span><br><span class="line">1689         skb-&gt;protocol = eth_type_trans(skb, dev);</span><br><span class="line">1690 &#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>net/ethernet/eth.c</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">188 __be16 eth_type_trans(struct sk_buff *skb, struct net_device *dev)</span><br><span class="line">189 &#123;</span><br><span class="line">...</span><br><span class="line">230         if (likely(eth_proto_is_802_3(eth-&gt;h_proto)))</span><br><span class="line">231                 return eth-&gt;h_proto;</span><br><span class="line">...</span><br><span class="line">242         /*</span><br><span class="line">243          *      Real 802.2 LLC</span><br><span class="line">244          */</span><br><span class="line">245         return htons(ETH_P_802_2);</span><br><span class="line">246 &#125;</span><br><span class="line">247 EXPORT_SYMBOL(eth_type_trans);</span><br></pre></td></tr></table></figure>
+
+<h4 id="centos7上的核弹-内核热升级工具"><a href="#centos7上的核弹-内核热升级工具" class="headerlink" title="centos7上的核弹 内核热升级工具"></a>centos7上的<code>核弹</code> 内核热升级工具</h4><p>centos7（3.10内核）开始，内核组已经部署了一个叫<code>centos-kpatch-modules</code>的rpm包，<br>它可以做到业务不感知的情况下，加载调试模块，调试完就可卸载。</p>
+<p>刚好出问题的机器内核版本是<code>3.10.0-514.16.1.el7.x86_64</code>，<br>于是编写了一个调试模块(后续会集成到<code>centos-kpatch-modules</code>)，其功能是：<br>    当drop掉异常报文的时候，把报文的内容（ethernet头）打印出来。</p>
+<p>通过kpatch命令加载调试模块，就能把被drop的报文头信息打印出来，</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">[root@testtest xfile]# uname -a</span><br><span class="line">Linux testtest 3.10.0-327.36.3.el7.x86_64 #1 SMP Mon Oct 24 16:09:20 UTC 2016 x86_64 x86_64 x86_64 GNU/Linux</span><br><span class="line">[root@testtest xfile]# rpm -q centos-kpatch-modules</span><br><span class="line">centos-kpatch-modules-1.6-1.x86_64</span><br><span class="line">[root@testtest xfile]# kpatch  load /root/martin/xfile/net_rx_drop/327/kpatch-dev.ko</span><br><span class="line">loading patch module: /root/martin/xfile/net_rx_drop/327/kpatch-dev.ko</span><br><span class="line">[root@testtest xfile]# dmesg</span><br><span class="line">[606774.224447] kpatch: loaded patch module &#x27;kpatch_dev&#x27;</span><br><span class="line">[606775.135343] __netif_receive_skb_core: skb len:105 protocol:0004</span><br><span class="line">[606775.135348] skb_mac_head:ffff88003625c440 skb data:ffff88003625c44e, mac hdr offset:14</span><br><span class="line">[606775.135350] mac hdr dest:01:80:c2:00:00:00 &lt;=== 50:da:00:ef:54:0a proto: 0069</span><br><span class="line">[606775.337246] __netif_receive_skb_core: skb len:96 protocol:86dd</span><br><span class="line">[606775.337252] skb_mac_head:ffff880850046c40 skb data:ffff880850046c4e, mac hdr offset:14</span><br><span class="line">[606775.337255] mac hdr dest:33:33:00:01:00:02 &lt;=== 6c:0b:84:81:ba:03 proto: 86dd</span><br><span class="line">[root@testtest xfile]#</span><br></pre></td></tr></table></figure>
+
+<p>通过日志我们看到被drop的报文ethernet头里protocol字段是<code>0069</code>, 其转化后存在skb里的protocol字段是<code>0004</code>。</p>
+<p>tcpdump命令也显示有报文进入(此处说法不严谨，后续会被打脸)。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">[root@localhost ~]# tcpdump -i em1 not ip -c 8</span><br><span class="line">tcpdump: verbose output suppressed, use -v or -vv for full protocol decode</span><br><span class="line">listening on em1, link-type EN10MB (Ethernet), capture size 65535 bytes</span><br><span class="line">04:55:07.868905 IP6 fe80::303b:6dff:fe6a:20c4 &gt; ff02::16: HBH ICMP6, multicast listener report v2, 1 group record(s), length 28</span><br><span class="line">04:55:08.183959 STP 802.1d, Config, Flags [none], bridge-id 812c.38:1c:1a:7a:c1:80.8036, length 42</span><br><span class="line">04:55:08.738143 STP 802.1s, Rapid STP, CIST Flags [Learn, Forward, Agreement], length 102</span><br><span class="line">04:55:08.790157 IP6 fe80::5c11:3ff:fe55:9037 &gt; ff02::2: ICMP6, router solicitation, length 8</span><br><span class="line">04:55:08.914911 IP6 :: &gt; ff02::16: HBH ICMP6, multicast listener report v2, 1 group record(s), length 28</span><br><span class="line">04:55:09.033921 IP6 :: &gt; ff02::16: HBH ICMP6, multicast listener report v2, 1 group record(s), length 28</span><br><span class="line">04:55:09.185917 IP6 :: &gt; ff02::1:ffab:f174: ICMP6, neighbor solicitation, who has fe80::18cc:d5ff:feab:f174, length 24</span><br><span class="line">04:55:09.773337 IP6 fe80::e818:a4ff:fe30:c522 &gt; ff02::2: ICMP6, router solicitation, length 8</span><br><span class="line">8 packets captured</span><br><span class="line">14 packets received by filter</span><br><span class="line">0 packets dropped by kernel</span><br><span class="line">[root@localhost ~]#</span><br></pre></td></tr></table></figure>
+<p>至此，我们锁定STP报文是drop统计增加的另一个来源。</p>
+<p>综合多台机器测试结果，被丢弃的报文有三类</p>
+<ul>
+<li>IPv6</li>
+<li>STP</li>
+<li>LLDP</li>
+</ul>
+<p>至此问题上半部分析清楚。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2020/03/15/2020-03-15-net-rx-drop/" data-id="clnfhaspb006ne0mh3rbk6vfk" data-title="net rx drop" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2020/03/15/2020-03-15-net-rx-drop-1/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          net rx drop(续)
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2017/05/15/2017-05-15-slabinfo-cause-delay/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">slabinfo 惹的祸</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IRQs/">IRQs</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/make/">make</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netcore/">netcore</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/virtnet/">virtnet</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IRQ/" rel="tag">IRQ</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SP/" rel="tag">SP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TCPDUMP/" rel="tag">TCPDUMP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/arg/" rel="tag">arg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bash/" rel="tag">bash</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/beep/" rel="tag">beep</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bootmem/" rel="tag">bootmem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/cacahe/" rel="tag">cacahe</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/dump-sa/" rel="tag">dump sa</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ftrace/" rel="tag">ftrace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/glibc/" rel="tag">glibc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gtk/" rel="tag">gtk</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2markdown/" rel="tag">html2markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2text/" rel="tag">html2text</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet/" rel="tag">inet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet-socket/" rel="tag">inet socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv4/" rel="tag">ipv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipvlan/" rel="tag">ipvlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kenel/" rel="tag">kenel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/km/" rel="tag">km</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kthread/" rel="tag">kthread</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kvm/" rel="tag">kvm</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/lc-trie/" rel="tag">lc-trie</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/makefile/" rel="tag">makefile</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mannual/" rel="tag">mannual</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/manpages-dev/" rel="tag">manpages-dev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/marco/" rel="tag">marco</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/markdown/" rel="tag">markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mem/" rel="tag">mem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/minivnc/" rel="tag">minivnc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mmap/" rel="tag">mmap</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/net/" rel="tag">net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/network/" rel="tag">network</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octean/" rel="tag">octean</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octopress/" rel="tag">octopress</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/page/" rel="tag">page</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pernet/" rel="tag">pernet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pfn/" rel="tag">pfn</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/policy/" rel="tag">policy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/qdisc/" rel="tag">qdisc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/reg/" rel="tag">reg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/rss/" rel="tag">rss</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/schedule/" rel="tag">schedule</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sock/" rel="tag">sock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/softirq/" rel="tag">softirq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/subst/" rel="tag">subst</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/summary/" rel="tag">summary</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sunrise/" rel="tag">sunrise</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/system-call/" rel="tag">system call</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/terminal/" rel="tag">terminal</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/timezone/" rel="tag">timezone</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/toolchain/" rel="tag">toolchain</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ubuntu/" rel="tag">ubuntu</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/udp/" rel="tag">udp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/usb/" rel="tag">usb</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/variant/" rel="tag">variant</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vhost/" rel="tag">vhost</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vimdiff/" rel="tag">vimdiff</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vxlan/" rel="tag">vxlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/watchdog/" rel="tag">watchdog</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/workqueue/" rel="tag">workqueue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 16.25px;">IPv4</a> <a href="/tags/IRQ/" style="font-size: 12.5px;">IRQ</a> <a href="/tags/SP/" style="font-size: 10px;">SP</a> <a href="/tags/TCPDUMP/" style="font-size: 10px;">TCPDUMP</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 11.25px;">address</a> <a href="/tags/arg/" style="font-size: 10px;">arg</a> <a href="/tags/bash/" style="font-size: 10px;">bash</a> <a href="/tags/beep/" style="font-size: 10px;">beep</a> <a href="/tags/bh/" style="font-size: 10px;">bh</a> <a href="/tags/bootmem/" style="font-size: 10px;">bootmem</a> <a href="/tags/cacahe/" style="font-size: 10px;">cacahe</a> <a href="/tags/checksum/" style="font-size: 11.25px;">checksum</a> <a href="/tags/debug/" style="font-size: 10px;">debug</a> <a href="/tags/dump-sa/" style="font-size: 10px;">dump sa</a> <a href="/tags/fib/" style="font-size: 13.75px;">fib</a> <a href="/tags/ftrace/" style="font-size: 10px;">ftrace</a> <a href="/tags/gcc/" style="font-size: 13.75px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/glibc/" style="font-size: 10px;">glibc</a> <a href="/tags/gtk/" style="font-size: 10px;">gtk</a> <a href="/tags/html2markdown/" style="font-size: 10px;">html2markdown</a> <a href="/tags/html2text/" style="font-size: 10px;">html2text</a> <a href="/tags/inet/" style="font-size: 10px;">inet</a> <a href="/tags/inet-socket/" style="font-size: 10px;">inet socket</a> <a href="/tags/ipv4/" style="font-size: 11.25px;">ipv4</a> <a href="/tags/ipv6/" style="font-size: 11.25px;">ipv6</a> <a href="/tags/ipvlan/" style="font-size: 10px;">ipvlan</a> <a href="/tags/irq/" style="font-size: 10px;">irq</a> <a href="/tags/kenel/" style="font-size: 10px;">kenel</a> <a href="/tags/kernel/" style="font-size: 20px;">kernel</a> <a href="/tags/km/" style="font-size: 10px;">km</a> <a href="/tags/kthread/" style="font-size: 10px;">kthread</a> <a href="/tags/kvm/" style="font-size: 10px;">kvm</a> <a href="/tags/lc-trie/" style="font-size: 10px;">lc-trie</a> <a href="/tags/makefile/" style="font-size: 10px;">makefile</a> <a href="/tags/mannual/" style="font-size: 10px;">mannual</a> <a href="/tags/manpages-dev/" style="font-size: 10px;">manpages-dev</a> <a href="/tags/marco/" style="font-size: 10px;">marco</a> <a href="/tags/markdown/" style="font-size: 10px;">markdown</a> <a href="/tags/mem/" style="font-size: 10px;">mem</a> <a href="/tags/memory/" style="font-size: 12.5px;">memory</a> <a href="/tags/minivnc/" style="font-size: 10px;">minivnc</a> <a href="/tags/mmap/" style="font-size: 10px;">mmap</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/net/" style="font-size: 13.75px;">net</a> <a href="/tags/netdev/" style="font-size: 11.25px;">netdev</a> <a href="/tags/netlink/" style="font-size: 15px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/octean/" style="font-size: 10px;">octean</a> <a href="/tags/octopress/" style="font-size: 10px;">octopress</a> <a href="/tags/page/" style="font-size: 10px;">page</a> <a href="/tags/pernet/" style="font-size: 10px;">pernet</a> <a href="/tags/pfn/" style="font-size: 10px;">pfn</a> <a href="/tags/policy/" style="font-size: 10px;">policy</a> <a href="/tags/qdisc/" style="font-size: 11.25px;">qdisc</a> <a href="/tags/reg/" style="font-size: 10px;">reg</a> <a href="/tags/route/" style="font-size: 17.5px;">route</a> <a href="/tags/rss/" style="font-size: 10px;">rss</a> <a href="/tags/sched/" style="font-size: 13.75px;">sched</a> <a href="/tags/schedule/" style="font-size: 10px;">schedule</a> <a href="/tags/sock/" style="font-size: 10px;">sock</a> <a href="/tags/socket/" style="font-size: 18.75px;">socket</a> <a href="/tags/softirq/" style="font-size: 12.5px;">softirq</a> <a href="/tags/subst/" style="font-size: 10px;">subst</a> <a href="/tags/summary/" style="font-size: 10px;">summary</a> <a href="/tags/sunrise/" style="font-size: 10px;">sunrise</a> <a href="/tags/system-call/" style="font-size: 10px;">system call</a> <a href="/tags/tcp/" style="font-size: 10px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 10px;">tcpdump</a> <a href="/tags/terminal/" style="font-size: 10px;">terminal</a> <a href="/tags/timezone/" style="font-size: 10px;">timezone</a> <a href="/tags/toolchain/" style="font-size: 11.25px;">toolchain</a> <a href="/tags/ubuntu/" style="font-size: 11.25px;">ubuntu</a> <a href="/tags/udp/" style="font-size: 10px;">udp</a> <a href="/tags/usb/" style="font-size: 10px;">usb</a> <a href="/tags/variant/" style="font-size: 10px;">variant</a> <a href="/tags/vhost/" style="font-size: 11.25px;">vhost</a> <a href="/tags/vim/" style="font-size: 11.25px;">vim</a> <a href="/tags/vimdiff/" style="font-size: 10px;">vimdiff</a> <a href="/tags/vxlan/" style="font-size: 10px;">vxlan</a> <a href="/tags/watchdog/" style="font-size: 10px;">watchdog</a> <a href="/tags/workqueue/" style="font-size: 13.75px;">workqueue</a> <a href="/tags/xfrm/" style="font-size: 16.25px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/02/">February 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2020/03/25/2020-03-25-kern-ovs-data-struct/">内核OVS的学习总结</a>
+          </li>
+        
+          <li>
+            <a href="/2020/03/15/2020-03-15-net-rx-drop-1/">net rx drop(续)</a>
+          </li>
+        
+          <li>
+            <a href="/2020/03/15/2020-03-15-net-rx-drop/">net rx drop</a>
+          </li>
+        
+          <li>
+            <a href="/2017/05/15/2017-05-15-slabinfo-cause-delay/">slabinfo 惹的祸</a>
+          </li>
+        
+          <li>
+            <a href="/2016/11/23/2016-11-23-what-is-tfo/">WHAT is TFO</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2023 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
