@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>vlan：ebpf是如何访问skb结构体里的字段 | Kernel study</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="以vlan为例，讲述ebpf在编译、加载到运行ebpf全过程中，如何一步步实现ebpf在内核运行时，访问skb结构体里的字段。 背景介绍ebpf如何支持skb结构体里的字段skb结构体里有部分字段，在过滤报文时候也是需要的。比如队列，vlan、mark等信息。 一个例子部分网卡驱动自带vlan自动剥离功能， 网络报文的vlan部分会被网卡硬件自动剥离， 网卡驱动收到报文时候已经是无vlan头的报文">
+<meta property="og:type" content="article">
+<meta property="og:title" content="vlan：ebpf是如何访问skb结构体里的字段">
+<meta property="og:url" content="https://martinbj2008.github.io/2023/12/30/2023-12-29-how-ebpf-access-skb-field/index.html">
+<meta property="og:site_name" content="Kernel study">
+<meta property="og:description" content="以vlan为例，讲述ebpf在编译、加载到运行ebpf全过程中，如何一步步实现ebpf在内核运行时，访问skb结构体里的字段。 背景介绍ebpf如何支持skb结构体里的字段skb结构体里有部分字段，在过滤报文时候也是需要的。比如队列，vlan、mark等信息。 一个例子部分网卡驱动自带vlan自动剥离功能， 网络报文的vlan部分会被网卡硬件自动剥离， 网卡驱动收到报文时候已经是无vlan头的报文">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2023-12-30T08:55:57.000Z">
+<meta property="article:modified_time" content="2023-12-30T09:04:21.990Z">
+<meta property="article:author" content="Martinbj2008">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel study" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel study</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-2023-12-29-how-ebpf-access-skb-field" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2023/12/30/2023-12-29-how-ebpf-access-skb-field/" class="article-date">
+  <time class="dt-published" datetime="2023-12-30T08:55:57.000Z" itemprop="datePublished">2023-12-30</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      vlan：ebpf是如何访问skb结构体里的字段
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>以vlan为例，讲述ebpf在编译、加载到运行ebpf全过程中，如何一步步实现ebpf在内核运行时，访问skb结构体里的字段。</p>
+<h2 id="背景介绍"><a href="#背景介绍" class="headerlink" title="背景介绍"></a>背景介绍</h2><h3 id="ebpf如何支持skb结构体里的字段"><a href="#ebpf如何支持skb结构体里的字段" class="headerlink" title="ebpf如何支持skb结构体里的字段"></a>ebpf如何支持skb结构体里的字段</h3><p>skb结构体里有部分字段，在过滤报文时候也是需要的。比如队列，vlan、mark等信息。</p>
+<h3 id="一个例子"><a href="#一个例子" class="headerlink" title="一个例子"></a>一个例子</h3><p>部分网卡驱动自带vlan自动剥离功能， 网络报文的vlan部分会被网卡硬件自动剥离， 网卡驱动收到报文时候已经是无vlan头的报文， 因此驱动从寄存器里读取vlan信息，并把vlan信息存放到skb里。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"> 842 struct sk_buff &#123;</span><br><span class="line"> ...</span><br><span class="line">1009         union &#123;</span><br><span class="line">1010                 u32             vlan_all;</span><br><span class="line">1011                 struct &#123;</span><br><span class="line">1012                         __be16  vlan_proto;</span><br><span class="line">1013                         __u16   vlan_tci;</span><br><span class="line">1014                 &#125;;</span><br><span class="line">1015         &#125;;</span><br></pre></td></tr></table></figure>
+
+<h2 id="ebpf如何支持这种场景"><a href="#ebpf如何支持这种场景" class="headerlink" title="ebpf如何支持这种场景"></a>ebpf如何支持这种场景</h2><h3 id="关键点-SKF-AD-OFF的应用"><a href="#关键点-SKF-AD-OFF的应用" class="headerlink" title="关键点:SKF_AD_OFF的应用"></a>关键点:<code>SKF_AD_OFF</code>的应用</h3><ul>
+<li><code>SKF_AD_OFF</code>: tcpdump和内核约定这些值<code>SKF_AD_OFF</code>, 内核把所有支持的skb结构体里的字段都定义对应的SKF_AD_XX，表示对应的偏移值。<br>如vlan对应的是&#96;&#96;</li>
+<li>compile: tcpdump&amp;libpcap将fitler里的字段用<code>SKF_AD_OFF + SKF_AD_XX</code>来表示</li>
+<li>load: 内核加载ebpf程序时候，把SKF_AD_XX翻译成对应字段在sk_buff里的真实偏移值。</li>
+<li>run: ebpf真正执行时候，skb是被当作ctx寄存器传递进来的，结合上一步转换的偏移值，实现对这些字段的读取。</li>
+</ul>
+<h3 id="tcpdump-libpcap"><a href="#tcpdump-libpcap" class="headerlink" title="tcpdump&amp;libpcap"></a>tcpdump&amp;libpcap</h3><p>以vlan为例，解释tcpdump&amp;libpcap如何与内核配合，翻译并加载ebpf代码到内核里并运行的</p>
+<ol>
+<li>tcpdump在初始化时候，会调用libpcap库查询内核ebpf是否支持”SKF_AD_VLAN_TAG“，</li>
+<li>如果支持， 则在libpcap的handle里设置标志位<code>BPF_SPECIAL_VLAN_HANDLING</code>。</li>
+<li>在翻译<code>valn</code> filter时候，<code>gen_vlan</code>函数会被调用。 <code>gen_vlan</code>根据<code>BPF_SPECIAL_VLAN_HANDLING</code>决定是否如何翻译filter。如果支持，则生成支持vlan扩展的ebpf指令。</li>
+</ol>
+<p>####代码段<br>tcpdump&amp;libpcap相关代码分为两个部分：</p>
+<ul>
+<li>设置<code>BPF_SPECIAL_VLAN_HANDLING</code>标志位</li>
+<li>根据vlan filter生成ebpf指令</li>
+<li>加载ebpf指令到内核</li>
+</ul>
+<p>因为tcpdump是个外壳，真正设置标志位和产品ebpf指令都是在libpcap库代码里实现的，所以这里没有吧tcpdump和libpcap的代码明确分开。</p>
+<h5 id="设置BPF-SPECIAL-VLAN-HANDLING标志位"><a href="#设置BPF-SPECIAL-VLAN-HANDLING标志位" class="headerlink" title="设置BPF_SPECIAL_VLAN_HANDLING标志位"></a>设置<code>BPF_SPECIAL_VLAN_HANDLING</code>标志位</h5><ul>
+<li>调用栈<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line">tcpdump main</span><br><span class="line"> =&gt; open_interface</span><br><span class="line"> =&gt; =&gt; pcap_open_live</span><br><span class="line"> =&gt; =&gt; =&gt; pcap_activate  &lt;-- libpcap代码</span><br><span class="line">            2720         status = p-&gt;activate_op(p);</span><br><span class="line">            ./pcap-linux.c:347:	handle-&gt;activate_op = pcap_activate_linux;</span><br><span class="line"> =&gt; =&gt; =&gt; =&gt; pcap_activate_linux</span><br><span class="line"> =&gt; =&gt; =&gt; =&gt; =&gt; setup_socket(pcap_t *handle, int is_any_device)</span><br><span class="line">        handle-&gt;bpf_codegen_flags |= BPF_SPECIAL_VLAN_HANDLING;</span><br><span class="line">=&gt; pcap_compile</span><br><span class="line"> =&gt; =&gt; ...这块待补充，grammer.c和gencode.c代码</span><br><span class="line"> =&gt; =&gt; =&gt;</span><br><span class="line">=&gt; pcap_setfilter  &lt;-- libpcap代码</span><br><span class="line">            3726         return (p-&gt;setfilter_op(p, fp));</span><br><span class="line">            1119         handle-&gt;setfilter_op = pcap_setfilter_linux;</span><br><span class="line"> =&gt; =&gt; set_kernel_filter</span><br><span class="line">            5453         if (setsockopt(handle-&gt;fd, SOL_SOCKET, SO_ATTACH_FILTER,</span><br><span class="line">            5454                        &amp;total_fcode, sizeof(total_fcode)) == 0) &#123;</span><br></pre></td></tr></table></figure></li>
+<li>设置标志位<code>BPF_SPECIAL_VLAN_HANDLING</code><br>通过<code>getsockopt(,SOL_SOCKET, SO_BPF_EXTENSIONS,</code>, 获取内核是否支持ebpf的<code>vlan</code>扩展，<br>如果支持则通过<code>BPF_SPECIAL_VLAN_HANDLING</code>记录到pcap的句柄里的<code>bpf_codegen_flags</code>上。</li>
+</ul>
+<p>这部分代码是libpcap实现的。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">2299 setup_socket(pcap_t *handle, int is_any_device)</span><br><span class="line">...</span><br><span class="line">2637         if (getsockopt(sock_fd, SOL_SOCKET, SO_BPF_EXTENSIONS,</span><br><span class="line">2638             &amp;bpf_extensions, &amp;len) == 0) &#123;</span><br><span class="line">2639                 if (bpf_extensions &gt;= SKF_AD_VLAN_TAG_PRESENT) &#123;</span><br><span class="line">2640                         /*</span><br><span class="line">2641                          * Yes, we can.  Request that we do so.</span><br><span class="line">2642                          */</span><br><span class="line">2643                         handle-&gt;bpf_codegen_flags |= BPF_SPECIAL_VLAN_HANDLING;</span><br><span class="line">2644                 &#125;</span><br><span class="line">2645         &#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">1262 static pcap_t *</span><br><span class="line">1263 open_interface(const char *device, netdissect_options *ndo, char *ebuf)</span><br><span class="line">....</span><br><span class="line">1476         pc = pcap_open_live(device, ndo-&gt;ndo_snaplen, !pflag, timeout, ebuf);</span><br></pre></td></tr></table></figure>
+
+<h4 id="根据BPF-SPECIAL-VLAN-HANDLING，生成ebpf指令"><a href="#根据BPF-SPECIAL-VLAN-HANDLING，生成ebpf指令" class="headerlink" title="根据BPF_SPECIAL_VLAN_HANDLING，生成ebpf指令"></a>根据<code>BPF_SPECIAL_VLAN_HANDLING</code>，生成ebpf指令</h4><p> 解析vlan过滤条件,生成ebpf指令时，根据<code>BPF_SPECIAL_VLAN_HANDLING</code>标志位决定是否生成vlan扩展。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"> 8909 struct block *</span><br><span class="line"> 8910 gen_vlan(compiler_state_t *cstate, bpf_u_int32 vlan_num, int has_vlan_tag)</span><br><span class="line"> 8911 &#123;</span><br><span class="line"> ...</span><br><span class="line">8970                         if (cstate-&gt;bpf_pcap-&gt;bpf_codegen_flags &amp; BPF_SPECIAL_VLAN_HANDLING)</span><br><span class="line">8971                                 b0 = gen_vlan_bpf_extensions(cstate, vlan_num,</span><br><span class="line">8972                                     has_vlan_tag);</span><br><span class="line">8973                         else</span><br><span class="line">8974                                 b0 = gen_vlan_no_bpf_extensions(cstate,</span><br><span class="line">8975                                     vlan_num, has_vlan_tag);</span><br><span class="line">8976                 &#125; else</span><br><span class="line">8977 #endif</span><br><span class="line">8978                         b0 = gen_vlan_no_bpf_extensions(cstate, vlan_num,</span><br><span class="line">8979                             has_vlan_tag);</span><br><span class="line">8980                 break;</span><br></pre></td></tr></table></figure>
+<h4 id="将ebpf指令加载到内核"><a href="#将ebpf指令加载到内核" class="headerlink" title="将ebpf指令加载到内核"></a>将ebpf指令加载到内核</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">1119         handle-&gt;setfilter_op = pcap_setfilter_linux;</span><br></pre></td></tr></table></figure>
+
+<h3 id="内核加载"><a href="#内核加载" class="headerlink" title="内核加载"></a>内核加载</h3><ol>
+<li>tcpdump通过<code>SO_ATTACH_FILTER</code>把应用层的bpf程序加载到内核中。这里有个转换细节，vlan扩展在应用程翻译时候是<code>SKF_AD_OFF + SKF_AD_VLAN_TAG</code>的形式，在加载到内核后，会调用prepare函数把<code>SKF_AD_VLAN_TAG</code>转换成skb里vlan的偏移值。这样后续处理时候只需要offset+ctx(skb)，不再关心具体offset位置上的数据的意义。内核这样设计不是<code>过度设计</code>,如果应用层转换时候直接一步到位，编译和执行内核版本相同时候，效率最高。如果内核版本不同并且skb结构体的vlan信息偏移位置有变化，就出问题了。</li>
+</ol>
+<h4 id="内核加载ebpf指令"><a href="#内核加载ebpf指令" class="headerlink" title="内核加载ebpf指令"></a>内核加载ebpf指令</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">libpcap调用setsockopt(handle-&gt;fd, SOL_SOCKET, SO_ATTACH_FILTER, ....）</span><br><span class="line"> =&gt;  sk_setsockopt</span><br><span class="line"> =&gt; =&gt; copy_bpf_fprog_from_user(&amp;fprog, optval, optlen);</span><br><span class="line"> =&gt; =&gt; =&gt; sk_attach_filter(&amp;fprog, sk);</span><br><span class="line"> =&gt; =&gt; =&gt; =&gt; __get_filter</span><br><span class="line"> =&gt; =&gt; =&gt; =&gt; =&gt; bpf_prog_alloc</span><br><span class="line"> =&gt; =&gt; =&gt; =&gt; =&gt; bpf_prog_store_orig_filter</span><br><span class="line"> =&gt; =&gt; =&gt; =&gt; =&gt; bpf_prepare_filter</span><br><span class="line"> =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; bpf_migrate_filter</span><br><span class="line"> =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; bpf_convert_filter</span><br><span class="line"> =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; convert_bpf_extensions</span><br><span class="line"> =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; convert_skb_access</span><br><span class="line">  =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt;  *insn++ = BPF_LDX_MEM(BPF_H, dst_reg, src_reg, offsetof(struct sk_buff, vlan_tci));</span><br><span class="line"> =&gt; =&gt; =&gt; =&gt; __sk_attach_prog</span><br><span class="line"> =&gt; =&gt; =&gt; =&gt; =&gt; rcu_assign_pointer(sk-&gt;sk_filter, fp);</span><br></pre></td></tr></table></figure>
+<p><a href="https://martinbj2008.github.io/2023/10/08/2023-10-08-tcpdump-and-ebpf/">具体内核如何加载ebpf程序见之前的这篇blog</a></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">325         case SKF_AD_VLAN_TAG:</span><br><span class="line">326                 BUILD_BUG_ON(sizeof_field(struct sk_buff, vlan_tci) != 2);</span><br><span class="line">327</span><br><span class="line">328                 /* dst_reg = *(u16 *) (src_reg + offsetof(vlan_tci)) */</span><br><span class="line">329                 *insn++ = BPF_LDX_MEM(BPF_H, dst_reg, src_reg,</span><br><span class="line">330                                       offsetof(struct sk_buff, vlan_tci));</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">663                         if (BPF_CLASS(fp-&gt;code) == BPF_LD &amp;&amp;</span><br><span class="line">664                             BPF_MODE(fp-&gt;code) == BPF_ABS &amp;&amp;</span><br><span class="line">665                             convert_bpf_extensions(fp, &amp;insn))</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">60 /* RATIONALE. Negative offsets are invalid in BPF.</span><br><span class="line">61    We use them to reference ancillary data.</span><br><span class="line">62    Unlike introduction new instructions, it does not break</span><br><span class="line">63    existing compilers/optimizers.</span><br><span class="line">64  */</span><br><span class="line">65 #define SKF_AD_OFF    (-0x1000)</span><br><span class="line">66 #define SKF_AD_PROTOCOL 0</span><br><span class="line">67 #define SKF_AD_PKTTYPE  4</span><br><span class="line">68 #define SKF_AD_IFINDEX  8</span><br><span class="line">69 #define SKF_AD_NLATTR   12</span><br><span class="line">70 #define SKF_AD_NLATTR_NEST      16</span><br><span class="line">71 #define SKF_AD_MARK     20</span><br><span class="line">72 #define SKF_AD_QUEUE    24</span><br><span class="line">73 #define SKF_AD_HATYPE   28</span><br><span class="line">74 #define SKF_AD_RXHASH   32</span><br><span class="line">75 #define SKF_AD_CPU      36</span><br><span class="line">76 #define SKF_AD_ALU_XOR_X        40</span><br><span class="line">77 #define SKF_AD_VLAN_TAG 44</span><br><span class="line">78 #define SKF_AD_VLAN_TAG_PRESENT 48</span><br><span class="line">79 #define SKF_AD_PAY_OFFSET       52</span><br><span class="line">80 #define SKF_AD_RANDOM   56</span><br><span class="line">81 #define SKF_AD_VLAN_TPID        60</span><br><span class="line">82 #define SKF_AD_MAX      64</span><br></pre></td></tr></table></figure>
+
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2023/12/30/2023-12-29-how-ebpf-access-skb-field/" data-id="clqt284io002qogps2dzrd927" data-title="vlan：ebpf是如何访问skb结构体里的字段" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2023/10/27/2023-10-27-how-xdp-pass-skb-as-ctx-to-bpf-prog/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">xdp是如何把skb传递给ctx寄存器</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IRQs/">IRQs</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/make/">make</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netcore/">netcore</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/virtnet/">virtnet</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IRQ/" rel="tag">IRQ</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SP/" rel="tag">SP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TCPDUMP/" rel="tag">TCPDUMP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/arg/" rel="tag">arg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bash/" rel="tag">bash</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/beep/" rel="tag">beep</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bootmem/" rel="tag">bootmem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/cacahe/" rel="tag">cacahe</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/dump-sa/" rel="tag">dump sa</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ftrace/" rel="tag">ftrace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/glibc/" rel="tag">glibc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gtk/" rel="tag">gtk</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2markdown/" rel="tag">html2markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2text/" rel="tag">html2text</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet/" rel="tag">inet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet-socket/" rel="tag">inet socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv4/" rel="tag">ipv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipvlan/" rel="tag">ipvlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kenel/" rel="tag">kenel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/km/" rel="tag">km</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kthread/" rel="tag">kthread</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kvm/" rel="tag">kvm</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/lc-trie/" rel="tag">lc-trie</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/makefile/" rel="tag">makefile</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mannual/" rel="tag">mannual</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/manpages-dev/" rel="tag">manpages-dev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/marco/" rel="tag">marco</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/markdown/" rel="tag">markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mem/" rel="tag">mem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/minivnc/" rel="tag">minivnc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mmap/" rel="tag">mmap</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/net/" rel="tag">net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/network/" rel="tag">network</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octean/" rel="tag">octean</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octopress/" rel="tag">octopress</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/page/" rel="tag">page</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pernet/" rel="tag">pernet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pfn/" rel="tag">pfn</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/policy/" rel="tag">policy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/qdisc/" rel="tag">qdisc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/reg/" rel="tag">reg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/rss/" rel="tag">rss</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/schedule/" rel="tag">schedule</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sock/" rel="tag">sock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/softirq/" rel="tag">softirq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/subst/" rel="tag">subst</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/summary/" rel="tag">summary</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sunrise/" rel="tag">sunrise</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/system-call/" rel="tag">system call</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/terminal/" rel="tag">terminal</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/timezone/" rel="tag">timezone</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/toolchain/" rel="tag">toolchain</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ubuntu/" rel="tag">ubuntu</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/udp/" rel="tag">udp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/usb/" rel="tag">usb</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/variant/" rel="tag">variant</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vhost/" rel="tag">vhost</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vimdiff/" rel="tag">vimdiff</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vxlan/" rel="tag">vxlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/watchdog/" rel="tag">watchdog</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/workqueue/" rel="tag">workqueue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 16.25px;">IPv4</a> <a href="/tags/IRQ/" style="font-size: 12.5px;">IRQ</a> <a href="/tags/SP/" style="font-size: 10px;">SP</a> <a href="/tags/TCPDUMP/" style="font-size: 10px;">TCPDUMP</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 11.25px;">address</a> <a href="/tags/arg/" style="font-size: 10px;">arg</a> <a href="/tags/bash/" style="font-size: 10px;">bash</a> <a href="/tags/beep/" style="font-size: 10px;">beep</a> <a href="/tags/bh/" style="font-size: 10px;">bh</a> <a href="/tags/bootmem/" style="font-size: 10px;">bootmem</a> <a href="/tags/cacahe/" style="font-size: 10px;">cacahe</a> <a href="/tags/checksum/" style="font-size: 11.25px;">checksum</a> <a href="/tags/debug/" style="font-size: 10px;">debug</a> <a href="/tags/dump-sa/" style="font-size: 10px;">dump sa</a> <a href="/tags/fib/" style="font-size: 15px;">fib</a> <a href="/tags/ftrace/" style="font-size: 10px;">ftrace</a> <a href="/tags/gcc/" style="font-size: 13.75px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/glibc/" style="font-size: 10px;">glibc</a> <a href="/tags/gtk/" style="font-size: 10px;">gtk</a> <a href="/tags/html2markdown/" style="font-size: 10px;">html2markdown</a> <a href="/tags/html2text/" style="font-size: 10px;">html2text</a> <a href="/tags/inet/" style="font-size: 10px;">inet</a> <a href="/tags/inet-socket/" style="font-size: 10px;">inet socket</a> <a href="/tags/ipv4/" style="font-size: 11.25px;">ipv4</a> <a href="/tags/ipv6/" style="font-size: 11.25px;">ipv6</a> <a href="/tags/ipvlan/" style="font-size: 10px;">ipvlan</a> <a href="/tags/irq/" style="font-size: 10px;">irq</a> <a href="/tags/kenel/" style="font-size: 10px;">kenel</a> <a href="/tags/kernel/" style="font-size: 20px;">kernel</a> <a href="/tags/km/" style="font-size: 10px;">km</a> <a href="/tags/kthread/" style="font-size: 10px;">kthread</a> <a href="/tags/kvm/" style="font-size: 10px;">kvm</a> <a href="/tags/lc-trie/" style="font-size: 10px;">lc-trie</a> <a href="/tags/makefile/" style="font-size: 10px;">makefile</a> <a href="/tags/mannual/" style="font-size: 10px;">mannual</a> <a href="/tags/manpages-dev/" style="font-size: 10px;">manpages-dev</a> <a href="/tags/marco/" style="font-size: 10px;">marco</a> <a href="/tags/markdown/" style="font-size: 10px;">markdown</a> <a href="/tags/mem/" style="font-size: 10px;">mem</a> <a href="/tags/memory/" style="font-size: 12.5px;">memory</a> <a href="/tags/minivnc/" style="font-size: 10px;">minivnc</a> <a href="/tags/mmap/" style="font-size: 10px;">mmap</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/net/" style="font-size: 13.75px;">net</a> <a href="/tags/netdev/" style="font-size: 11.25px;">netdev</a> <a href="/tags/netlink/" style="font-size: 15px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/octean/" style="font-size: 10px;">octean</a> <a href="/tags/octopress/" style="font-size: 10px;">octopress</a> <a href="/tags/page/" style="font-size: 10px;">page</a> <a href="/tags/pernet/" style="font-size: 10px;">pernet</a> <a href="/tags/pfn/" style="font-size: 10px;">pfn</a> <a href="/tags/policy/" style="font-size: 10px;">policy</a> <a href="/tags/qdisc/" style="font-size: 11.25px;">qdisc</a> <a href="/tags/reg/" style="font-size: 10px;">reg</a> <a href="/tags/route/" style="font-size: 17.5px;">route</a> <a href="/tags/rss/" style="font-size: 10px;">rss</a> <a href="/tags/sched/" style="font-size: 13.75px;">sched</a> <a href="/tags/schedule/" style="font-size: 10px;">schedule</a> <a href="/tags/sock/" style="font-size: 10px;">sock</a> <a href="/tags/socket/" style="font-size: 18.75px;">socket</a> <a href="/tags/softirq/" style="font-size: 12.5px;">softirq</a> <a href="/tags/subst/" style="font-size: 10px;">subst</a> <a href="/tags/summary/" style="font-size: 10px;">summary</a> <a href="/tags/sunrise/" style="font-size: 10px;">sunrise</a> <a href="/tags/system-call/" style="font-size: 10px;">system call</a> <a href="/tags/tcp/" style="font-size: 10px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 10px;">tcpdump</a> <a href="/tags/terminal/" style="font-size: 10px;">terminal</a> <a href="/tags/timezone/" style="font-size: 10px;">timezone</a> <a href="/tags/toolchain/" style="font-size: 11.25px;">toolchain</a> <a href="/tags/ubuntu/" style="font-size: 11.25px;">ubuntu</a> <a href="/tags/udp/" style="font-size: 10px;">udp</a> <a href="/tags/usb/" style="font-size: 10px;">usb</a> <a href="/tags/variant/" style="font-size: 10px;">variant</a> <a href="/tags/vhost/" style="font-size: 11.25px;">vhost</a> <a href="/tags/vim/" style="font-size: 11.25px;">vim</a> <a href="/tags/vimdiff/" style="font-size: 10px;">vimdiff</a> <a href="/tags/vxlan/" style="font-size: 10px;">vxlan</a> <a href="/tags/watchdog/" style="font-size: 10px;">watchdog</a> <a href="/tags/workqueue/" style="font-size: 12.5px;">workqueue</a> <a href="/tags/xfrm/" style="font-size: 16.25px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/12/">December 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">October 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/09/">September 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/11/">November 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/02/">February 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2023/12/30/2023-12-29-how-ebpf-access-skb-field/">vlan：ebpf是如何访问skb结构体里的字段</a>
+          </li>
+        
+          <li>
+            <a href="/2023/10/27/2023-10-27-how-xdp-pass-skb-as-ctx-to-bpf-prog/">xdp是如何把skb传递给ctx寄存器</a>
+          </li>
+        
+          <li>
+            <a href="/2023/10/27/2023-10-27-how-netstack-call-xdp-prog/">协议栈是如何调用xdp程序处理报文的</a>
+          </li>
+        
+          <li>
+            <a href="/2023/10/27/2023-10-27-core-entry-function-of-bpf-run/">bfp 在内核运行的核心入口函数及其变形</a>
+          </li>
+        
+          <li>
+            <a href="/2023/10/26/2023-10-26-how-load-xdp-into-kernel/">xdp 是如何加载到内核并运行的</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2023 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
