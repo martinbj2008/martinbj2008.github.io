@@ -96,13 +96,12 @@
     <div class="e-content article-entry" itemprop="articleBody">
       
         <p>以vlan为例，讲述ebpf在编译、加载到运行ebpf全过程中，如何一步步实现ebpf在内核运行时，访问skb结构体里的字段。</p>
-<h2 id="背景介绍"><a href="#背景介绍" class="headerlink" title="背景介绍"></a>背景介绍</h2><h3 id="ebpf如何支持skb结构体里的字段"><a href="#ebpf如何支持skb结构体里的字段" class="headerlink" title="ebpf如何支持skb结构体里的字段"></a>ebpf如何支持skb结构体里的字段</h3><p>skb结构体里有部分字段，在过滤报文时候也是需要的。比如队列，vlan、mark等信息。</p>
-<h3 id="一个例子"><a href="#一个例子" class="headerlink" title="一个例子"></a>一个例子</h3><p>部分网卡驱动自带vlan自动剥离功能， 网络报文的vlan部分会被网卡硬件自动剥离， 网卡驱动收到报文时候已经是无vlan头的报文， 因此驱动从寄存器里读取vlan信息，并把vlan信息存放到skb里。</p>
+<h2 id="背景介绍"><a href="#背景介绍" class="headerlink" title="背景介绍"></a>背景介绍</h2><h3 id="ebpf如何支持skb结构体里的字段"><a href="#ebpf如何支持skb结构体里的字段" class="headerlink" title="ebpf如何支持skb结构体里的字段"></a>ebpf如何支持skb结构体里的字段</h3><p>skb结构体里有部分字段，在过滤报文时候也是需要的。比如队列，vlan、mark等信息。<br>以vlan为例，部分网卡驱动自带vlan自动剥离功能， 网络报文的vlan部分会被网卡硬件自动剥离， 网卡驱动收到报文时候已经是无vlan头的报文， 因此驱动从寄存器里读取vlan信息，并把vlan信息存放到skb里。</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"> 842 struct sk_buff &#123;</span><br><span class="line"> ...</span><br><span class="line">1009         union &#123;</span><br><span class="line">1010                 u32             vlan_all;</span><br><span class="line">1011                 struct &#123;</span><br><span class="line">1012                         __be16  vlan_proto;</span><br><span class="line">1013                         __u16   vlan_tci;</span><br><span class="line">1014                 &#125;;</span><br><span class="line">1015         &#125;;</span><br></pre></td></tr></table></figure>
 
 <!---more--->
 
-<h2 id="ebpf如何支持这种场景"><a href="#ebpf如何支持这种场景" class="headerlink" title="ebpf如何支持这种场景"></a>ebpf如何支持这种场景</h2><h3 id="关键点-SKF-AD-OFF的应用"><a href="#关键点-SKF-AD-OFF的应用" class="headerlink" title="关键点:SKF_AD_OFF的应用"></a>关键点:<code>SKF_AD_OFF</code>的应用</h3><ul>
+<h2 id="ebpf如何支持这种场景"><a href="#ebpf如何支持这种场景" class="headerlink" title="ebpf如何支持这种场景"></a>ebpf如何支持这种场景</h2><h3 id="关键点-SKF-AD-OFF"><a href="#关键点-SKF-AD-OFF" class="headerlink" title="关键点:SKF_AD_OFF"></a>关键点:<code>SKF_AD_OFF</code></h3><ul>
 <li><code>SKF_AD_OFF</code>: tcpdump和内核约定这些值<code>SKF_AD_OFF</code>, 内核把所有支持的skb结构体里的字段都定义对应的SKF_AD_XX，表示对应的偏移值。<br>如vlan对应的是&#96;&#96;</li>
 <li>compile: tcpdump&amp;libpcap将fitler里的字段用<code>SKF_AD_OFF + SKF_AD_XX</code>来表示</li>
 <li>load: 内核加载ebpf程序时候，把SKF_AD_XX翻译成对应字段在sk_buff里的真实偏移值。</li>
@@ -686,7 +685,7 @@
   <div class="outer">
     <div id="footer-info" class="inner">
       
-      &copy; 2023 Martinbj2008<br>
+      &copy; 2024 Martinbj2008<br>
       Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
     </div>
   </div>
