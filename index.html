@@ -73,6 +73,80 @@
       <div class="outer">
         <section id="main">
   
+    <article id="post-2024-07-24-struct-group" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2024/07/24/2024-07-24-struct-group/" class="article-date">
+  <time class="dt-published" datetime="2024-07-24T02:18:38.000Z" itemprop="datePublished">2024-07-24</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2024/07/24/2024-07-24-struct-group/">2024-07-24-struct-group</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="struct-group"><a href="#struct-group" class="headerlink" title="__struct_group"></a><code>__struct_group</code></h2><p>浏览IPv6代码时候，看到这样一个新玩法，<br><code>__struct_group</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">118 struct ipv6hdr &#123;</span><br><span class="line">...</span><br><span class="line">132         __u8                    hop_limit;</span><br><span class="line">133</span><br><span class="line">134         __struct_group(/* no tag */, addrs, /* no attrs */,</span><br><span class="line">135                 struct  in6_addr        saddr;</span><br><span class="line">136                 struct  in6_addr        daddr;</span><br><span class="line">137         );</span><br><span class="line">138 &#125;;</span><br></pre></td></tr></table></figure>
+<p>###用法<br>再看一下用法：</p>
+<pre><code> 922 /* copy IPv6 saddr &amp; daddr to flow_keys, possibly using 64bit load/store
+ 923  * Equivalent to :      flow-&gt;v6addrs.src = iph-&gt;saddr;
+ 924  *                      flow-&gt;v6addrs.dst = iph-&gt;daddr;
+ 925  */
+ 926 static inline void iph_to_flow_copy_v6addrs(struct flow_keys *flow,
+ 927                                             const struct ipv6hdr *iph)
+ 928 &#123;
+ ...
+ 932         memcpy(&amp;flow-&gt;addrs.v6addrs, &amp;iph-&gt;addrs, sizeof(flow-&gt;addrs.v6addrs));
+ ...
+ <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line">###</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+ 11 /**
+ 12  * __struct_group() - Create a mirrored named and anonyomous struct
+ 13  *
+ 14  * @TAG: The tag name for the named sub-struct (usually empty)
+ 15  * @NAME: The identifier name of the mirrored sub-struct
+ 16  * @ATTRS: Any struct attributes (usually empty)
+ 17  * @MEMBERS: The member declarations for the mirrored structs
+ 18  *
+ 19  * Used to create an anonymous union of two structs with identical layout
+ 20  * and size: one anonymous and one named. The former&#39;s members can be used
+ 21  * normally without sub-struct naming, and the latter can be used to
+ 22  * reason about the start, end, and size of the group of struct members.
+ 23  * The named struct can also be explicitly tagged for layer reuse, as well
+ 24  * as both having struct attributes appended.
+ 25  */
+ 26 #define __struct_group(TAG, NAME, ATTRS, MEMBERS...) \
+ 27         union &#123; \
+ 28                 struct &#123; MEMBERS &#125; ATTRS; \
+ 29                 struct TAG &#123; MEMBERS &#125; ATTRS NAME; \
+ 30         &#125; ATTRS
+```
+</code></pre>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2024/07/24/2024-07-24-struct-group/" data-id="clzuvx0g400000xp190o70emf" data-title="2024-07-24-struct-group" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
     <article id="post-2024-07-18-IPv6-how-to-support-IPv6-ext-header" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2024/07/18/2024-07-18-IPv6-how-to-support-IPv6-ext-header/" class="article-date">
@@ -544,51 +618,6 @@
 
 
   
-    <article id="post-2023-10-08-tcpdump-and-ebpf" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2023/10/08/2023-10-08-tcpdump-and-ebpf/" class="article-date">
-  <time class="dt-published" datetime="2023-10-08T11:18:21.000Z" itemprop="datePublished">2023-10-08</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2023/10/08/2023-10-08-tcpdump-and-ebpf/">tcpdump and ebpf</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <p>以内核v6.6代码，介绍tcpdump程序如何与内核交互，加载bpf程序的。</p>
-<h2 id="加载："><a href="#加载：" class="headerlink" title="加载："></a>加载：</h2><p>libpcap通过sockopt里的“SO_ATTACH_FILTER“，<br>在 packet socket下的”sk_filter“挂载prog呈现。</p>
-<h2 id="运行："><a href="#运行：" class="headerlink" title="运行："></a>运行：</h2><p>当skb报文到达packet_rcv时候， 通过调用___bpf_prog_run函数（注意，这个函数是3个下滑线，区别于2个下划线的函数）<br>运行”sk_filter“对应的prog。<br>其中prog的<br>&#x3D;&#x3D;&gt;packet_rcv<br>&#x3D;&#x3D;&gt; &#x3D;&#x3D;&gt; run_filter<br>&#x3D;&#x3D;&gt; &#x3D;&#x3D;&gt; &#x3D;&#x3D;&gt;bpf_prog_run_clear_cb</p>
-        
-          <p class="article-more-link">
-            <a href="/2023/10/08/2023-10-08-tcpdump-and-ebpf/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2023/10/08/2023-10-08-tcpdump-and-ebpf/" data-id="clyqxo1w900003ip13pc84jw7" data-title="tcpdump and ebpf" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
 
 
   <nav id="page-nav">
@@ -646,6 +675,10 @@
       <ul>
         
           <li>
+            <a href="/2024/07/24/2024-07-24-struct-group/">2024-07-24-struct-group</a>
+          </li>
+        
+          <li>
             <a href="/2024/07/18/2024-07-18-IPv6-how-to-support-IPv6-ext-header/">IPv6: how to support IPv6 ext header </a>
           </li>
         
@@ -659,10 +692,6 @@
         
           <li>
             <a href="/2023/10/27/2023-10-27-core-entry-function-of-bpf-run/">bfp 在内核运行的核心入口函数及其变形</a>
-          </li>
-        
-          <li>
-            <a href="/2023/10/26/2023-10-26-how-load-xdp-into-kernel/">xdp 是如何加载到内核并运行的</a>
           </li>
         
       </ul>
