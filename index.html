@@ -73,9 +73,183 @@
       <div class="outer">
         <section id="main">
   
-    <article id="post-How-tcpdump-run-with-length-parameter" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+    <article id="post-2025-03-14-NIC-state-flags-part1" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
-    <a href="/2025/02/06/How-tcpdump-run-with-length-parameter/" class="article-date">
+    <a href="/2025/03/14/2025-03-14-NIC-state-flags-part1/" class="article-date">
+  <time class="dt-published" datetime="2025-03-14T11:00:02.000Z" itemprop="datePublished">2025-03-14</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2025/03/14/2025-03-14-NIC-state-flags-part1/">网口状态标志位解析: part1</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h4 id="IP-link命令结果里的网口状态标志位"><a href="#IP-link命令结果里的网口状态标志位" class="headerlink" title="IP link命令结果里的网口状态标志位"></a><code>IP link</code>命令结果里的网口状态标志位</h4><p>我们先来看几个场景里，不同状态的网口，输出的标志位有哪些不一样。</p>
+<h4 id="正常状态下物理网口eth0-的输出"><a href="#正常状态下物理网口eth0-的输出" class="headerlink" title="正常状态下物理网口eth0 的输出"></a>正常状态下物理网口eth0 的输出</h4><p>命令行<code>ip link show dev eth0</code>会输出网口eth0的一些状态标志位。<br>这里注意一个现象, ‘ifconfig’命令显示的结果里有’RUNNING’标志位， 但是’ip link’命令的结果里没有这个标志位。<br><img src="/images/ip_link/iplink.ifconfig.pic.png" alt="图1: 正常网口的ip link 命令和ifconfig命令结果"></p>
+<h4 id="场景2：拔掉物理口的网线后-网口的状态变化。"><a href="#场景2：拔掉物理口的网线后-网口的状态变化。" class="headerlink" title="场景2：拔掉物理口的网线后, 网口的状态变化。"></a>场景2：拔掉物理口的网线后, 网口的状态变化。</h4><p>网口状态标志位里有个明显变化，多了一个’NO-CARRIER’<br><img src="/images/ip_link/iplink.no.carrier.png" alt="图2: 拔掉网线后的网口输出结果"></p>
+        
+          <p class="article-more-link">
+            <a href="/2025/03/14/2025-03-14-NIC-state-flags-part1/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2025/03/14/2025-03-14-NIC-state-flags-part1/" data-id="cm88o9avu0003jup1augt5c0g" data-title="网口状态标志位解析: part1" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2025-03-14-NIC-state-flags-part2" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/03/14/2025-03-14-NIC-state-flags-part2/" class="article-date">
+  <time class="dt-published" datetime="2025-03-14T11:00:02.000Z" itemprop="datePublished">2025-03-14</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2025/03/14/2025-03-14-NIC-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>内核如何维护网卡设备的RUNNING 状态</p>
+<h3 id="流程概述"><a href="#流程概述" class="headerlink" title="流程概述"></a>流程概述</h3><p>主要几个部分：</p>
+<ol>
+<li>网卡驱动有个看门狗：不同网卡驱动实现可能不太一样 ，功能负责监控网卡硬件上网线的状态， 当网线状态变换的时候，会激发内核的 carrier 处理函数。</li>
+<li>内核两个通用的处理函数：<code>netif_carrier_on</code>和<code>netif_carrier_off</code>。这个函数会<ul>
+<li>设置或者清除<code>netdev-&gt;state</code>上的<code>__LINK_STATE_NOCARRIER</code>标志位。</li>
+<li>发送事件消息给linkwatch，做后续处理.</li>
+<li>如果是网线插好了状态， 会启动一个通用的看门狗，这个看门狗是负责检测tx队列是否’HUNG’了， 如果’HUNG’了就调用网卡对应的处理函数<code>ndo_tx_timeout</code>， 做一些应急补救，比如对网卡队列复位等操作。这里的看门狗跟网卡驱动里的看门狗还不是同一个看门狗。具体差别待研究。</li>
+</ul>
+</li>
+<li>linkwath模块：linkwatch本身是个workqueue 队列，对接受到的消息按照，分为紧急和非紧急两类。紧急的决定立即处理，非紧急的则挂到一个链表里，等定时器超时后，再集中处理。所有事件处理，最终都交给<code>linkwatch_do_dev(struct net_device *dev)</code>函数进行处理。 该函数更新<code>netdev-&gt;operate</code>标志位。同时调用通用的<code>dev_activate</code>或者<code>dev_deactivate</code>对网卡做网卡队列进行处理。 我们这里重点关注跟网卡状态位有管的部分，忽略跟网卡队列的处理。<br> 这里有两个重要函数<code>rfc2863_policy</code>和<code>default_operstate</code> 后面我们重点介绍。</li>
+</ol>
+<h4 id="carrier-on-和-off-函数"><a href="#carrier-on-和-off-函数" class="headerlink" title="carrier on 和 off 函数"></a>carrier on 和 off 函数</h4><p><code>netif_carrier_on</code>和<code>netif_carrier_off</code>: 内核里的两个通用的处理函数，功能基本对称</p>
+<h6 id="carrier-on详解"><a href="#carrier-on详解" class="headerlink" title="carrier on详解"></a>carrier on详解</h6><pre><code>`netif_carrier_on`主要依次做下面三个操作
++ `__LINK_STATE_NOCARRIER`: 设置`netdev-&gt;state`上的`__LINK_STATE_NOCARRIER`标志位。这个标志位很关键，后续判断carrier 是否 OK，就看这个标志位。
+如果是从无到有这个标志位，则执行下面两步，否则就跳过。
++ 增加网卡设备下的`dev-&gt;carrier_up_count`的计数次数。
++ 发送事件消息给linkwatch：让他做后续处理。激发动作有两部分
+    + &#39;__LINK_STATE_LINKWATCH_PENDING&#39;：设置这个标志位
++ 如果是网线插好了状态， 会启动一个网卡的看门狗，这个看门狗是负责检测tx队列是否&#39;HUNG&#39;了， 如果&#39;HUNG&#39;了就调用网卡对应的处理函数`ndo_tx_timeout`， 做一些应急补救，比如对网卡队列复位等操作。
+</code></pre>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">4390 static inline bool netif_carrier_ok(const struct net_device *dev)</span><br><span class="line">4391 &#123;</span><br><span class="line">4392         return !test_bit(__LINK_STATE_NOCARRIER, &amp;dev-&gt;state);</span><br><span class="line">4393 &#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">581 void netif_carrier_on(struct net_device *dev)</span><br><span class="line">582 &#123;</span><br><span class="line">583         if (test_and_clear_bit(__LINK_STATE_NOCARRIER, &amp;dev-&gt;state)) &#123;</span><br><span class="line">584                 if (dev-&gt;reg_state == NETREG_UNINITIALIZED)</span><br><span class="line">585                         return;</span><br><span class="line">586                 atomic_inc(&amp;dev-&gt;carrier_up_count);</span><br><span class="line">587                 linkwatch_fire_event(dev);</span><br><span class="line">588                 if (netif_running(dev))</span><br><span class="line">589                         netdev_watchdog_up(dev);</span><br><span class="line">590         &#125;</span><br><span class="line">591 &#125;</span><br><span class="line">592 EXPORT_SYMBOL(netif_carrier_on);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">600 void netif_carrier_off(struct net_device *dev)</span><br><span class="line">601 &#123;</span><br><span class="line">602         if (!test_and_set_bit(__LINK_STATE_NOCARRIER, &amp;dev-&gt;state)) &#123;</span><br><span class="line">603                 if (dev-&gt;reg_state == NETREG_UNINITIALIZED)</span><br><span class="line">604                         return;</span><br><span class="line">605                 atomic_inc(&amp;dev-&gt;carrier_down_count);</span><br><span class="line">606                 linkwatch_fire_event(dev);</span><br><span class="line">607         &#125;</span><br><span class="line">608 &#125;</span><br><span class="line">609 EXPORT_SYMBOL(netif_carrier_off);</span><br></pre></td></tr></table></figure>
+
+
+
+<h5 id="link-watch函数"><a href="#link-watch函数" class="headerlink" title="link watch函数"></a>link watch函数</h5><p>入口函数</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">291 void linkwatch_fire_event(struct net_device *dev)</span><br><span class="line">292 &#123;</span><br><span class="line">293         bool urgent = linkwatch_urgent_event(dev);</span><br><span class="line">294</span><br><span class="line">295         if (!test_and_set_bit(__LINK_STATE_LINKWATCH_PENDING, &amp;dev-&gt;state)) &#123;</span><br><span class="line">296                 linkwatch_add_event(dev);</span><br><span class="line">297         &#125; else if (!urgent)</span><br><span class="line">298                 return;</span><br><span class="line">299</span><br><span class="line">300         linkwatch_schedule_work(urgent);</span><br><span class="line">301 &#125;</span><br></pre></td></tr></table></figure>
+
+<p>将 netdev 增加到链表中</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">124 static void linkwatch_add_event(struct net_device *dev)</span><br><span class="line">125 &#123;</span><br><span class="line">126         unsigned long flags;</span><br><span class="line">127</span><br><span class="line">128         spin_lock_irqsave(&amp;lweventlist_lock, flags);</span><br><span class="line">129         if (list_empty(&amp;dev-&gt;link_watch_list)) &#123;</span><br><span class="line">130                 list_add_tail(&amp;dev-&gt;link_watch_list, &amp;lweventlist);</span><br><span class="line">131                 netdev_hold(dev, &amp;dev-&gt;linkwatch_dev_tracker, GFP_ATOMIC);</span><br><span class="line">132         &#125;</span><br><span class="line">133         spin_unlock_irqrestore(&amp;lweventlist_lock, flags);</span><br><span class="line">134 &#125;</span><br></pre></td></tr></table></figure>
+
+<p>workqueue 的处理函数，dev从链表上摘下来，逐个调用<code>linkwatch_do_dev</code>处理。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">194 static void __linkwatch_run_queue(int urgent_only)</span><br><span class="line">195 &#123;</span><br><span class="line">...</span><br><span class="line">224         spin_lock_irq(&amp;lweventlist_lock);</span><br><span class="line">225         list_splice_init(&amp;lweventlist, &amp;wrk);</span><br><span class="line">226</span><br><span class="line">227         while (!list_empty(&amp;wrk) &amp;&amp; do_dev &gt; 0) &#123;</span><br><span class="line">229</span><br><span class="line">230                 dev = list_first_entry(&amp;wrk, struct net_device, link_watch_list);</span><br><span class="line">...</span><br><span class="line">243                 linkwatch_do_dev(dev);</span><br><span class="line">...</span><br><span class="line">246         &#125;</span><br><span class="line">...</span><br><span class="line">254 &#125;</span><br></pre></td></tr></table></figure>
+
+<p>link watch</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">166 static void linkwatch_do_dev(struct net_device *dev)</span><br><span class="line">167 &#123;</span><br><span class="line">...</span><br><span class="line">177         clear_bit(__LINK_STATE_LINKWATCH_PENDING, &amp;dev-&gt;state);</span><br><span class="line">178</span><br><span class="line">179         rfc2863_policy(dev);</span><br><span class="line">180         if (dev-&gt;flags &amp; IFF_UP) &#123;</span><br><span class="line">181                 if (netif_carrier_ok(dev))</span><br><span class="line">182                         dev_activate(dev);</span><br><span class="line">183                 else</span><br><span class="line">184                         dev_deactivate(dev);</span><br><span class="line">185</span><br><span class="line">186                 netdev_state_change(dev);</span><br><span class="line">187         &#125;</span><br><span class="line">...</span><br><span class="line">192 &#125;</span><br></pre></td></tr></table></figure>
+
+
+<h5 id="两个状态维护函数"><a href="#两个状态维护函数" class="headerlink" title="两个状态维护函数"></a>两个状态维护函数</h5><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">74 static void rfc2863_policy(struct net_device *dev)</span><br><span class="line">75 &#123;</span><br><span class="line">76         unsigned int operstate = default_operstate(dev);</span><br><span class="line">77</span><br><span class="line">78         if (operstate == READ_ONCE(dev-&gt;operstate))</span><br><span class="line">79                 return;</span><br><span class="line">80</span><br><span class="line">81         switch(dev-&gt;link_mode) &#123;</span><br><span class="line">82         case IF_LINK_MODE_TESTING:</span><br><span class="line">83                 if (operstate == IF_OPER_UP)</span><br><span class="line">84                         operstate = IF_OPER_TESTING;</span><br><span class="line">85                 break;</span><br><span class="line">86</span><br><span class="line">87         case IF_LINK_MODE_DORMANT:</span><br><span class="line">88                 if (operstate == IF_OPER_UP)</span><br><span class="line">89                         operstate = IF_OPER_DORMANT;</span><br><span class="line">90                 break;</span><br><span class="line">91         case IF_LINK_MODE_DEFAULT:</span><br><span class="line">92         default:</span><br><span class="line">93                 break;</span><br><span class="line">94         &#125;</span><br><span class="line">95</span><br><span class="line">96         WRITE_ONCE(dev-&gt;operstate, operstate);</span><br><span class="line">97 &#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br></pre></td><td class="code"><pre><span class="line">36 static unsigned int default_operstate(const struct net_device *dev)</span><br><span class="line">37 &#123;</span><br><span class="line">38         if (netif_testing(dev))</span><br><span class="line">39                 return IF_OPER_TESTING;</span><br><span class="line">40</span><br><span class="line">41         /* Some uppers (DSA) have additional sources for being down, so</span><br><span class="line">42          * first check whether lower is indeed the source of its down state.</span><br><span class="line">43          */</span><br><span class="line">44         if (!netif_carrier_ok(dev)) &#123;</span><br><span class="line">45                 struct net_device *peer;</span><br><span class="line">46                 int iflink;</span><br><span class="line">47</span><br><span class="line">48                 /* If called from netdev_run_todo()/linkwatch_sync_dev(),</span><br><span class="line">49                  * dev_net(dev) can be already freed, and RTNL is not held.</span><br><span class="line">50                  */</span><br><span class="line">51                 if (dev-&gt;reg_state &lt;= NETREG_REGISTERED)</span><br><span class="line">52                         iflink = dev_get_iflink(dev);</span><br><span class="line">53                 else</span><br><span class="line">54                         iflink = dev-&gt;ifindex;</span><br><span class="line">55</span><br><span class="line">56                 if (iflink == dev-&gt;ifindex)</span><br><span class="line">57                         return IF_OPER_DOWN;</span><br><span class="line">58</span><br><span class="line">59                 ASSERT_RTNL();</span><br><span class="line">60                 peer = __dev_get_by_index(dev_net(dev), iflink);</span><br><span class="line">61                 if (!peer)</span><br><span class="line">62                         return IF_OPER_DOWN;</span><br><span class="line">63</span><br><span class="line">64                 return netif_carrier_ok(peer) ? IF_OPER_DOWN :</span><br><span class="line">65                                                 IF_OPER_LOWERLAYERDOWN;</span><br><span class="line">66         &#125;</span><br><span class="line">67</span><br><span class="line">68         if (netif_dormant(dev))</span><br><span class="line">69                 return IF_OPER_DORMANT;</span><br><span class="line">70</span><br><span class="line">71         return IF_OPER_UP;</span><br><span class="line">72 &#125;</span><br></pre></td></tr></table></figure>
+
+<h4 id="回调函数-待细看"><a href="#回调函数-待细看" class="headerlink" title="回调函数 (待细看)"></a>回调函数 (待细看)</h4><p>这部分代码要涉及到 netdev的callback链和 rtnetlin 消息通知。<br>是网卡设备状态变换后的消息通知和处理工作。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">1530 void netdev_state_change(struct net_device *dev)</span><br><span class="line">1531 &#123;</span><br><span class="line">1532         if (dev-&gt;flags &amp; IFF_UP) &#123;</span><br><span class="line">1533                 struct netdev_notifier_change_info change_info = &#123;</span><br><span class="line">1534                         .info.dev = dev,</span><br><span class="line">1535                 &#125;;</span><br><span class="line">1536</span><br><span class="line">1537                 call_netdevice_notifiers_info(NETDEV_CHANGE,</span><br><span class="line">1538                                               &amp;change_info.info);</span><br><span class="line">1539                 rtmsg_ifinfo(RTM_NEWLINK, dev, 0, GFP_KERNEL, 0, NULL);</span><br><span class="line">1540         &#125;</span><br><span class="line">1541 &#125;</span><br><span class="line">1542 EXPORT_SYMBOL(netdev_state_change);</span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2025/03/14/2025-03-14-NIC-state-flags-part2/" data-id="cm8d1nk3w000073p13yhl61kr" data-title="网口状态标志位解析part2: 内核如何维护网卡carrier的状态" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2025-02-06-epoll-frame-summary" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/02/06/2025-02-06-epoll-frame-summary/" class="article-date">
+  <time class="dt-published" datetime="2025-02-06T09:04:12.000Z" itemprop="datePublished">2025-02-06</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2025/02/06/2025-02-06-epoll-frame-summary/">2025-02-06-epoll-frame-summary</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="epoll学习笔记"><a href="#epoll学习笔记" class="headerlink" title="epoll学习笔记"></a>epoll学习笔记</h3><ul>
+<li>epoll 相关结构体</li>
+<li>epoll 各个系统调用及内核实现</li>
+</ul>
+<p><img src="/images/epoll/epoll.2.png" alt="epoll相关结构体"><br><img src="/images/epoll/epoll.1.png" alt="epoll调用关联图"><br><img src="/images/epoll/epoll.3.png" alt="epoll调用关联图"><br><img src="/images/epoll/epoll.4.png" alt="epoll调用关联图"></p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2025/02/06/2025-02-06-epoll-frame-summary/" data-id="cm88o9avl0000jup1f9dpgfd7" data-title="2025-02-06-epoll-frame-summary" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2025-02-06-how-tcpdump-run-with-snaplen" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/02/06/2025-02-06-how-tcpdump-run-with-snaplen/" class="article-date">
   <time class="dt-published" datetime="2025-02-06T08:10:30.000Z" itemprop="datePublished">2025-02-06</time>
 </a>
     
@@ -87,7 +261,7 @@
         
   
     <h1 itemprop="name">
-      <a class="p-name article-title" href="/2025/02/06/How-tcpdump-run-with-length-parameter/">tcpdump如何实现参数-报文长度过滤</a>
+      <a class="p-name article-title" href="/2025/02/06/2025-02-06-how-tcpdump-run-with-snaplen/">tcpdump如何实现参数-报文抓取长度</a>
     </h1>
   
 
@@ -97,16 +271,16 @@
       
         <h2 id="用法"><a href="#用法" class="headerlink" title="用法"></a>用法</h2><p>tcpdump -s len</p>
 <h2 id="原理"><a href="#原理" class="headerlink" title="原理"></a>原理</h2><p>tcpdump会把这个长度值编译到ebpf代码中。 ebpf代码执行完后，如果filter成功，则作为返回值（return）返回给调用方（内核协议栈），内核协议栈根据返回值，修改 skb报文到指定的长度，并借助 af socket 返回给用户空间。</p>
-<h3 id="tcpdump命令解析"><a href="#tcpdump命令解析" class="headerlink" title="tcpdump命令解析"></a>tcpdump命令解析</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line">ubuntu@VM-0-7-ubuntu:~$ tcpdump  -d dst host 9.9.9.9</span><br><span class="line">Warning: assuming Ethernet</span><br><span class="line">(000) ldh      [12]</span><br><span class="line">(001) jeq      #0x800           jt 2	jf 4</span><br><span class="line">(002) ld       [30]</span><br><span class="line">(003) jeq      #0x9090909       jt 8	jf 9</span><br><span class="line">(004) jeq      #0x806           jt 6	jf 5</span><br><span class="line">(005) jeq      #0x8035          jt 6	jf 9</span><br><span class="line">(006) ld       [38]</span><br><span class="line">(007) jeq      #0x9090909       jt 8	jf 9</span><br><span class="line">(008) ret      #262144</span><br><span class="line">(009) ret      #0</span><br><span class="line">ubuntu@VM-0-7-ubuntu:~$ tcpdump  -d dst host 9.9.9.9 -s 100</span><br><span class="line">Warning: assuming Ethernet</span><br><span class="line">(000) ldh      [12]</span><br><span class="line">(001) jeq      #0x800           jt 2	jf 4</span><br><span class="line">(002) ld       [30]</span><br><span class="line">(003) jeq      #0x9090909       jt 8	jf 9</span><br><span class="line">(004) jeq      #0x806           jt 6	jf 5</span><br><span class="line">(005) jeq      #0x8035          jt 6	jf 9</span><br><span class="line">(006) ld       [38]</span><br><span class="line">(007) jeq      #0x9090909       jt 8	jf 9</span><br><span class="line">(008) ret      #100</span><br><span class="line">(009) ret      #0</span><br><span class="line">ubuntu@VM-0-7-ubuntu:~$</span><br></pre></td></tr></table></figure>
+<h3 id="tcpdump命令解析"><a href="#tcpdump命令解析" class="headerlink" title="tcpdump命令解析"></a>tcpdump命令解析</h3><p><img src="/images/tcpdump-ebpf.png" alt="tcpdump snaplen参数: ebpf指令对比"></p>
         
           <p class="article-more-link">
-            <a href="/2025/02/06/How-tcpdump-run-with-length-parameter/#more">Read More</a>
+            <a href="/2025/02/06/2025-02-06-how-tcpdump-run-with-snaplen/#more">Read More</a>
           </p>
         
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2025/02/06/How-tcpdump-run-with-length-parameter/" data-id="cm6t25u1z0000hdp1bf5sas1q" data-title="tcpdump如何实现参数-报文长度过滤" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2025/02/06/2025-02-06-how-tcpdump-run-with-snaplen/" data-id="cm88o9avq0001jup132yh4kd6" data-title="tcpdump如何实现参数-报文抓取长度" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -473,141 +647,6 @@
 
 
   
-    <article id="post-2023-10-18-how-to-run-hexo-with-docker-image" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2023/10/18/2023-10-18-how-to-run-hexo-with-docker-image/" class="article-date">
-  <time class="dt-published" datetime="2023-10-18T06:58:09.000Z" itemprop="datePublished">2023-10-18</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2023/10/18/2023-10-18-how-to-run-hexo-with-docker-image/">aws上部署hexo步骤记录</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="安装步骤"><a href="#安装步骤" class="headerlink" title="安装步骤"></a>安装步骤</h2><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">sudo apt-get update</span><br><span class="line">sudo apt install docker.io -y</span><br><span class="line">docker pull ditw/hexo:v1.0</span><br><span class="line">docker create --name=blog -p 4000:4000 ditw/hexo:v1.0</span><br><span class="line">docker start blog</span><br></pre></td></tr></table></figure>
-        
-          <p class="article-more-link">
-            <a href="/2023/10/18/2023-10-18-how-to-run-hexo-with-docker-image/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2023/10/18/2023-10-18-how-to-run-hexo-with-docker-image/" data-id="clyqxo1wj00053ip1duv3fbr2" data-title="aws上部署hexo步骤记录" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2023-10-09-how-tcpdump-work-with-vlan-filter" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2023/10/09/2023-10-09-how-tcpdump-work-with-vlan-filter/" class="article-date">
-  <time class="dt-published" datetime="2023-10-09T11:42:57.000Z" itemprop="datePublished">2023-10-09</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2023/10/09/2023-10-09-how-tcpdump-work-with-vlan-filter/">how tcpdump work with vlan filter</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <ul>
-<li><p>问题描述：<br>  tcpdump在网口抓包和读取pcap文件，相同的filter表达式”icmp“，对vlan报文有不同的处理结果。<br>在网口上抓包可以看到vlan和非vlan两种流量， 而读取pcap只能看到非vlan流量一种流量。</p>
-</li>
-<li><p>原因：<br>  kernel里在tcpdump抓包之前会把报文的vlan提前解析掉，并把vlan信息放到skb的metadata里了。<br>所以tcpdump（内核的af_packet对应的ptype_all)处理的报文都是不带vlan的，因此这两类报文都会被过滤出来。<br>而读取pcap时候，因为vlan报文并没有被剥离掉，所以vlan报文不满足过滤条件，被丢弃了。</p>
-</li>
-</ul>
-<p>国外已经有人发现并分析过这个问题<br><code>https://andreaskaris.github.io/blog/networking/bpf-and-tcpdump/</code></p>
-        
-          <p class="article-more-link">
-            <a href="/2023/10/09/2023-10-09-how-tcpdump-work-with-vlan-filter/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2023/10/09/2023-10-09-how-tcpdump-work-with-vlan-filter/" data-id="clyqxo1wg00023ip12e7166em" data-title="how tcpdump work with vlan filter" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2023-10-09-xfrm-configure-xfrm-state-and-policy-with-iproute2" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2023/10/09/2023-10-09-xfrm-configure-xfrm-state-and-policy-with-iproute2/" class="article-date">
-  <time class="dt-published" datetime="2023-10-09T10:55:53.000Z" itemprop="datePublished">2023-10-09</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2023/10/09/2023-10-09-xfrm-configure-xfrm-state-and-policy-with-iproute2/">xfrm: configure xfrm state and policy with iproute2</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h3 id="测试环境"><a href="#测试环境" class="headerlink" title="测试环境"></a>测试环境</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">ip netns exec ns1 ip l s veth1 down</span><br><span class="line">ip l delete veth0</span><br><span class="line">ip netns delete ns1</span><br><span class="line"></span><br><span class="line">ip l add type veth</span><br><span class="line">ip netns add ns1</span><br><span class="line"></span><br><span class="line">ip l s dev veth1 netns ns1</span><br><span class="line">ip l set veth0 up</span><br><span class="line">ip netns exec ns1 ip l set veth1 up</span><br><span class="line"></span><br><span class="line">ip a a dev veth0 192.168.100.1/24</span><br><span class="line">ip netns exec ns1 ip a a dev veth1 192.168.100.2/24</span><br><span class="line">ip netns exec ns1 ip r a default via 192.168.100.1</span><br></pre></td></tr></table></figure>
-        
-          <p class="article-more-link">
-            <a href="/2023/10/09/2023-10-09-xfrm-configure-xfrm-state-and-policy-with-iproute2/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2023/10/09/2023-10-09-xfrm-configure-xfrm-state-and-policy-with-iproute2/" data-id="clyqxo1wi00043ip1h3na1gld" data-title="xfrm: configure xfrm state and policy with iproute2" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
 
 
   <nav id="page-nav">
@@ -652,7 +691,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Archives</h3>
     <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/02/">February 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/07/">July 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">October 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/09/">September 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/11/">November 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/02/">February 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/03/">March 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/02/">February 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/07/">July 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/10/">October 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/09/">September 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/11/">November 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/02/">February 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
     </div>
   </div>
 
@@ -665,23 +704,23 @@
       <ul>
         
           <li>
-            <a href="/2025/02/06/How-tcpdump-run-with-length-parameter/">tcpdump如何实现参数-报文长度过滤</a>
+            <a href="/2025/03/14/2025-03-14-NIC-state-flags-part1/">网口状态标志位解析: part1</a>
+          </li>
+        
+          <li>
+            <a href="/2025/03/14/2025-03-14-NIC-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
+          </li>
+        
+          <li>
+            <a href="/2025/02/06/2025-02-06-epoll-frame-summary/">2025-02-06-epoll-frame-summary</a>
+          </li>
+        
+          <li>
+            <a href="/2025/02/06/2025-02-06-how-tcpdump-run-with-snaplen/">tcpdump如何实现参数-报文抓取长度</a>
           </li>
         
           <li>
             <a href="/2024/07/24/2024-07-24-struct-group/">2024-07-24-struct-group</a>
-          </li>
-        
-          <li>
-            <a href="/2024/07/18/2024-07-18-IPv6-how-to-support-IPv6-ext-header/">IPv6: how to support IPv6 ext header </a>
-          </li>
-        
-          <li>
-            <a href="/2023/10/27/2023-10-27-how-xdp-pass-skb-as-ctx-to-bpf-prog/">ebpf如何访问skb 的fileds</a>
-          </li>
-        
-          <li>
-            <a href="/2023/10/27/2023-10-27-how-netstack-call-xdp-prog/">协议栈是如何调用xdp程序处理报文的</a>
           </li>
         
       </ul>
