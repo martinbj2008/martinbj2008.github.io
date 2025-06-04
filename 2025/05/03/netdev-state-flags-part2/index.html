@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>网口状态标志位解析part2: 内核如何维护网卡carrier的状态 | Kernel Study Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="####operstate的小插曲2006年内核引入operstate特性，在当时协议栈的维护者中也是颇有争议的！！！引入operstat特性的patch  标志位IFF_UP设置&#x2F;清除标志位IFF_UPip link set eth0 up:  每个eth口在内核里有对应的struct net_device。 每个netdev设备里有一个上的flags用来存放标志位 ip link">
+<meta property="og:type" content="article">
+<meta property="og:title" content="网口状态标志位解析part2: 内核如何维护网卡carrier的状态">
+<meta property="og:url" content="https://martinbj2008.github.io/2025/05/03/netdev-state-flags-part2/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="####operstate的小插曲2006年内核引入operstate特性，在当时协议栈的维护者中也是颇有争议的！！！引入operstat特性的patch  标志位IFF_UP设置&#x2F;清除标志位IFF_UPip link set eth0 up:  每个eth口在内核里有对应的struct net_device。 每个netdev设备里有一个上的flags用来存放标志位 ip link">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/operstate.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/ioctl.cmd.png">
+<meta property="og:image" content="https://docs.kernel.org/networking/operstates.html">
+<meta property="article:published_time" content="2025-05-03T17:23:04.000Z">
+<meta property="article:modified_time" content="2025-05-28T12:13:09.572Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="netdev">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/ip_link/operstate.png">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel Study Notes</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-netdev-state-flags-part2" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/05/03/netdev-state-flags-part2/" class="article-date">
+  <time class="dt-published" datetime="2025-05-03T17:23:04.000Z" itemprop="datePublished">2025-05-03</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/netdev/">netdev</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      网口状态标志位解析part2: 内核如何维护网卡carrier的状态
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <!-- TOC -->
+
+<p>####operstate的小插曲<br>2006年内核引入<code>operstate</code>特性，在当时协议栈的维护者中也是颇有争议的！！！<br><a target="_blank" rel="noopener" href="https://web.git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=b00055aa">引入operstat特性的patch</a><br> <img src="/./images/ip_link/operstate.png" alt="图4: 2006年协议栈加入operstate 特性"></p>
+<h2 id="标志位IFF-UP"><a href="#标志位IFF-UP" class="headerlink" title="标志位IFF_UP"></a>标志位<code>IFF_UP</code></h2><h3 id="设置-清除标志位IFF-UP"><a href="#设置-清除标志位IFF-UP" class="headerlink" title="设置&#x2F;清除标志位IFF_UP"></a>设置&#x2F;清除标志位<code>IFF_UP</code></h3><p><code>ip link set eth0 up</code>:</p>
+<ul>
+<li>每个<code>eth</code>口在内核里有对应的<code>struct net_device</code>。</li>
+<li>每个<code>netdev</code>设备里有一个上的flags用来存放标志位</li>
+<li><code>ip link set eth0 up</code> 设置 eth0口对应的<code>IFF_UP</code>标志。</li>
+<li><code>ip link set eth0 down</code>清除对应的<code>IFF_UP</code>标记。</li>
+</ul>
+<h3 id="ip-link源码实现"><a href="#ip-link源码实现" class="headerlink" title="ip link源码实现"></a>ip link源码实现</h3><p><code>ip link set eth0 up</code>命令实现：</p>
+<ul>
+<li>通过ioctol获取eth0口对应的flags，</li>
+<li>然后将<code>IFF_UP</code>标志位设置到 flags 上，</li>
+<li>再通过ioctol 命令<code>SIOCSIFFLAGS</code>下发会内核。</li>
+</ul>
+<p>具体实现在函数<code>do_set</code>和<code>do_chflags</code>中。</p>
+<ol>
+<li><code>do_set</code>：  解析命令，转换为需要设置的标志位。</li>
+</ol>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">1370 static int do_set(int argc, char **argv)</span><br><span class="line">1371 &#123;</span><br><span class="line">...</span><br><span class="line">1383         while (argc &gt; 0) &#123;</span><br><span class="line">1384                 if (strcmp(*argv, &quot;up&quot;) == 0) &#123;</span><br><span class="line">1385                         mask |= IFF_UP;</span><br><span class="line">1386                         flags |= IFF_UP;</span><br><span class="line">1387                 &#125; else if (strcmp(*argv, &quot;down&quot;) == 0) &#123;</span><br><span class="line">1388                         mask |= IFF_UP;</span><br><span class="line">1389                         flags &amp;= ~IFF_UP;</span><br><span class="line">...</span><br><span class="line">1536         if (mask)</span><br><span class="line">1537                 return do_chflags(dev, flags, mask);</span><br></pre></td></tr></table></figure>
+
+<ol start="2">
+<li><code>do_chflags</code>: 借助<code>ioctl</code>函数接口，与内核交互。<ul>
+<li>首先，读取内核的网口标志位<code>netdev-&gt;flags</code>，</li>
+<li>把期望更新的标志位更新成期望值。</li>
+<li>最后，把期望的标志位状态下发回内核。</li>
+</ul>
+</li>
+</ol>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">static int do_chflags(const char *dev, __u32 flags, __u32 mask)</span><br><span class="line">...</span><br><span class="line">        err = ioctl(fd, SIOCGIFFLAGS, &amp;ifr);</span><br><span class="line">...</span><br><span class="line">        if ((ifr.ifr_flags^flags)&amp;mask) &#123;</span><br><span class="line">                ifr.ifr_flags &amp;= ~mask;</span><br><span class="line">                ifr.ifr_flags |= mask&amp;flags;</span><br><span class="line">                err = ioctl(fd, SIOCSIFFLAGS, &amp;ifr);</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p>*** 注意: *** ioctol命令参数里，获取和设置的命令名字, 只有一个字母<code>G</code>和<code>S</code>的差别。<br><img src="/./images/ip_link/ioctl.cmd.png"></p>
+<h4 id="内核代码实现"><a href="#内核代码实现" class="headerlink" title="内核代码实现"></a>内核代码实现</h4><p>ioctl在内核的对应实现比较复杂, 避免歪楼，单拉一篇去介绍实现吧。</p>
+<p>内核如何维护网卡设备的RUNNING 状态</p>
+<h3 id="流程概述"><a href="#流程概述" class="headerlink" title="流程概述"></a>流程概述</h3><p>主要几个部分：</p>
+<ol>
+<li>网卡驱动有个看门狗：不同网卡驱动实现可能不太一样 ，功能负责监控网卡硬件上网线的状态， 当网线状态变换的时候，会激发内核的 carrier 处理函数。</li>
+<li>内核两个通用的处理函数：<code>netif_carrier_on</code>和<code>netif_carrier_off</code>。这个函数会<ul>
+<li>设置或者清除<code>netdev-&gt;state</code>上的<code>__LINK_STATE_NOCARRIER</code>标志位。</li>
+<li>发送事件消息给linkwatch，做后续处理.</li>
+<li>如果是网线插好了状态， 会启动一个通用的看门狗，这个看门狗是负责检测tx队列是否’HUNG’了， 如果’HUNG’了就调用网卡对应的处理函数<code>ndo_tx_timeout</code>， 做一些应急补救，比如对网卡队列复位等操作。这里的看门狗跟网卡驱动里的看门狗还不是同一个看门狗。具体差别待研究。</li>
+</ul>
+</li>
+<li>linkwath模块：linkwatch本身是个workqueue 队列，对接受到的消息按照，分为紧急和非紧急两类。紧急的决定立即处理，非紧急的则挂到一个链表里，等定时器超时后，再集中处理。所有事件处理，最终都交给<code>linkwatch_do_dev(struct net_device *dev)</code>函数进行处理。 该函数更新<code>netdev-&gt;operate</code>标志位。同时调用通用的<code>dev_activate</code>或者<code>dev_deactivate</code>对网卡做网卡队列进行处理。 我们这里重点关注跟网卡状态位有管的部分，忽略跟网卡队列的处理。<br> 这里有两个重要函数<code>rfc2863_policy</code>和<code>default_operstate</code> 后面我们重点介绍。</li>
+</ol>
+<h4 id="carrier-on-和-off-函数"><a href="#carrier-on-和-off-函数" class="headerlink" title="carrier on 和 off 函数"></a>carrier on 和 off 函数</h4><p><code>netif_carrier_on</code>和<code>netif_carrier_off</code>: 内核里的两个通用的处理函数，功能基本对称</p>
+<h5 id="carrier标志位"><a href="#carrier标志位" class="headerlink" title="carrier标志位"></a>carrier标志位</h5><p>总结：<br>    <code>dev-&gt;state</code>下的<code>__LINK_STATE_NOCARRIER</code>是 carrier是否OK 的唯一判断标准。</p>
+<span id="more"></span>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">4390 static inline bool netif_carrier_ok(const struct net_device *dev)</span><br><span class="line">4391 &#123;</span><br><span class="line">4392         return !test_bit(__LINK_STATE_NOCARRIER, &amp;dev-&gt;state);</span><br><span class="line">4393 &#125;</span><br></pre></td></tr></table></figure>
+
+<h5 id="carrier-on函数解析"><a href="#carrier-on函数解析" class="headerlink" title="carrier on函数解析"></a>carrier on函数解析</h5><p>总结：<code>netif_carrier_on</code>主要依次做下面三个操作:</p>
+<ul>
+<li><code>__LINK_STATE_NOCARRIER</code>: 设置<code>netdev-&gt;state</code>上的<code>__LINK_STATE_NOCARRIER</code>标志位。这个标志位很关键，后续判断carrier 是否 OK，就看这个标志位。<br>如果是从无到有这个标志位，则执行下面两步，否则就可以 return 结束了。</li>
+<li>计数: 增加网卡设备下的<code>dev-&gt;carrier_up_count</code>的计数次数。</li>
+<li>发送事件消息给linkwatch：让他做后续处理。激发动作有两部分</li>
+<li>如果是网线插好了状态， 会启动一个网卡的看门狗，这个看门狗是负责检测tx队列是否’HUNG’了， 如果’HUNG’了就调用网卡对应的处理函数<code>ndo_tx_timeout</code>， 做一些应急补救，比如对网卡队列复位等操作。</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">581 void netif_carrier_on(struct net_device *dev)</span><br><span class="line">582 &#123;</span><br><span class="line">583         if (test_and_clear_bit(__LINK_STATE_NOCARRIER, &amp;dev-&gt;state)) &#123;</span><br><span class="line">584                 if (dev-&gt;reg_state == NETREG_UNINITIALIZED)</span><br><span class="line">585                         return;</span><br><span class="line">586                 atomic_inc(&amp;dev-&gt;carrier_up_count);</span><br><span class="line">587                 linkwatch_fire_event(dev);</span><br><span class="line">588                 if (netif_running(dev))</span><br><span class="line">589                         netdev_watchdog_up(dev);</span><br><span class="line">590         &#125;</span><br><span class="line">591 &#125;</span><br><span class="line">592 EXPORT_SYMBOL(netif_carrier_on);</span><br></pre></td></tr></table></figure>
+
+<h5 id="carrier-off函数解析"><a href="#carrier-off函数解析" class="headerlink" title="carrier off函数解析"></a>carrier off函数解析</h5><p>跟<code>netif_carrier_on</code>函数对称，唯一差别是不会处理看门狗的部分。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">600 void netif_carrier_off(struct net_device *dev)</span><br><span class="line">601 &#123;</span><br><span class="line">602         if (!test_and_set_bit(__LINK_STATE_NOCARRIER, &amp;dev-&gt;state)) &#123;</span><br><span class="line">603                 if (dev-&gt;reg_state == NETREG_UNINITIALIZED)</span><br><span class="line">604                         return;</span><br><span class="line">605                 atomic_inc(&amp;dev-&gt;carrier_down_count);</span><br><span class="line">606                 linkwatch_fire_event(dev);</span><br><span class="line">607         &#125;</span><br><span class="line">608 &#125;</span><br><span class="line">609 EXPORT_SYMBOL(netif_carrier_off);</span><br></pre></td></tr></table></figure>
+
+<h4 id="link-watch函数"><a href="#link-watch函数" class="headerlink" title="link watch函数"></a>link watch函数</h4><h5 id="link-watch时间激发函数"><a href="#link-watch时间激发函数" class="headerlink" title="link watch时间激发函数"></a>link watch时间激发函数</h5><p>link watch事件在被激发后，会设置一个标志位<code>__LINK_STATE_LINKWATCH_PENDING</code><br>然后通过<code>linkwatch_add_event</code>, 把 link watch事件相关的 netdev 设备挂载到一个全局链表上。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">291 void linkwatch_fire_event(struct net_device *dev)</span><br><span class="line">292 &#123;</span><br><span class="line">293         bool urgent = linkwatch_urgent_event(dev);</span><br><span class="line">294</span><br><span class="line">295         if (!test_and_set_bit(__LINK_STATE_LINKWATCH_PENDING, &amp;dev-&gt;state)) &#123;</span><br><span class="line">296                 linkwatch_add_event(dev);</span><br><span class="line">297         &#125; else if (!urgent)</span><br><span class="line">298                 return;</span><br><span class="line">299</span><br><span class="line">300         linkwatch_schedule_work(urgent);</span><br><span class="line">301 &#125;</span><br></pre></td></tr></table></figure>
+<h5 id="linkwatch-add-event"><a href="#linkwatch-add-event" class="headerlink" title="linkwatch_add_event"></a>linkwatch_add_event</h5><p>将 netdev 增加到链表中</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">124 static void linkwatch_add_event(struct net_device *dev)</span><br><span class="line">125 &#123;</span><br><span class="line">126         unsigned long flags;</span><br><span class="line">127</span><br><span class="line">128         spin_lock_irqsave(&amp;lweventlist_lock, flags);</span><br><span class="line">129         if (list_empty(&amp;dev-&gt;link_watch_list)) &#123;</span><br><span class="line">130                 list_add_tail(&amp;dev-&gt;link_watch_list, &amp;lweventlist);</span><br><span class="line">131                 netdev_hold(dev, &amp;dev-&gt;linkwatch_dev_tracker, GFP_ATOMIC);</span><br><span class="line">132         &#125;</span><br><span class="line">133         spin_unlock_irqrestore(&amp;lweventlist_lock, flags);</span><br><span class="line">134 &#125;</span><br></pre></td></tr></table></figure>
+<h5 id="link-watch的workqueue"><a href="#link-watch的workqueue" class="headerlink" title="link watch的workqueue"></a>link watch的workqueue</h5><p>link watch 的workqueue 处理函数，把dev从链表上摘下来，逐个调用<code>linkwatch_do_dev</code>处理。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">194 static void __linkwatch_run_queue(int urgent_only)</span><br><span class="line">195 &#123;</span><br><span class="line">...</span><br><span class="line">224         spin_lock_irq(&amp;lweventlist_lock);</span><br><span class="line">225         list_splice_init(&amp;lweventlist, &amp;wrk);</span><br><span class="line">226</span><br><span class="line">227         while (!list_empty(&amp;wrk) &amp;&amp; do_dev &gt; 0) &#123;</span><br><span class="line">229</span><br><span class="line">230                 dev = list_first_entry(&amp;wrk, struct net_device, link_watch_list);</span><br><span class="line">...</span><br><span class="line">243                 linkwatch_do_dev(dev);</span><br><span class="line">...</span><br><span class="line">246         &#125;</span><br><span class="line">...</span><br><span class="line">254 &#125;</span><br></pre></td></tr></table></figure>
+
+<h5 id="link-watch的最终处理逻辑"><a href="#link-watch的最终处理逻辑" class="headerlink" title="link watch的最终处理逻辑"></a>link watch的最终处理逻辑</h5><p>在<code>linkwatch_do_dev</code>里, 才执行真正的网口设备状态处理。</p>
+<ul>
+<li>清除<code>__LINK_STATE_LINKWATCH_PENDING</code>标志位，在这个标准位在事件被激发时候，被设置到netdevice上。</li>
+<li>更新 netdev设备状态<code>dev-&gt;operstate</code>: 核心函数<code>rfc2863_policy</code>，后续详解</li>
+<li>网卡状态变换通知：如果网卡是 UP 状态下， 出现 carrier 状态变换，网卡active&#x2F;deactive，，并通知响应的回调模块。</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">166 static void linkwatch_do_dev(struct net_device *dev)</span><br><span class="line">167 &#123;</span><br><span class="line">...</span><br><span class="line">177         clear_bit(__LINK_STATE_LINKWATCH_PENDING, &amp;dev-&gt;state);</span><br><span class="line">178</span><br><span class="line">179         rfc2863_policy(dev);</span><br><span class="line">180         if (dev-&gt;flags &amp; IFF_UP) &#123;</span><br><span class="line">181                 if (netif_carrier_ok(dev))</span><br><span class="line">182                         dev_activate(dev);</span><br><span class="line">183                 else</span><br><span class="line">184                         dev_deactivate(dev);</span><br><span class="line">185</span><br><span class="line">186                 netdev_state_change(dev);</span><br><span class="line">187         &#125;</span><br><span class="line">...</span><br><span class="line">192 &#125;</span><br></pre></td></tr></table></figure>
+
+
+<h5 id="网卡的状态维护核心函数"><a href="#网卡的状态维护核心函数" class="headerlink" title="网卡的状态维护核心函数"></a>网卡的状态维护核心函数</h5><p>两个核心函数<code>rfc2863_policy</code>和<code>default_operstate</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">74 static void rfc2863_policy(struct net_device *dev)</span><br><span class="line">75 &#123;</span><br><span class="line">76         unsigned int operstate = default_operstate(dev);</span><br><span class="line">77</span><br><span class="line">78         if (operstate == READ_ONCE(dev-&gt;operstate))</span><br><span class="line">79                 return;</span><br><span class="line">80</span><br><span class="line">81         switch(dev-&gt;link_mode) &#123;</span><br><span class="line">82         case IF_LINK_MODE_TESTING:</span><br><span class="line">83                 if (operstate == IF_OPER_UP)</span><br><span class="line">84                         operstate = IF_OPER_TESTING;</span><br><span class="line">85                 break;</span><br><span class="line">86</span><br><span class="line">87         case IF_LINK_MODE_DORMANT:</span><br><span class="line">88                 if (operstate == IF_OPER_UP)</span><br><span class="line">89                         operstate = IF_OPER_DORMANT;</span><br><span class="line">90                 break;</span><br><span class="line">91         case IF_LINK_MODE_DEFAULT:</span><br><span class="line">92         default:</span><br><span class="line">93                 break;</span><br><span class="line">94         &#125;</span><br><span class="line">95</span><br><span class="line">96         WRITE_ONCE(dev-&gt;operstate, operstate);</span><br><span class="line">97 &#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br></pre></td><td class="code"><pre><span class="line">36 static unsigned int default_operstate(const struct net_device *dev)</span><br><span class="line">37 &#123;</span><br><span class="line">38         if (netif_testing(dev))</span><br><span class="line">39                 return IF_OPER_TESTING;</span><br><span class="line">40</span><br><span class="line">41         /* Some uppers (DSA) have additional sources for being down, so</span><br><span class="line">42          * first check whether lower is indeed the source of its down state.</span><br><span class="line">43          */</span><br><span class="line">44         if (!netif_carrier_ok(dev)) &#123;</span><br><span class="line">45                 struct net_device *peer;</span><br><span class="line">46                 int iflink;</span><br><span class="line">47</span><br><span class="line">48                 /* If called from netdev_run_todo()/linkwatch_sync_dev(),</span><br><span class="line">49                  * dev_net(dev) can be already freed, and RTNL is not held.</span><br><span class="line">50                  */</span><br><span class="line">51                 if (dev-&gt;reg_state &lt;= NETREG_REGISTERED)</span><br><span class="line">52                         iflink = dev_get_iflink(dev);</span><br><span class="line">53                 else</span><br><span class="line">54                         iflink = dev-&gt;ifindex;</span><br><span class="line">55</span><br><span class="line">56                 if (iflink == dev-&gt;ifindex)</span><br><span class="line">57                         return IF_OPER_DOWN;</span><br><span class="line">58</span><br><span class="line">59                 ASSERT_RTNL();</span><br><span class="line">60                 peer = __dev_get_by_index(dev_net(dev), iflink);</span><br><span class="line">61                 if (!peer)</span><br><span class="line">62                         return IF_OPER_DOWN;</span><br><span class="line">63</span><br><span class="line">64                 return netif_carrier_ok(peer) ? IF_OPER_DOWN :</span><br><span class="line">65                                                 IF_OPER_LOWERLAYERDOWN;</span><br><span class="line">66         &#125;</span><br><span class="line">67</span><br><span class="line">68         if (netif_dormant(dev))</span><br><span class="line">69                 return IF_OPER_DORMANT;</span><br><span class="line">70</span><br><span class="line">71         return IF_OPER_UP;</span><br><span class="line">72 &#125;</span><br></pre></td></tr></table></figure>
+
+<p>依照上面的逻辑，当 veth1 up 后， veth0 口的 operate 状态应该是<code>LOWERLAYERDOWN</code>。但是在命令显示里， 是<code>DOWN</code>。。。</p>
+<p>如果网口没有启动(RUNNING)，返回的operate状态是<em><strong>IF_OPER_DOWN</strong></em></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">2017 static int rtnl_fill_ifinfo(struct sk_buff *skb,</span><br><span class="line">2018                             struct net_device *dev, struct net *src_net,</span><br><span class="line">...</span><br><span class="line">2050             nla_put_u8(skb, IFLA_OPERSTATE,</span><br><span class="line">2051                        netif_running(dev) ? READ_ONCE(dev-&gt;operstate) :</span><br><span class="line">2052                                             IF_OPER_DOWN) ||</span><br><span class="line">2053             nla_put_u8(skb, IFLA_LINKMODE, READ_ONCE(dev-&gt;link_mode)) ||</span><br></pre></td></tr></table></figure>
+<h4 id="回调函数-待细看"><a href="#回调函数-待细看" class="headerlink" title="回调函数 (待细看)"></a>回调函数 (待细看)</h4><p>这部分代码要涉及到 netdev的callback链和 rtnetlin 消息通知。<br>是网卡设备状态变换后的消息通知和处理工作。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">1530 void netdev_state_change(struct net_device *dev)</span><br><span class="line">1531 &#123;</span><br><span class="line">1532         if (dev-&gt;flags &amp; IFF_UP) &#123;</span><br><span class="line">1533                 struct netdev_notifier_change_info change_info = &#123;</span><br><span class="line">1534                         .info.dev = dev,</span><br><span class="line">1535                 &#125;;</span><br><span class="line">1536</span><br><span class="line">1537                 call_netdevice_notifiers_info(NETDEV_CHANGE,</span><br><span class="line">1538                                               &amp;change_info.info);</span><br><span class="line">1539                 rtmsg_ifinfo(RTM_NEWLINK, dev, 0, GFP_KERNEL, 0, NULL);</span><br><span class="line">1540         &#125;</span><br><span class="line">1541 &#125;</span><br><span class="line">1542 EXPORT_SYMBOL(netdev_state_change);</span><br></pre></td></tr></table></figure>
+
+<p>另：<br><img src="https://docs.kernel.org/networking/operstates.html" alt="kernel: operate的帮助文档"></p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2025/05/03/netdev-state-flags-part2/" data-id="cmb7wpkrh00311qoaalnta1qz" data-title="网口状态标志位解析part2: 内核如何维护网卡carrier的状态" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2025/05/05/tcp-req-queue-length-check/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          创建req scoket时的三个长度检查
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2025/05/01/netdev-state-flags-part1/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">网口状态标志位详解(Part 1/2)</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/12/">December 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/">tcp三次握手 --- 逐渐消失的tcp半链接队列</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/05/tcp-req-queue-length-check/">创建req scoket时的三个长度检查</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/01/netdev-state-flags-part1/">网口状态标志位详解(Part 1/2)</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2025 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

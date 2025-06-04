@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>网口状态标志位详解(Part 1/2) | Kernel Study Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="常见问题我们在平常定位问题，经常会通过ip link或ifconfig查看网络环境和配置。其中网口的标志位是其中很重要的一个检查环节。在输出结果里，会有两组标志位信息  一组是尖括弧里包含的值&lt;BROADCAST,MULTICAST,UP,LOWER_UP\&gt;，有很多标志位的组合。 另一组是 state UP。还有其他状态如DOWN, LOWERLAYERDOWN等。这些信息有时候">
+<meta property="og:type" content="article">
+<meta property="og:title" content="网口状态标志位详解(Part 1&#x2F;2)">
+<meta property="og:url" content="https://martinbj2008.github.io/2025/05/01/netdev-state-flags-part1/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="常见问题我们在平常定位问题，经常会通过ip link或ifconfig查看网络环境和配置。其中网口的标志位是其中很重要的一个检查环节。在输出结果里，会有两组标志位信息  一组是尖括弧里包含的值&lt;BROADCAST,MULTICAST,UP,LOWER_UP\&gt;，有很多标志位的组合。 另一组是 state UP。还有其他状态如DOWN, LOWERLAYERDOWN等。这些信息有时候">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/iplink.running.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/iplink.no.carrier.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/iplink.ifconfig.pic.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/veth.link.init.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/veth.link.up.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/operstate.png">
+<meta property="article:published_time" content="2025-05-01T10:24:11.000Z">
+<meta property="article:modified_time" content="2025-05-28T12:30:23.991Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="netdev">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/ip_link/iplink.running.png">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel Study Notes</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-netdev-state-flags-part1" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/05/01/netdev-state-flags-part1/" class="article-date">
+  <time class="dt-published" datetime="2025-05-01T10:24:11.000Z" itemprop="datePublished">2025-05-01</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/netdev/">netdev</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      网口状态标志位详解(Part 1/2)
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <!-- toc -->
+
+<h1 id="常见问题"><a href="#常见问题" class="headerlink" title="常见问题"></a>常见问题</h1><p>我们在平常定位问题，经常会通过<code>ip link</code>或<code>ifconfig</code>查看网络环境和配置。其中网口的标志位是其中很重要的一个检查环节。在输出结果里，会有两组标志位信息</p>
+<ul>
+<li>一组是尖括弧里包含的值<code>&lt;BROADCAST,MULTICAST,UP,LOWER_UP\&gt;</code>，有很多标志位的组合。</li>
+<li>另一组是 <code>state UP</code>。还有其他状态如<code>DOWN</code>, <code>LOWERLAYERDOWN</code>等。<br><img src="/images/ip_link/iplink.running.png" alt="图1：ip link 输出结果"><br>这些信息有时候看起来是一致的, 有时候是重复的，甚至矛盾的。难免让人产生一些疑惑，这两组标志位分别代表什么？他们是什么关系？下面我们就这两组标志，逐个展开分析下。<br>我们先来看几个场景里，网口在不同状态下，输出的标志位有哪些差异。</li>
+</ul>
+<h2 id="场景1：网线没插，显示NO-CARRIER"><a href="#场景1：网线没插，显示NO-CARRIER" class="headerlink" title="场景1：网线没插，显示NO-CARRIER"></a>场景1：网线没插，显示<code>NO-CARRIER</code></h2><p><img src="/images/ip_link/iplink.no.carrier.png" alt="图2: 拔掉网线后的网口输出结果"></p>
+<ul>
+<li>【Q1】 网口状态标志位里有个明显特征，有个<code>NO-CARRIER</code>标志，但是状态里一个<code>UP</code>,一个<code>DOWN</code>，why? :( <span id="more"></span></li>
+</ul>
+<h2 id="场景2-正常状态下物理口eth0-的输出"><a href="#场景2-正常状态下物理口eth0-的输出" class="headerlink" title="场景2: 正常状态下物理口eth0 的输出"></a>场景2: 正常状态下物理口eth0 的输出</h2><p><code>ip link show dev eth0</code>命令输出网口eth0的一些状态标志位。<br><img src="/images/ip_link/iplink.ifconfig.pic.png" alt="图3: 正常网口的ip link 命令和ifconfig命令结果"><br>这里有几个疑问：</p>
+<ul>
+<li>【Q2】<code>RUNNING</code>标志位：为什么ifconfig命令显示有这个标志位，而ip link 命令没有显示出来。<br>或者说，我们通过<code>ip link</code>命令能确认网口是<code>RUNNING</code>吗？还是只能通过<code>ifconfig</code>命令查看。</li>
+<li>【Q3】<code>LOWER_UP</code>标志位:<code>UP</code>紧跟个<code>LOWER_UP</code>. 标志位里这两个标记分别代表的意义是什么？有啥区别？是不是重复了？</li>
+</ul>
+<h2 id="场景3：veth口-UP-DOWN的状态变化"><a href="#场景3：veth口-UP-DOWN的状态变化" class="headerlink" title="场景3：veth口 UP&#x2F;DOWN的状态变化"></a>场景3：veth口 UP&#x2F;DOWN的状态变化</h2><p>veth: 在对端<code>veth0</code>口down状态下，<code>veth1</code> down&#x2F;up状态下的对比</p>
+<ul>
+<li>通过ip link命令创建一对veth口。默认网口状态down。<br><img src="/images/ip_link/veth.link.init.png" alt="图4: veth1口状态对比"></li>
+<li>【Q4】<code>M-DOWN</code>：veth0口上第一组状态标志位里是<code>M-DOWN</code>(不是<code>DOWN</code>)， 而第二组是<code>state DOWN</code></li>
+<li>设置<code>veth1</code> 网口<code>UP</code></li>
+</ul>
+<p><img src="/images/ip_link/veth.link.up.png" alt="图5: veth1口状态对比"><br>veth1被UP后，有两个变化：</p>
+<ol>
+<li><code>M-DOWN</code>：veth0口上的<code>M-DOWN</code>消失了， veth1口UP后反而没有消失</li>
+<li><code>LOWERLAYERDOWN</code>： veth1口UP后， state没有变成UP而是<code>LOWERLAYERDOWN</code><br>这里就带来个问题：</li>
+</ol>
+<ul>
+<li>【Q5】<code>M-DOWN</code> <code>state LOWERLAYERDOWN</code>跟<code>UP/DOWN</code>的关联关系是什么，有哪些区别？</li>
+</ul>
+<h1 id="标记汇总："><a href="#标记汇总：" class="headerlink" title="标记汇总："></a>标记汇总：</h1><h2 id=""><a href="#" class="headerlink" title="&lt;flags&gt;"></a><code>&lt;flags&gt;</code></h2><ul>
+<li><code>UP</code>: 可以通过<code>ip link set dev xx up</code>设置，系统管理员启用某个网口，不代表网口可以正常使用。</li>
+<li><code>DOWN</code>：与<code>UP</code> 类似。通过ip命里停用某个网口。 停用后，网口无法收发包，设置可以因为节能，将设备断电。</li>
+<li><code>NO-CARRIER</code>: 如果是物理网口，网口上网线没有插好。如果是虚拟口，关联网口的状态不正常。如veth情况下，对端网口没有被UP</li>
+<li><code>RUNNING</code>: 通过ifconfig命令才能看到。在ip link命令不显示这个标志位。在 iplink 命令里如果网口有<code>UP</code>标志，没有<code>NO-CARRIER</code>，那么ifconfig一定能看到这个标志。反之也成立， 如果网口有<code>UP</code>和<code>NO-CARRIER</code>标志两个标志， ifconfig肯定看不到<code>RUNNING</code>。</li>
+<li><code>LOWER_UP</code>: 本意是指当网口被<code>UP</code>后，网口底层底层载体是正常的，如以太网口的网线是插好的（wifi情况是指信道是好的？待学习)。 对eth口来说，有&#96;&#96;LOWER_UP<code>, 等价与有</code>RUNNING&#96;</li>
+<li><code>DORMANT</code>:</li>
+<li><code>M-DOWN</code>: 当网口有配对端口时，对端网口如果没有<code>UP</code>标记，则本端网口会显示这个标记。 若 veth0&#x2F;1配对， veth0如果是<code>DOWN</code>, 则 veth1 口的状态里会有这个标记。</li>
+</ul>
+<h2 id="operate"><a href="#operate" class="headerlink" title="operate"></a><code>operate</code></h2><ul>
+<li><code>state UP</code>: 代表网口可以正常使用。 对eth口，等于flag里的<code>UP</code>和<code>RUNNING</code>同时存在。</li>
+<li><code>state DOWN</code>: 代表网口不可用。有可能是flags的标志位<code>DOWN</code>了， 也有可能是网口被<code>UP</code>但是状态不正常（如<code>NO-CARRIER</code> 或者 wifi 网口的认证不通过）。</li>
+<li><code>state LOWERLAYERDOWN</code>：当网口配对使用时候，本端网口被<code>UP</code>， 但是对端网口没有<code>UP</code>时候，会显示这个状态。对veth口来说等同于<code>UP</code>和<code>M-DOWN</code>同时存在。</li>
+<li><code>state DORMANT</code>： 跟移动网络和节能相关。 工作中没有遇不到这种场景，现在只能贴英文, 待学习。</li>
+<li><code>state DORMANT</code>: A state in which the mobile restricts its ability to receive normal IP traffic by reducing monitoring of radio<br>channels.  This allows the mobile to save power and reduces signaling load on the network.&#96;</li>
+</ul>
+<p>以上提到的<code>UP</code>和<code>DOWN</code>，都是指 flags 标志位(<code>&lt;&gt;</code>)里的，不要跟下面的 state 标志混了。</p>
+<h1 id="标志位分类"><a href="#标志位分类" class="headerlink" title="标志位分类"></a>标志位分类</h1><h2 id="IP-link标志位分类"><a href="#IP-link标志位分类" class="headerlink" title="IP link标志位分类"></a>IP link标志位分类</h2><p>根据这些标志位的来源， 我们可以把他们分为三大类：<br>前两类都是在<code>&lt;XX, ...&gt;</code>里打印的， 第三类是在 <code>state XX</code>里打印的。</p>
+<ul>
+<li><code>ip link</code>类：<code>ip link</code>命令自己打印的，不是内核里携带过来的。这一类比较特殊，比如<code>NO_CARRIER</code>和<code>M-DOWMN</code>，</li>
+<li><code>flags</code>类：根据内核里网口的<code>dev-&gt;flags</code>对应的标志位转换而来的。 如<code>IFF_UP</code>，<code>IFF_PROMISC</code>等。</li>
+<li><code>operstate</code>类：与内核里对应网口下的<code>dev-&gt;operstate</code>一致。在第二组状态里，以<code>state XXX</code>形式显示。内核里网口的operstate是根据<code>dev-&gt;state</code>状态和网口类型等条件转换而来。</li>
+</ul>
+<h2 id="内核网口的3个状态变量"><a href="#内核网口的3个状态变量" class="headerlink" title="内核网口的3个状态变量"></a>内核网口的3个状态变量</h2><p>这两组状态都是从内核里读取过来的，分别对应内核里的两个状态标记，<code>dev-&gt;flags</code>和<code>dev-&gt;operstate</code><br>在具体实现实现时候，还要涉及另外一个状态标记<code>dev-&gt;state</code></p>
+<ul>
+<li><code>dev-&gt;flags</code>：每个位代表一个标志。</li>
+<li><code>dev-&gt;operstate</code>: </li>
+<li><code>dev-&gt;state</code>:</li>
+</ul>
+<p>ip link命令通过netlink消息跟内核交互，通过sendmsg下发req请求（命令）, 通过recvmsg获取内核返回结果（命令结果）。解析结果，以获取内核里网口(netdevice)的状态。根据内核返回网口状态信息，打印输出网口的标志位(falgs)和状态值(operstate)。<br>可以分为以下几步：</p>
+<ol>
+<li>构建一个<code>netlink socket</code>,并通过它往内核发送一个获取内核网口状态的命令，</li>
+<li>内核根据命令，读取网口状态并发送一个响应消息，通过<code>netlink socket</code>返回给<code>ip link</code>命令。</li>
+<li><code>ip link</code>根据内核返回结果，输出网口<code>flags</code>和状态</li>
+</ol>
+<p>netlink命令的实现机制涉及的内容很多，我们这里不展开讲解netlink在内核如何实现。只关注调用链两端的实现。即:</p>
+<ul>
+<li>ip命令如何解析并打印网口状态</li>
+<li>内核如何搜集并发回网口状态<br>后续我们按照标志位分类顺序，结合<code>ip link show eth0</code>命令，逐个解析各个标志位在两端(内核和 ip link)的实现。</li>
+</ul>
+<h1 id="ip-link命令的实现"><a href="#ip-link命令的实现" class="headerlink" title="ip link命令的实现"></a><code>ip link</code>命令的实现</h1><h2 id="函数调用栈"><a href="#函数调用栈" class="headerlink" title="函数调用栈"></a>函数调用栈</h2><p>当执行命令<code>ip link show eth0</code>时候，具体函数调用关系如下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><span class="line">main / iplink.c</span><br><span class="line">   |--&gt; do_cmd</span><br><span class="line">        |--&gt; c-&gt;func(...) //等同于do_iplink</span><br><span class="line">             do_iplink(...)</span><br><span class="line">             |--&gt; brlink_show</span><br><span class="line">                  |--&gt; rtnl_linkdump_req</span><br><span class="line">                  |--&gt; rtnl_dump_filter(&amp;rth, print_linkinfo, stdout) //rtnl_dump_filter_nc</span><br><span class="line">                       rtnl_dump_filter_nc</span><br><span class="line">                       |--&gt;  a.filter = filter, // filter =&gt; `print_linkinfo`                      </span><br><span class="line">                       |--&gt;  rtnl_dump_filter_l(rth, a);</span><br><span class="line">                            |--&gt; a-&gt;filter(h, a-&gt;arg1);</span><br><span class="line">                                 print_linkinfo</span><br><span class="line">                                 |--&gt; print_name_and_link(&quot;%s: &quot;, name, tb) // 如&quot;eth0:&quot;</span><br><span class="line">                                 |--&gt; print_link_flags(fp, ifi-&gt;ifi_flags, m_flag); //如`&lt;..,UP,LOWER_UP\&gt;`</span><br><span class="line">                                      |--&gt; if (flags &amp; IFF_UP &amp;&amp; !(flags &amp; IFF_RUNNING))</span><br><span class="line">                                           |--&gt; print_string(flags ? &quot;%s,&quot; : &quot;%s&quot;, &quot;NO-CARRIER&quot;); //</span><br><span class="line">                                      |--&gt; _PF(UP);</span><br><span class="line">                                      |--&gt; _PF(LOWER_UP);</span><br><span class="line">                                      |--&gt; _PF(DORMANT);</span><br><span class="line">                                      |--&gt; if (mdown)</span><br><span class="line">                                           |--&gt; print_string(PRINT_ANY, NULL, &quot;,%s&quot;, &quot;M-DOWN&quot;);</span><br><span class="line">                                 |--&gt; print_operstate(fp, rta_getattr_u8(tb[IFLA_OPERSTATE]));//如`state UP`。</span><br><span class="line">                                                                     |--&gt; color_fprintf(..., &quot;%s &quot;, oper_states[state]);</span><br></pre></td></tr></table></figure>
+
+<p><code>ip link</code>命令, 因为没有指定具体网口，参数不同, 它的调用栈跟这个略有不同。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">main / iplink.c</span><br><span class="line">   |--&gt; do_cmd</span><br><span class="line">        |--&gt; c-&gt;func(...) //等同于do_iplink</span><br><span class="line">             do_iplink(...)</span><br><span class="line">             |--&gt; ipaddr_list_link</span><br><span class="line">                  |--&gt; ipaddr_list_flush_or_save</span><br><span class="line">                         |--&gt; print_linkinfo //后续调用同上</span><br></pre></td></tr></table></figure>
+<p>但最终都会调用<code>print_linkinfo</code>去处理netlink返回消息，逐个打印返回消息里的网口信息。这里不展开讨论。</p>
+<h2 id="主要函数"><a href="#主要函数" class="headerlink" title="主要函数"></a>主要函数</h2><p>其中处理状态标志位的两个主要函数：函数<code>print_link_flags</code>和<code>print_operstate</code></p>
+<ol>
+<li>函数<code>print_link_flags</code>输出网口的flags。如<code>&lt;BROADCAST,MULTICAST,UP,LOWER_UP\&gt;</code>。</li>
+<li>函数<code>print_operstate</code>网卡operstate状态。 如<code>state UP</code>。</li>
+</ol>
+<h3 id="print-link-flags"><a href="#print-link-flags" class="headerlink" title="print_link_flags"></a><code>print_link_flags</code></h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line">  83 static void print_link_flags(FILE *fp, unsigned int flags, unsigned int mdown)</span><br><span class="line">  84 &#123;</span><br><span class="line">  85         open_json_array(PRINT_ANY, is_json_context() ? &quot;flags&quot; : &quot;&lt;&quot;);</span><br><span class="line">  86         if (flags &amp; IFF_UP &amp;&amp; !(flags &amp; IFF_RUNNING))</span><br><span class="line">  87                 print_string(PRINT_ANY, NULL,</span><br><span class="line">  88                              flags ? &quot;%s,&quot; : &quot;%s&quot;, &quot;NO-CARRIER&quot;);</span><br><span class="line">  89         flags &amp;= ~IFF_RUNNING;</span><br><span class="line">  90 #define _PF(f) if (flags&amp;IFF_##f) &#123;                                     \</span><br><span class="line">  91                 flags &amp;= ~IFF_##f ;                                     \</span><br><span class="line">  92                 print_string(PRINT_ANY, NULL, flags ? &quot;%s,&quot; : &quot;%s&quot;, #f); &#125;</span><br><span class="line"> ...</span><br><span class="line"> 107         _PF(UP);</span><br><span class="line"> 108         _PF(LOWER_UP);</span><br><span class="line"> 109         _PF(DORMANT);</span><br><span class="line">...</span><br><span class="line"> 114         if (mdown)</span><br><span class="line"> 115                 print_string(PRINT_ANY, NULL, &quot;,%s&quot;, &quot;M-DOWN&quot;);</span><br><span class="line"> 116         close_json_array(PRINT_ANY, &quot;&gt; &quot;);</span><br><span class="line"> 117 &#125;</span><br></pre></td></tr></table></figure>
+<p>这个函数会打印<code>&lt;&gt;</code>中全部的标志位，因此我们后续拆分成几部分解释：</p>
+<ol>
+<li><code>NO_CARRIER</code>标志位:</li>
+<li><code>RUNNING</code>标志位:</li>
+<li><code>UP</code>、<code>LOWER_UP </code>、<code>DORMANT </code>标志位</li>
+<li><code>M-DOWN</code>标志位:</li>
+</ol>
+<h3 id="print-operstate"><a href="#print-operstate" class="headerlink" title="print_operstate"></a><code>print_operstate</code></h3> <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line">124 static void print_operstate(FILE *f, __u8 state)</span><br><span class="line">125 &#123;</span><br><span class="line">126         if (state &gt;= ARRAY_SIZE(oper_states)) &#123;</span><br><span class="line">127                 if (is_json_context())</span><br><span class="line">128                         print_uint(PRINT_JSON, &quot;operstate_index&quot;, NULL, state);</span><br><span class="line">129                 else</span><br><span class="line">130                         print_0xhex(PRINT_FP, NULL, &quot;state %#llx&quot;, state);</span><br><span class="line">131         &#125; else if (brief) &#123;</span><br><span class="line">132                 print_color_string(PRINT_ANY,</span><br><span class="line">133                                    oper_state_color(state),</span><br><span class="line">134                                    &quot;operstate&quot;,</span><br><span class="line">135                                    &quot;%-14s &quot;,</span><br><span class="line">136                                    oper_states[state]);</span><br><span class="line">137         &#125; else &#123;</span><br><span class="line">138                 if (is_json_context())</span><br><span class="line">139                         print_string(PRINT_JSON,</span><br><span class="line">140                                      &quot;operstate&quot;,</span><br><span class="line">141                                      NULL, oper_states[state]);</span><br><span class="line">142                 else &#123;</span><br><span class="line">143                         fprintf(f, &quot;state &quot;);</span><br><span class="line">144                         color_fprintf(f, oper_state_color(state),</span><br><span class="line">145                                       &quot;%s &quot;, oper_states[state]);</span><br><span class="line">146                 &#125;</span><br><span class="line">147         &#125;</span><br><span class="line">148 &#125;</span><br></pre></td></tr></table></figure>
+<p> 这个函数会打印<code>state XX</code>这个状态信息，具体数值是从内核传递回来的, 使用<code>oper_states</code>做了数值到状态字符串的转换。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">119 static const char *oper_states[] = &#123;</span><br><span class="line">120         &quot;UNKNOWN&quot;, &quot;NOTPRESENT&quot;, &quot;DOWN&quot;, &quot;LOWERLAYERDOWN&quot;,</span><br><span class="line">121         &quot;TESTING&quot;, &quot;DORMANT&quot;,    &quot;UP&quot;</span><br><span class="line">122 &#125;;</span><br></pre></td></tr></table></figure>
+
+<h2 id="NO-CARRIER标志位"><a href="#NO-CARRIER标志位" class="headerlink" title="NO_CARRIER标志位"></a><code>NO_CARRIER</code>标志位</h2><p>在函数<code>print_link_flags</code>里，ip link命令根据内核返回的网口属性里的<code>ifi_flags</code>标志进行打印，实现了<code>NO_CARRIER</code>标志位的输出。<br>这个标志位比较特殊：不是内核里自带的，而是<code>ip link</code>根据返回结果自己追加的。<br> 只有在网口<code>UP</code>并且没有<code>RUNNING</code>时，<code>ip link</code>就会打印<code>NO_CARRIER</code>,这个标志。<br>或者说：<br>    + 如果网口被<code>UP</code>了，没有<code>NO_CARRIER</code>，那说明网口是<code>RUNNING</code>状态。此时是<code>CARRIER_OK</code>(现实中没有这个标志位)<br>    + 如网口被<code>DOWN</code>了(NOT <code>UP</code>），<code>RUNNING</code>标志位肯定就没有了。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">86         if (flags &amp; IFF_UP &amp;&amp; !(flags &amp; IFF_RUNNING))</span><br><span class="line">87                 print_string(PRINT_ANY, NULL,</span><br><span class="line">88                              flags ? &quot;%s,&quot; : &quot;%s&quot;, &quot;NO-CARRIER&quot;);</span><br></pre></td></tr></table></figure>
+<p><em><strong>【Q】</strong></em> 这里有个问题解释下：<br> <code>CARRIER</code>本意是表示网口上网线状态。现实中，网线是否插好，跟网口是否被<code>UP</code>或者<code>DOWN</code>没直接关系。<br>为什么必须网口被<code>UP</code>后，才能显示？网口被<code>DOWN</code>的时候，为什么不考虑显示？<br>A：【待完善】有些类型的物理网卡，当网口<code>DOWN</code>了，会做节能断电处理。 此时设备上没有光电信号，不可能去做网口的信号检测，因此不能判断光纤或者网线是否插好。</p>
+<h2 id="RUNNING标志位"><a href="#RUNNING标志位" class="headerlink" title="RUNNING标志位"></a><code>RUNNING</code>标志位</h2><p>【Q】为什么ip link命令，输出的网口状态标志位的列表里，看不到标志位<code>RUNNING</code>？<br>接前面<code>NO_CARRIER</code>的处理，<code>print_link_flags </code>处理完<code>NO_CARRIER</code>标志位的后，<br>就会把<em><strong>抹掉标志位<code>IFF_RUNNING</code>，不再处理。</strong></em>（见代码第89行）<br>因此即使内核携带<code>IFF_RUNNING</code>标记位返回给ip命令，在 iplink命令中也不会显示<code>RUNNING</code>标志位。这与ifconfig的处理是不一样的。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">89         flags &amp;= ~IFF_RUNNING;</span><br></pre></td></tr></table></figure>
+
+<h2 id="UP-LOWER-UP-DORMANT标志位"><a href="#UP-LOWER-UP-DORMANT标志位" class="headerlink" title="UP``LOWER_UP ``DORMANT标志位"></a><code>UP``LOWER_UP ``DORMANT</code>标志位</h2><p>这三个标志位处理比较简单， 都是根据内核里返回的标志位，打印对应的标记字符串。<br><code>_PF </code>的解释：<br>    每次打印一个标志位前，先清除掉这个标志位，再打印。<br>    打印时候，如果是最后一个标志(<code>flags</code>为0), 则只打印状态字符串(格式”%s”），否选择要多个<code>,</code>(格式”%s”,)。用<code>,</code>分割多个标志位。  </p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">90 #define _PF(f) if (flags&amp;IFF_##f) &#123;                                     \</span><br><span class="line">91                 flags &amp;= ~IFF_##f ;                                     \</span><br><span class="line">92                 print_string(PRINT_ANY, NULL, flags ? &quot;%s,&quot; : &quot;%s&quot;, #f); &#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="M-DOWN标志位"><a href="#M-DOWN标志位" class="headerlink" title="M-DOWN标志位:"></a><code>M-DOWN</code>标志位:</h2><p>结论：当前网口的peer端口，没有UP时候，会在当前接口的<code>&lt;&gt;</code>里打印这个标志。</p>
+<ol>
+<li><code>print_name_and_link</code>：根据内核上传的网口的iflink的序号(IFLA_LINK属性)，查找到iflink对应的关联网口peer, 并返回peer网口的<code>flags</code>(m_flag)。</li>
+<li><code>print_link_flags</code>: 如果peer网口没有<code>IFF_UP</code>，打印<code>M-DOWN</code>标记。</li>
+</ol>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"> 962 int print_linkinfo(struct nlmsghdr *n, void *arg)</span><br><span class="line"> 963 &#123;</span><br><span class="line"> ...</span><br><span class="line">1027         m_flag = print_name_and_link(&quot;%s: &quot;, name, tb);</span><br><span class="line">1028         print_link_flags(fp, ifi-&gt;ifi_flags, m_flag);</span><br></pre></td></tr></table></figure>
+
+<h3 id="print-name-and-link"><a href="#print-name-and-link" class="headerlink" title="print_name_and_link"></a><code>print_name_and_link</code></h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">1269 unsigned int print_name_and_link(const char *fmt,</span><br><span class="line">1270                                  const char *name, struct rtattr *tb[])</span><br><span class="line">1271 &#123;</span><br><span class="line">...</span><br><span class="line">1276         if (tb[IFLA_LINK]) &#123;</span><br><span class="line">1277                 int iflink = rta_getattr_u32(tb[IFLA_LINK]);</span><br><span class="line">...</span><br><span class="line">1296                                 m_flag = ll_index_to_flags(iflink);</span><br><span class="line">1297                                 m_flag = !(m_flag &amp; IFF_UP);</span><br><span class="line">...</span><br><span class="line">1310         &#125;</span><br><span class="line">...</span><br><span class="line">1314         return m_flag;</span><br><span class="line">1315 &#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">  83 static void print_link_flags(FILE *fp, unsigned int flags, unsigned int mdown)</span><br><span class="line">  84 &#123;</span><br><span class="line">...</span><br><span class="line"> 114         if (mdown)</span><br><span class="line"> 115                 print_string(PRINT_ANY, NULL, &quot;,%s&quot;, &quot;M-DOWN&quot;);</span><br></pre></td></tr></table></figure>
+
+<h1 id="内核的网口状态标志位"><a href="#内核的网口状态标志位" class="headerlink" title="内核的网口状态标志位"></a>内核的网口状态标志位</h1><h2 id="struct-net-device的相关定义"><a href="#struct-net-device的相关定义" class="headerlink" title="struct net_device的相关定义"></a><code>struct net_device</code>的相关定义</h2><ul>
+<li>每个网口在内核里有对应的<code>struct net_device</code>结构体。<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">2080 struct net_device &#123;</span><br><span class="line">...</span><br><span class="line">2127         unsigned long           state;</span><br><span class="line">2128         unsigned int            flags;</span><br><span class="line">...</span><br><span class="line">2232         unsigned int            operstate;</span><br></pre></td></tr></table></figure></li>
+</ul>
+<h2 id="标志位netdev-flags"><a href="#标志位netdev-flags" class="headerlink" title="标志位netdev-&gt;flags"></a>标志位<code>netdev-&gt;flags</code></h2><p>每个<code>netdev</code>设备里有一个上的flags用来存放标志位，我们这里只关注up&#x2F;down相关的几个标志位</p>
+<ul>
+<li><code>IFF_UP</code></li>
+<li><code>IFF_RUNING</code></li>
+<li><code>IFF_LOWER_UP</code></li>
+<li><code>IFF_DORMANT</code></li>
+</ul>
+<h3 id="定义"><a href="#定义" class="headerlink" title="定义"></a>定义</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"> 80 enum net_device_flags &#123;</span><br><span class="line"> 81 /* for compatibility with glibc net/if.h */</span><br><span class="line"> 82 #if __UAPI_DEF_IF_NET_DEVICE_FLAGS</span><br><span class="line"> 83         IFF_UP                          = 1&lt;&lt;0,  /* sysfs */</span><br><span class="line">...</span><br><span class="line"> 89         IFF_RUNNING                     = 1&lt;&lt;6,  /* __volatile__ */</span><br><span class="line">...</span><br><span class="line">100 #if __UAPI_DEF_IF_NET_DEVICE_FLAGS_LOWER_UP_DORMANT_ECHO</span><br><span class="line">101         IFF_LOWER_UP                    = 1&lt;&lt;16, /* __volatile__ */</span><br><span class="line">102         IFF_DORMANT                     = 1&lt;&lt;17, /* __volatile__ */</span><br><span class="line">103         IFF_ECHO                        = 1&lt;&lt;18, /* __volatile__ */</span><br><span class="line">104 #endif /* __UAPI_DEF_IF_NET_DEVICE_FLAGS_LOWER_UP_DORMANT_ECHO */</span><br><span class="line">105 &#125;;</span><br></pre></td></tr></table></figure>
+
+<h3 id="状态获取函数"><a href="#状态获取函数" class="headerlink" title="状态获取函数"></a>状态获取函数</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line">9191 unsigned int dev_get_flags(const struct net_device *dev)</span><br><span class="line">9192 &#123;</span><br><span class="line">9193         unsigned int flags;</span><br><span class="line">9194</span><br><span class="line">9195         flags = (READ_ONCE(dev-&gt;flags) &amp; ~(IFF_PROMISC |</span><br><span class="line">9196                                 IFF_ALLMULTI |</span><br><span class="line">9197                                 IFF_RUNNING |</span><br><span class="line">9198                                 IFF_LOWER_UP |</span><br><span class="line">9199                                 IFF_DORMANT)) |</span><br><span class="line">9200                 (READ_ONCE(dev-&gt;gflags) &amp; (IFF_PROMISC |</span><br><span class="line">9201                                 IFF_ALLMULTI));</span><br><span class="line">9202</span><br><span class="line">9203         if (netif_running(dev)) &#123;</span><br><span class="line">9204                 if (netif_oper_up(dev))</span><br><span class="line">9205                         flags |= IFF_RUNNING;</span><br><span class="line">9206                 if (netif_carrier_ok(dev))</span><br><span class="line">9207                         flags |= IFF_LOWER_UP;</span><br><span class="line">9208                 if (netif_dormant(dev))</span><br><span class="line">9209                         flags |= IFF_DORMANT;</span><br><span class="line">9210         &#125;</span><br><span class="line">9211</span><br><span class="line">9212         return flags;</span><br><span class="line">9213 &#125;</span><br><span class="line">9214 EXPORT_SYMBOL(dev_get_flags);</span><br></pre></td></tr></table></figure>
+
+<h2 id="标志位IFF-RUNNING"><a href="#标志位IFF-RUNNING" class="headerlink" title="标志位IFF_RUNNING"></a>标志位<code>IFF_RUNNING</code></h2><p>放到后面跟<code>netif_oper_up</code>一起解释。</p>
+<h2 id="标志位IFF-LOWER-UP"><a href="#标志位IFF-LOWER-UP" class="headerlink" title="标志位IFF_LOWER_UP"></a>标志位<code>IFF_LOWER_UP</code></h2><p>在内核里，<code>IFF_LOWER_UP</code>标志位被置位的两个前提条件：</p>
+<ul>
+<li>网口处于<code>UP</code>状态:  即前面解释的<code>IFF_UP</code>标志位被设置</li>
+<li>网口的载质(网线) OK:  内核判断函数netif_carrier_ok为<code>TRUE</code>，即<code>dev-&gt;state</code>上没有<code>__LINK_STATE_NOCARRIER</code>标志位<br>对应场景：以太网网口eth0，被管理员通过 ip link 命令设置<code>UP</code>后，并且网线正常接入对端交换机（交换机状态正常加电，且交换机上对应网口也被 UP）<br>当内核网口flags上有这个标志位时候，<code>ip link</code>打印网口标志位时候就会打印<code>LOWER_UP</code>标记。<br>这个等同于ifconfig命令里的<code>RUNNING</code>标记<br><em><strong>注意：</strong></em> 内核的<code>netif_running</code>跟用户态<code>ip link</code>命令里用到的<code>RUNNING</code>标志位含义是完全不一样的。<code>netif_running</code>在网口up时候，被设置标志位<code>__LINK_STATE_START</code></li>
+</ul>
+<h4 id="标志位-IFF-DORMANT"><a href="#标志位-IFF-DORMANT" class="headerlink" title="标志位 IFF_DORMANT"></a>标志位 <code>IFF_DORMANT</code></h4><p><code>DORMANT</code>在我工作中没有接触到，看文档是wifi类的网口会使用，这里没有具体验证，只描述理解。<br>应用场景：wifi 网口， 当 wifi 网口连接到路由器后，记为 T1（carrier OK），跟以太网网口不一样的是，在物理载质检测通过后， wifi 口有时候还需要做一些安全认证， 也就是咱们平时配置 wifi 密码的哪些上层身份验证。<code>DORMANT</code>感觉翻译为<code>匿名</code>比较合适，因为没有还没有通过身份校验。<br>具体代码有机会在展开分析。对以太网网口没有意义。</p>
+<h2 id="netdev-state和netdev-operstate"><a href="#netdev-state和netdev-operstate" class="headerlink" title="netdev-&gt;state和netdev-&gt;operstate"></a><code>netdev-&gt;state</code>和<code>netdev-&gt;operstate</code></h2><p>这部分我们放到后面part2里详细讲述。<br><em><strong>operstate的小插曲</strong></em><br>2006年内核引入<code>operstate</code>特性，在当时协议栈的维护者中也是颇有争议的！！！<br><a target="_blank" rel="noopener" href="https://web.git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=b00055aa">引入operstat特性的patch</a><br> <img src="/./images/ip_link/operstate.png" alt="图4: 2006年协议栈加入operstate特性"></p>
+<p>&#x3D;&#x3D;注：更新源代码的内核版本：<code>v6.14</code>&#x3D;&#x3D;</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2025/05/01/netdev-state-flags-part1/" data-id="cmb7wpkrf002y1qoa4kyo0bqm" data-title="网口状态标志位详解(Part 1/2)" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2025/05/03/netdev-state-flags-part2/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          网口状态标志位解析part2: 内核如何维护网卡carrier的状态
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2024/10/03/epoll-frame-summary/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">epoll-frame-summary</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/12/">December 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/">tcp三次握手 --- 逐渐消失的tcp半链接队列</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/05/tcp-req-queue-length-check/">创建req scoket时的三个长度检查</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/01/netdev-state-flags-part1/">网口状态标志位详解(Part 1/2)</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2025 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

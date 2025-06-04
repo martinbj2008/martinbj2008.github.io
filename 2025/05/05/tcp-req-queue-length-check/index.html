@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>创建req scoket时的三个长度检查 | Kernel Study Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="创建半链接时的三个长度检查在处理TCP-SYN首包时候， tcp_conn_request函数里， 会有三个不同条件的长度检查。   inet_csk_reqsk_queue_is_full 半链接的个数超过sk_max_ack_backlog， 则丢包。 sk_acceptq_is_full： accept 队列长度超过sk_max_ack_backlog，则丢包。 sysctl_tcp_syn">
+<meta property="og:type" content="article">
+<meta property="og:title" content="创建req scoket时的三个长度检查">
+<meta property="og:url" content="https://martinbj2008.github.io/2025/05/05/tcp-req-queue-length-check/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="创建半链接时的三个长度检查在处理TCP-SYN首包时候， tcp_conn_request函数里， 会有三个不同条件的长度检查。   inet_csk_reqsk_queue_is_full 半链接的个数超过sk_max_ack_backlog， 则丢包。 sk_acceptq_is_full： accept 队列长度超过sk_max_ack_backlog，则丢包。 sysctl_tcp_syn">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2025-05-05T23:45:58.000Z">
+<meta property="article:modified_time" content="2025-05-28T12:13:09.573Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="tcp">
+<meta property="article:tag" content="socket">
+<meta property="article:tag" content="IPv4">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel Study Notes</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-tcp-req-queue-length-check" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/05/05/tcp-req-queue-length-check/" class="article-date">
+  <time class="dt-published" datetime="2025-05-05T23:45:58.000Z" itemprop="datePublished">2025-05-05</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/socket/">socket</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      创建req scoket时的三个长度检查
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="创建半链接时的三个长度检查"><a href="#创建半链接时的三个长度检查" class="headerlink" title="创建半链接时的三个长度检查"></a>创建半链接时的三个长度检查</h3><p>在处理TCP-SYN首包时候， <code>tcp_conn_request</code>函数里， 会有三个不同条件的长度检查。 </p>
+<ul>
+<li><code>inet_csk_reqsk_queue_is_full</code> 半链接的个数超过sk_max_ack_backlog， 则丢包。</li>
+<li><code>sk_acceptq_is_full</code>： accept 队列长度超过sk_max_ack_backlog，则丢包。</li>
+<li><code>sysctl_tcp_syncookies</code>禁用(值为0)时, <code>sysctl_max_syn_backlog</code> 与<code>inet_csk_reqsk_queue_len</code>： 队列长度如果超过sysctl_max_syn_backlog的3&#x2F;4则丢包</li>
+</ul>
+<p>其中，</p>
+<ul>
+<li><code>sysctl_max_syn_backlog</code>： 初始化时，最小 128。如果ehash_entries&#x2F;128比128大，取最大值。ehash_entries是 tcp 的 hash 桶个数。</li>
+<li><code>sysctl_tcp_syncookies</code>:  初始值为 1</li>
+</ul>
+<h4 id="判断1：-半链接队列是否溢出-inet-csk-reqsk-queue-is-full"><a href="#判断1：-半链接队列是否溢出-inet-csk-reqsk-queue-is-full" class="headerlink" title="判断1： 半链接队列是否溢出 inet_csk_reqsk_queue_is_full"></a>判断1： 半链接队列是否溢出 inet_csk_reqsk_queue_is_full</h4><p>虽然不再维护半链接队列了, 但是每次创建req socket后，这个统计值都是在增加的。<br>因此如果<code>半链接个数</code>超过了最大值<code>sk_max_ack_backlog</code>，则启用cookie(sysctl_tcp_syncookies为1或2)，如果不支持cookie，则丢弃。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">278 static inline int inet_csk_reqsk_queue_len(const struct sock *sk)</span><br><span class="line">279 &#123;</span><br><span class="line">280         return reqsk_queue_len(&amp;inet_csk(sk)-&gt;icsk_accept_queue);</span><br><span class="line">281 &#125;</span><br><span class="line">282</span><br><span class="line">283 static inline int inet_csk_reqsk_queue_is_full(const struct sock *sk)</span><br><span class="line">284 &#123;</span><br><span class="line">285         return inet_csk_reqsk_queue_len(sk) &gt; READ_ONCE(sk-&gt;sk_max_ack_backlog);</span><br><span class="line">286 &#125;</span><br></pre></td></tr></table></figure>
+<p>当前内核默认启用syncookie机制(sysctl_tcp_syncookies为1)，队列溢出会触发synccookie 机制。<br>只有关闭了tcpcookie(0)后，才会在队列溢出时候丢弃syn报文。</p>
+<span id="more"></span>
+
+<h4 id="判断2：accept接队列溢出-sk-acceptq-is-full"><a href="#判断2：accept接队列溢出-sk-acceptq-is-full" class="headerlink" title="判断2：accept接队列溢出 sk_acceptq_is_full"></a>判断2：accept接队列溢出 sk_acceptq_is_full</h4><p>如果accept队列里的已经完成三次握手，等待被accept的socket数量超过了监听socket 的<code>sk_max_ack_backlog</code>，后续的 req socket 就会被丢弃。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">1034 static inline bool sk_acceptq_is_full(const struct sock *sk)</span><br><span class="line">1035 &#123;</span><br><span class="line">1036         return READ_ONCE(sk-&gt;sk_ack_backlog) &gt; READ_ONCE(sk-&gt;sk_max_ack_backlog);</span><br><span class="line">1037 &#125;</span><br></pre></td></tr></table></figure>
+
+<p>当因为accept 队列满，而被丢弃的SYN 请求，会被统计到<code>LINUX_MIB_LISTENOVERFLOWS</code>里。</p>
+<h5 id="如何查看LINUX-MIB-LISTENOVERFLOWS"><a href="#如何查看LINUX-MIB-LISTENOVERFLOWS" class="headerlink" title="如何查看LINUX_MIB_LISTENOVERFLOWS"></a>如何查看LINUX_MIB_LISTENOVERFLOWS</h5><ul>
+<li><code>cat /proc/net/netstat</code><br>在 <code>TcpExt</code> 这部分统计里有个 <code>ListenOverflows</code>子统计项</li>
+<li><code>netstat -es</code></li>
+</ul>
+<h4 id="判断3：-inet-csk-reqsk-queue-len-和-sysctl-max-syn-backlog"><a href="#判断3：-inet-csk-reqsk-queue-len-和-sysctl-max-syn-backlog" class="headerlink" title="判断3： inet_csk_reqsk_queue_len 和 sysctl_max_syn_backlog"></a>判断3： inet_csk_reqsk_queue_len 和 sysctl_max_syn_backlog</h4><p>如果tcp syncookie机制没有使用，那么还有第3个检查</p>
+<ul>
+<li>半链接队列的长度不能超过sysctl_max_syn_backlog的3&#x2F;4， 否则丢弃。<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">7283         if (!want_cookie &amp;&amp; !isn) &#123;</span><br><span class="line">7284                 int max_syn_backlog = READ_ONCE(net-&gt;ipv4.sysctl_max_syn_backlog);</span><br><span class="line">7287                 if (!syncookies &amp;&amp;</span><br><span class="line">7288                     (max_syn_backlog - inet_csk_reqsk_queue_len(sk) &lt;</span><br><span class="line">7289                      (max_syn_backlog &gt;&gt; 2)) &amp;&amp;</span><br><span class="line">7290                     !tcp_peer_is_proven(req, dst)) &#123;</span><br><span class="line"></span><br><span class="line">7301                 &#125;</span><br></pre></td></tr></table></figure>
+只有关闭syncookie时，才会走到这个检查逻辑里，不要被前面want_cookie（是否使用cookie的判断结果）干扰。</li>
+</ul>
+<h4 id="listen-调用-backlog-与-somaxconn-取最小值"><a href="#listen-调用-backlog-与-somaxconn-取最小值" class="headerlink" title="listen 调用 backlog 与 somaxconn 取最小值"></a>listen 调用 backlog 与 somaxconn 取最小值</h4><ul>
+<li>比较listen调用里的第二个参数<code>backlog</code> 和 sysctl 里的<code>net.core.somaxconn</code>，取 <em><strong>最小值</strong></em></li>
+<li>结果存放到<code>sk-&gt;sk_max_ack_backlog</code>， 这也是accept 队列和变链接队列的最大长度。<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">1860  */</span><br><span class="line">1861 int __sys_listen_socket(struct socket *sock, int backlog)</span><br><span class="line">1862 &#123;</span><br><span class="line">...</span><br><span class="line">1865         somaxconn = READ_ONCE(sock_net(sock-&gt;sk)-&gt;core.sysctl_somaxconn);</span><br><span class="line">1866         if ((unsigned int)backlog &gt; somaxconn)</span><br><span class="line">1867                 backlog = somaxconn;</span><br></pre></td></tr></table></figure>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"> 191 int __inet_listen_sk(struct sock *sk, int backlog)</span><br><span class="line"> 192 &#123;</span><br><span class="line">...</span><br><span class="line"> 199         WRITE_ONCE(sk-&gt;sk_max_ack_backlog, backlog);</span><br></pre></td></tr></table></figure></li>
+</ul>
+<h4 id="系统参数-sysctl-max-syn-backlog"><a href="#系统参数-sysctl-max-syn-backlog" class="headerlink" title="系统参数 sysctl_max_syn_backlog"></a>系统参数 sysctl_max_syn_backlog</h4><ul>
+<li>最小 128</li>
+<li>取ehash_entries&#x2F;128 和 128 的最大值<br>ehash_entries如何计算， 如何查看:简单看了下，内核启动时候可以指定大小， 否则系统默认初始化是在内存模块里做的。待细看</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">3434         net-&gt;ipv4.sysctl_max_syn_backlog = max(128U, ehash_entries / 128);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">245 static inline int reqsk_queue_len(const struct request_sock_queue *queue)</span><br><span class="line">246 &#123;</span><br><span class="line">247         return atomic_read(&amp;queue-&gt;qlen);</span><br><span class="line">248 &#125;</span><br></pre></td></tr></table></figure>
+
+
+<h4 id="如何查看accept队列里的child-socket数量以及accept队列的最大长度"><a href="#如何查看accept队列里的child-socket数量以及accept队列的最大长度" class="headerlink" title="如何查看accept队列里的child socket数量以及accept队列的最大长度"></a>如何查看accept队列里的child socket数量以及accept队列的最大长度</h4><p>通过<code>ss -leti</code>命令，可以查看每个 listen socket 下的 accept 队列里的实际长度，也就是 等待被 accept 的 child socket 的个数。其实 accept 队列的总长度也已经透过内核传递给了ss里，只是ss命令在Send-Q列显示。<br>具体代码逻辑待查看。</p>
+<h5 id="内核-struct-tcp-info里的-tcpi-unacked和tcpi-sacked"><a href="#内核-struct-tcp-info里的-tcpi-unacked和tcpi-sacked" class="headerlink" title="内核  struct tcp_info里的 tcpi_unacked和tcpi_sacked"></a>内核 <code> struct tcp_info</code>里的 <code>tcpi_unacked</code>和<code>tcpi_sacked</code></h5><p>内核没有专门为两个统计值，设置上传的名字，而是借用<code> struct tcp_info</code>里的<code>tcpi_unacked</code>和<code>tcpi_sacked</code>两个字段传递 listen socket 的 accept 队列长度<code>sk_ack_backlog</code>和最大值<code>sk_max_ack_backlog</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">4096         if (info-&gt;tcpi_state == TCP_LISTEN) &#123;</span><br><span class="line">4097                 /* listeners aliased fields :</span><br><span class="line">4098                  * tcpi_unacked -&gt; Number of children ready for accept()</span><br><span class="line">4099                  * tcpi_sacked  -&gt; max backlog</span><br><span class="line">4100                  */</span><br><span class="line">4101                 info-&gt;tcpi_unacked = READ_ONCE(sk-&gt;sk_ack_backlog);</span><br><span class="line">4102                 info-&gt;tcpi_sacked = READ_ONCE(sk-&gt;sk_max_ack_backlog);</span><br><span class="line">4103                 return;</span><br><span class="line">4104         &#125;</span><br></pre></td></tr></table></figure>
+
+<h5 id="ss命令的实现"><a href="#ss命令的实现" class="headerlink" title="ss命令的实现"></a>ss命令的实现</h5><p>ss命令通过 netlink 消息获取到 tcpinfo 后，会吧数据转换到一个 s 结构体，并打印出来。<br>因此队列长度就被当做<code>unacked</code>字段打印出来。 而listen socket 的队列最大长度，特意过滤没有打印。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">3072                 s.unacked        = info-&gt;tcpi_unacked;</span><br><span class="line">...</span><br><span class="line">3076                 s.sacked         = info-&gt;tcpi_sacked;</span><br></pre></td></tr></table></figure>
+<p>备注：ss 代码在<code>https://github.com/shemminger/iproute2.git</code></p>
+<h5 id="我也不知道为啥不打印出来最大长度值"><a href="#我也不知道为啥不打印出来最大长度值" class="headerlink" title="我也不知道为啥不打印出来最大长度值"></a>我也不知道为啥不打印出来最大长度值</h5><p>这部分功能在 2007 年比较早就进入了内核<code>https://web.git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=5ee3afba88f5a79d0bff07ddd87af45919259f91</code><br>而 ss 命里第一个版本是2013 年加入的时候， 就把 LISTEN socket 作为一个特殊情况处理了。<br><code>https://web.git.kernel.org/pub/scm/network/iproute2/iproute2.git/commit/?id=260804f422fd33aa78379270d564a495b7bb5717</code></p>
+<ul>
+<li>备注：内核代码版本v6.14(v6.14-rc6-22-gb7f94fcf5546)</li>
+</ul>
+<h4 id="如何查看accept队列里半连接的长度？"><a href="#如何查看accept队列里半连接的长度？" class="headerlink" title="如何查看accept队列里半连接的长度？"></a>如何查看accept队列里半连接的长度？</h4><p>我也不没找到命令， 待学习。</p>
+<h4 id="实验记录"><a href="#实验记录" class="headerlink" title="实验记录"></a>实验记录</h4><ul>
+<li>设置tcp_syncookies为 0， 关闭syncookie 机制。关闭后才能够进入tcp_max_syn_backlog的检查逻辑。</li>
+<li>设置tcp_max_syn_backlog 值为 64，</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">echo 64 &gt; /proc/sys/net/ipv4/tcp_max_syn_backlog</span><br><span class="line">echo 0 &gt; /proc/sys/net/ipv4/tcp_syncookies</span><br></pre></td></tr></table></figure>
+
+<h4 id="持续发送syn报文到server端口。"><a href="#持续发送syn报文到server端口。" class="headerlink" title="持续发送syn报文到server端口。"></a>持续发送syn报文到server端口。</h4><p>投过 scapy 构造简单的 syn 报文， 往 server 端发送 syn 报文。</p>
+<ul>
+<li>预期最大半链接数  64*(3&#x2F;4）&#x3D;48,  48+ 1 &#x3D; 49,  对应源代码，见判断 3<br>  <code>+1</code>的原因是代码里判断是<code>&lt;</code>, 而不是<code>&lt;=</code>, 所以要多发一个。</li>
+</ul>
+<p>实际抓包数据显示从第 49 个syn 报文开始， server 不再响应。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">20:57:22.633658 IP 9.9.9.9.10000 &gt; 10.0.111.13.2005: Flags [S], seq 0, win 8192, length 0</span><br><span class="line">20:57:22.633693 IP 10.0.111.13.2005 &gt; 9.9.9.9.10000: Flags [S.], seq 4100933444, ack 1, win 59220, options [mss 8460], length 0</span><br><span class="line">20:57:22.666099 IP 9.9.9.9.10001 &gt; 10.0.111.13.2005: Flags [S], seq 0, win 8192, length 0</span><br><span class="line">20:57:22.666126 IP 10.0.111.13.2005 &gt; 9.9.9.9.10001: Flags [S.], seq 799721612, ack 1, win 59220, options [mss 8460], length 0</span><br><span class="line"></span><br><span class="line">...</span><br><span class="line">20:57:24.218159 IP 9.9.9.9.10047 &gt; 10.0.111.13.2005: Flags [S], seq 0, win 8192, length 0</span><br><span class="line">20:57:24.218178 IP 10.0.111.13.2005 &gt; 9.9.9.9.10047: Flags [S.], seq 4141939655, ack 1, win 59220, options [mss 8460], length 0</span><br><span class="line">20:57:24.250101 IP 9.9.9.9.10048 &gt; 10.0.111.13.2005: Flags [S], seq 0, win 8192, length 0</span><br><span class="line">20:57:24.250111 IP 10.0.111.13.2005 &gt; 9.9.9.9.10048: Flags [S.], seq 3904682644, ack 1, win 59220, options [mss 8460], length 0  &lt;===最后一个syn+ack 报文</span><br><span class="line">20:57:24.282224 IP 9.9.9.9.10049 &gt; 10.0.111.13.2005: Flags [S], seq 0, win 8192, length 0  &lt;===开始不响应 syn 报文了</span><br><span class="line">20:57:24.314192 IP 9.9.9.9.10050 &gt; 10.0.111.13.2005: Flags [S], seq 0, win 8192, length 0</span><br></pre></td></tr></table></figure>
+
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2025/05/05/tcp-req-queue-length-check/" data-id="cmb7wpkrm003a1qoagbqc2w3t" data-title="创建req scoket时的三个长度检查" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          tcp三次握手 --- 逐渐消失的tcp半链接队列
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2025/05/03/netdev-state-flags-part2/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/12/">December 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/">tcp三次握手 --- 逐渐消失的tcp半链接队列</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/05/tcp-req-queue-length-check/">创建req scoket时的三个长度检查</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/01/netdev-state-flags-part1/">网口状态标志位详解(Part 1/2)</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2025 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

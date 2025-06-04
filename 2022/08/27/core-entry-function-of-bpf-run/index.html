@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>bfp 在内核运行的核心入口函数及其变形 | Kernel Study Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="bpf prog内核运行核心入口函数总结：___bpf_prog_runbfp 在内核运行的核心入口函数:___bpf_prog_run___bpf_prog_run是bfp的核心函数入口，该函数被多个不同stack size的函数调用。函数指针数组interpreters这把上面的这些函数汇集到一起。当bpf程序被加载到内核时候，内核创建为它一个bpf_prog结构体，根据prog的stacks">
+<meta property="og:type" content="article">
+<meta property="og:title" content="bfp 在内核运行的核心入口函数及其变形">
+<meta property="og:url" content="https://martinbj2008.github.io/2022/08/27/core-entry-function-of-bpf-run/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="bpf prog内核运行核心入口函数总结：___bpf_prog_runbfp 在内核运行的核心入口函数:___bpf_prog_run___bpf_prog_run是bfp的核心函数入口，该函数被多个不同stack size的函数调用。函数指针数组interpreters这把上面的这些函数汇集到一起。当bpf程序被加载到内核时候，内核创建为它一个bpf_prog结构体，根据prog的stacks">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2022-08-27T01:38:45.000Z">
+<meta property="article:modified_time" content="2025-05-28T12:13:09.569Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="socket">
+<meta property="article:tag" content="bpf">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel Study Notes</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-core-entry-function-of-bpf-run" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2022/08/27/core-entry-function-of-bpf-run/" class="article-date">
+  <time class="dt-published" datetime="2022-08-27T01:38:45.000Z" itemprop="datePublished">2022-08-27</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/bpf/">bpf</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      bfp 在内核运行的核心入口函数及其变形
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="bpf-prog内核运行核心入口函数"><a href="#bpf-prog内核运行核心入口函数" class="headerlink" title="bpf prog内核运行核心入口函数"></a>bpf prog内核运行核心入口函数</h2><h3 id="总结：-bpf-prog-run"><a href="#总结：-bpf-prog-run" class="headerlink" title="总结：___bpf_prog_run"></a>总结：<code>___bpf_prog_run</code></h3><p>bfp 在内核运行的核心入口函数:<code>___bpf_prog_run</code><br><code>___bpf_prog_run</code>是bfp的核心函数入口，该函数被多个不同stack size的函数调用。<br>函数指针数组interpreters这把上面的这些函数汇集到一起。<br>当bpf程序被加载到内核时候，内核创建为它一个bpf_prog结构体，根据prog的stacksize，选择对应的interpreters里的对应的<br>函数，并保存到bpf_prog里的bpf_func上。<br>这样后续hook点运行bpf_prog程序时候，就使用bpf_func运行。</p>
+<span id="more"></span>
+
+<p>对应patch： <code>https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?h=v6.6-rc2&amp;id=b870aa</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">bpf: use different interpreter depending on required stack size</span><br><span class="line"></span><br><span class="line">Author: Alexei Starovoitov &lt;ast@kernel.org&gt;</span><br><span class="line">Date:   Tue May 30 13:31:33 2017 -0700</span><br><span class="line"></span><br><span class="line">    bpf: use different interpreter depending on required stack size</span><br><span class="line"></span><br><span class="line">    16 __bpf_prog_run() interpreters for various stack sizes add .text</span><br><span class="line">    but not a lot comparing to run-time stack savings</span><br><span class="line"></span><br><span class="line">       text    data     bss     dec     hex filename</span><br><span class="line">      26350   10328     624   37302    91b6 kernel/bpf/core.o.before_split</span><br><span class="line">      25777   10328     624   36729    8f79 kernel/bpf/core.o.after_split</span><br><span class="line">      26970   10328     624   37922    9422 kernel/bpf/core.o.now</span><br></pre></td></tr></table></figure>
+
+<h3 id="函数定义"><a href="#函数定义" class="headerlink" title="函数定义"></a>函数定义</h3><h4 id="先看下函数定义："><a href="#先看下函数定义：" class="headerlink" title="先看下函数定义："></a>先看下函数定义：</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">2049 EVAL6(DEFINE_BPF_PROG_RUN, 32, 64, 96, 128, 160, 192);</span><br><span class="line">2050 EVAL6(DEFINE_BPF_PROG_RUN, 224, 256, 288, 320, 352, 384);</span><br><span class="line">2051 EVAL4(DEFINE_BPF_PROG_RUN, 416, 448, 480, 512);</span><br></pre></td></tr></table></figure>
+<h4 id="展开宏EVAL："><a href="#展开宏EVAL：" class="headerlink" title="展开宏EVAL："></a>展开宏<code>EVAL</code>：</h4><p> EVAL宏定义：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">2042 #define EVAL1(FN, X) FN(X)</span><br><span class="line">2043 #define EVAL2(FN, X, Y...) FN(X) EVAL1(FN, Y)</span><br><span class="line">2051 EVAL4(DEFINE_BPF_PROG_RUN, 416, 448, 480, 512);</span><br></pre></td></tr></table></figure>
+<p>为了便于理解，我们人肉展开宏后,效果相当于</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">DEFINE_BPF_PROG_RUN(416） DEFINE_BPF_PROG_RUN(448）DEFINE_BPF_PROG_RUN(480）DEFINE_BPF_PROG_RUN(512)</span><br></pre></td></tr></table></figure>
+
+<h4 id="展开宏DEFINE-BPF-PROG-RUN"><a href="#展开宏DEFINE-BPF-PROG-RUN" class="headerlink" title="展开宏DEFINE_BPF_PROG_RUN:"></a>展开宏<code>DEFINE_BPF_PROG_RUN</code>:</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">2013 #define PROG_NAME(stack_size) __bpf_prog_run##stack_size</span><br><span class="line">2014 #define DEFINE_BPF_PROG_RUN(stack_size) \</span><br><span class="line">2015 static unsigned int PROG_NAME(stack_size)(const void *ctx, const struct bpf_insn *insn) \</span><br><span class="line">2016 &#123; \</span><br><span class="line">2017         u64 stack[stack_size / sizeof(u64)]; \</span><br><span class="line">2018         u64 regs[MAX_BPF_EXT_REG] = &#123;&#125;; \</span><br><span class="line">2019 \</span><br><span class="line">2020         FP = (u64) (unsigned long) &amp;stack[ARRAY_SIZE(stack)]; \</span><br><span class="line">2021         ARG1 = (u64) (unsigned long) ctx; \</span><br><span class="line">2022         return ___bpf_prog_run(regs, insn); \</span><br><span class="line">2023 &#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>DEFINE_BPF_PROG_RUN</code>定义了一个以<code>__bpf_prog_run</code>开头加<code>satcksize</code>的函数。<br>比如<code>DEFINE_BPF_PROG_RUN(416</code>）展开后</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">static unsigned int__bpf_prog_run416(stack_size)(const void *ctx, const struct bpf_insn *insn) \</span><br></pre></td></tr></table></figure>
+<p>其中函数里面的<code>FP</code>和<code>ARG1</code>都是BPF机制里使用的寄存器</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">60 #define FP      regs[BPF_REG_FP]</span><br><span class="line">61 #define AX      regs[BPF_REG_AX]</span><br><span class="line">62 #define ARG1    regs[BPF_REG_ARG1]</span><br><span class="line">63 #define CTX     regs[BPF_REG_CTX]</span><br></pre></td></tr></table></figure>
+
+<h3 id="函数指针数组interpreters"><a href="#函数指针数组interpreters" class="headerlink" title="函数指针数组interpreters"></a>函数指针数组<code>interpreters</code></h3><h4 id="函数指针数组interpreters-1"><a href="#函数指针数组interpreters-1" class="headerlink" title="函数指针数组interpreters"></a>函数指针数组interpreters</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">2057 #define PROG_NAME_LIST(stack_size) PROG_NAME(stack_size),</span><br><span class="line">2058</span><br><span class="line">2059 static unsigned int (*interpreters[])(const void *ctx,</span><br><span class="line">2060                                       const struct bpf_insn *insn) = &#123;</span><br><span class="line">2061 EVAL6(PROG_NAME_LIST, 32, 64, 96, 128, 160, 192)</span><br><span class="line">2062 EVAL6(PROG_NAME_LIST, 224, 256, 288, 320, 352, 384)</span><br><span class="line">2063 EVAL4(PROG_NAME_LIST, 416, 448, 480, 512)</span><br><span class="line">2064 &#125;;</span><br><span class="line">2065 #undef PROG_NAME_LIST</span><br></pre></td></tr></table></figure>
+<h4 id="展开EVAL宏："><a href="#展开EVAL宏：" class="headerlink" title="展开EVAL宏："></a>展开EVAL宏：</h4><p> EVAL宏定义：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">2042 #define EVAL1(FN, X) FN(X)</span><br><span class="line">2043 #define EVAL2(FN, X, Y...) FN(X) EVAL1(FN, Y)</span><br></pre></td></tr></table></figure>
+<p>以<code>EVAL4(PROG_NAME_LIST, 416, 448, 480, 512)</code> 为例，<br>展开宏后： </p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">PROG_NAME_LIST(416）  PROG_NAME_LIST(448）PROG_NAME_LIST(480） PROG_NAME_LIST(512)</span><br></pre></td></tr></table></figure>
+<h4 id="展开PROG-NAME-LIST宏："><a href="#展开PROG-NAME-LIST宏：" class="headerlink" title="展开PROG_NAME_LIST宏："></a>展开<code>PROG_NAME_LIST</code>宏：</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">2057 #define PROG_NAME_LIST(stack_size) PROG_NAME(stack_size),</span><br><span class="line">2013 #define PROG_NAME(stack_size) __bpf_prog_run##stack_size</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">PROG_NAME_LIST(416) </span><br><span class="line"> ==&gt; 展开：PROG_NAME(416)</span><br><span class="line"> ==&gt; ==&gt; 再展开：__bpf_prog_run416</span><br></pre></td></tr></table></figure>
+
+
+<h3 id="相比之下，老代码更直观且容易理解"><a href="#相比之下，老代码更直观且容易理解" class="headerlink" title="相比之下，老代码更直观且容易理解"></a>相比之下，老代码更直观且容易理解</h3><p>对比下老代码，更便于理解，先看一下老代码,commit（b870aa901f4be）之前代码是这样的。<br>在<code>bpf_prog_select_runtime</code>函数中，直接把<code>bpf_func</code>赋值为<code>__bpf_prog_run</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line">struct bpf_prog *bpf_prog_select_runtime(struct bpf_prog *fp, int *err)</span><br><span class="line"> &#123;</span><br><span class="line">     fp-&gt;bpf_func = (void *) __bpf_prog_run;</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">     /* eBPF JITs can rewrite the program in case constant</span><br><span class="line">      * blinding is active. However, in case of error during</span><br><span class="line">      * blinding, bpf_int_jit_compile() must always return a</span><br><span class="line">      * valid program, which in this case would simply not</span><br><span class="line">      * be JITed, but falls back to the interpreter.</span><br><span class="line">      */</span><br><span class="line">     fp = bpf_int_jit_compile(fp);</span><br><span class="line">     bpf_prog_lock_ro(fp);</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">     /* The tail call compatibility check can only be done at</span><br><span class="line">      * this late stage as we need to determine, if we deal</span><br><span class="line">      * with JITed or non JITed program concatenations and not</span><br><span class="line">      * all eBPF JITs might immediately support all features.</span><br><span class="line">      */</span><br><span class="line">     *err = bpf_check_tail_call(fp);</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">     return fp;</span><br><span class="line"> &#125;</span><br><span class="line"> EXPORT_SYMBOL_GPL(bpf_prog_select_runtime);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">static unsigned int __bpf_prog_run(void *ctx, const struct bpf_insn *insn)</span><br><span class="line"> &#123;</span><br><span class="line">     u64 stack[MAX_BPF_STACK / sizeof(u64)];</span><br><span class="line">     u64 regs[MAX_BPF_REG];</span><br><span class="line"></span><br><span class="line"></span><br><span class="line">     FP = (u64) (unsigned long) &amp;stack[ARRAY_SIZE(stack)];</span><br><span class="line">     ARG1 = (u64) (unsigned long) ctx;</span><br><span class="line">     return ___bpf_prog_run(regs, insn, stack);</span><br><span class="line"> &#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="BPF如何调用"><a href="#BPF如何调用" class="headerlink" title=". BPF如何调用"></a>. BPF如何调用</h2><h3 id="初始化bpf-func"><a href="#初始化bpf-func" class="headerlink" title="初始化bpf_func"></a>初始化bpf_func</h3><p>当bpf程序被加载到内核时候，内核创建为它一个bpf_prog结构体，根据prog的stacksize，选择interpreters里的对应的<br>函数，并选中的函数地址保存到bpf_prog里的bpf_func这个函数指针上。<br>这样后续hook点运行bpf_prog程序时候，就使用bpf_func运行</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">2550 static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr, u32 uattr_size)</span><br><span class="line">2551 &#123;</span><br><span class="line">...</span><br><span class="line">2711         prog = bpf_prog_select_runtime(prog, &amp;err);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">2179 struct bpf_prog *bpf_prog_select_runtime(struct bpf_prog *fp, int *err)</span><br><span class="line">...</span><br><span class="line">2193         bpf_prog_select_func(fp);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">2157 static void bpf_prog_select_func(struct bpf_prog *fp)</span><br><span class="line">2158 &#123;</span><br><span class="line">2159 #ifndef CONFIG_BPF_JIT_ALWAYS_ON</span><br><span class="line">2160         u32 stack_depth = max_t(u32, fp-&gt;aux-&gt;stack_depth, 1);</span><br><span class="line">2161</span><br><span class="line">2162         fp-&gt;bpf_func = interpreters[(round_up(stack_depth, 32) / 32) - 1];</span><br><span class="line">2163 #else</span><br><span class="line">2164         fp-&gt;bpf_func = __bpf_prog_ret0_warn;</span><br><span class="line">2165 #endif</span><br><span class="line">2166 &#125;</span><br></pre></td></tr></table></figure>
+
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2022/08/27/core-entry-function-of-bpf-run/" data-id="cmb7wpkqt001t1qoahlnl0zhh" data-title="bfp 在内核运行的核心入口函数及其变形" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2023/12/27/2023-12-27-ebpf-and-vlan-filter/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          2023-12-27 ebpf and vlan filter
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2021/10/24/how-to-run-hexo-with-docker-image/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">aws上部署hexo步骤记录</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/12/">December 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/">tcp三次握手 --- 逐渐消失的tcp半链接队列</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/05/tcp-req-queue-length-check/">创建req scoket时的三个长度检查</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/01/netdev-state-flags-part1/">网口状态标志位详解(Part 1/2)</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2025 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

@@ -4,17 +4,17 @@
   <meta charset="utf-8">
   
   
-  <title>Kernel study</title>
+  <title>Kernel Study Notes</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
   <meta property="og:type" content="website">
-<meta property="og:title" content="Kernel study">
+<meta property="og:title" content="Kernel Study Notes">
 <meta property="og:url" content="https://martinbj2008.github.io/page/5/index.html">
-<meta property="og:site_name" content="Kernel study">
+<meta property="og:site_name" content="Kernel Study Notes">
 <meta property="og:locale" content="en_US">
 <meta property="article:author" content="Martinbj2008">
 <meta name="twitter:card" content="summary">
   
-    <link rel="alternate" href="/atom.xml" title="Kernel study" type="application/atom+xml">
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
   
   
     <link rel="shortcut icon" href="/favicon.png">
@@ -43,7 +43,7 @@
   <div id="header-outer" class="outer">
     <div id="header-title" class="inner">
       <h1 id="logo-wrap">
-        <a href="/" id="logo">Kernel study</a>
+        <a href="/" id="logo">Kernel Study Notes</a>
       </h1>
       
     </div>
@@ -73,14 +73,14 @@
       <div class="outer">
         <section id="main">
   
-    <article id="post-2013-11-25-net-protocol-handler-for-tcp-udp" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+    <article id="post-2015-05-21-vhost-net-study" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
-    <a href="/2013/11/25/2013-11-25-net-protocol-handler-for-tcp-udp/" class="article-date">
-  <time class="dt-published" datetime="2013-11-25T10:54:00.000Z" itemprop="datePublished">2013-11-25</time>
+    <a href="/2015/05/21/2015-05-21-vhost-net-study/" class="article-date">
+  <time class="dt-published" datetime="2015-05-21T09:41:07.000Z" itemprop="datePublished">2015-05-21</time>
 </a>
     
   <div class="article-category">
-    <a class="article-category-link" href="/categories/socket/">socket</a>
+    <a class="article-category-link" href="/categories/netdev/">netdev</a>
   </div>
 
   </div>
@@ -91,7 +91,7 @@
         
   
     <h1 itemprop="name">
-      <a class="p-name article-title" href="/2013/11/25/2013-11-25-net-protocol-handler-for-tcp-udp/">How does IPV4/6 process input tcp/udp packet</a>
+      <a class="p-name article-title" href="/2015/05/21/2015-05-21-vhost-net-study/">vhost net study</a>
     </h1>
   
 
@@ -99,22 +99,30 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <p>For the packet to localhost, <code>ip_local_deliver_finish</code> will be the<br>last funciton called by network layer.</p>
-<p>In <code>ip_local_deliver_finish</code>, it will be process the protocol<br>hander of a array element of <code>inet_protos</code> according the <code>protocol</code> value<br>in IPv4 header.</p>
-<p>IPv6 is very similar vs IPv4 except the name is a bit different.</p>
+        <p>vhost net 的目的是为了避免在host kerne上做一次qemu的调度，提升性能。<br>xmit: 让vm的数据报在 host的内核就把报文发送出去。<br>rcv：</p>
+<h3 id="核心数据结构"><a href="#核心数据结构" class="headerlink" title="核心数据结构"></a>核心数据结构</h3><h4 id="vhost-poll是vhost里最关键的一个数据结构。"><a href="#vhost-poll是vhost里最关键的一个数据结构。" class="headerlink" title="vhost_poll是vhost里最关键的一个数据结构。"></a><code>vhost_poll</code>是vhost里最关键的一个数据结构。</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">27 /* Pol&gt; &gt; file (eventfd or socket) */</span><br><span class="line">28 /* Note: there&#x27;s nothing vhost specific about this structure. */</span><br><span class="line">29 struct vhost_poll &#123;</span><br><span class="line">3&gt; &gt; &gt; &gt;   poll_tabl&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt;  table;</span><br><span class="line">3&gt; &gt; &gt; &gt;   wait_queue_head_&gt; &gt; &gt; &gt;  *wqh;</span><br><span class="line">3&gt; &gt; &gt; &gt;   wait_queue_&gt; &gt; &gt; &gt; &gt; &gt;    wait;</span><br><span class="line">3&gt; &gt; &gt; &gt;   struct vhost_wor&gt; &gt; &gt; &gt;   work;</span><br><span class="line">3&gt; &gt; &gt; &gt;   unsigned lon&gt; &gt; &gt; &gt; &gt; &gt;   mask;</span><br><span class="line">3&gt; &gt; &gt; &gt;   struct vhost_de&gt; &gt; &gt; &gt;   *dev;</span><br><span class="line">36 &#125;;</span><br></pre></td></tr></table></figure>
+
+<ul>
+<li>table:每次负责把wait域放倒wqh里。vhost_net_open将它的执行函数vhost_poll_func</li>
+<li>wqh：它的wqh被初始化指向一个eventfd的ctx，</li>
+<li>wait：每次把wait放倒这个wqh链表里，当guest vm的发送报文时，wait被摘下，<br>并执行其对应的func,vhost_net_open将该func被初始化为vhost_poll_wakeup。<br>vhost_poll_wakeup负责将work放入对应vhost_dev下的work_list链表中。</li>
+<li>work: 每个vhost_dev有一个thread，负责从work_list链表里的摘除work节点，<br>并执行work节点对应的fn. fn是真正干活的的函数。<br>  对于rx vhost_virqueue, vhost_net_open将该fn初始化为handle_rx_kick<br>  对于tx vhost_virqueue, vhost_net_open将该fn初始化为handle_tx_kick<br>  对于rx vhost_virqueue, vhost_net_open将该fn初始化为<br>handle_rx_kick.</li>
+<li>mask:是需要监听的eventfd的事件集合</li>
+<li>dev: 该vhost_poll对应的vhost_dev;</li>
+</ul>
         
           <p class="article-more-link">
-            <a href="/2013/11/25/2013-11-25-net-protocol-handler-for-tcp-udp/#more">Read More</a>
+            <a href="/2015/05/21/2015-05-21-vhost-net-study/#more">Read More</a>
           </p>
         
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2013/11/25/2013-11-25-net-protocol-handler-for-tcp-udp/" data-id="clnfhasrr00ahe0mh0ik45s15" data-title="How does IPV4/6 process input tcp/udp packet" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2015/05/21/2015-05-21-vhost-net-study/" data-id="clnfhassw00cle0mham2wfs8a" data-title="vhost net study" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li></ul>
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li></ul>
 
     </footer>
   </div>
@@ -124,311 +132,10 @@
 
 
   
-    <article id="post-2013-11-22-the-inheriting-of-linux-sock-type" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+    <article id="post-2015-05-21-ipvlan-study" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
-    <a href="/2013/11/22/2013-11-22-the-inheriting-of-linux-sock-type/" class="article-date">
-  <time class="dt-published" datetime="2013-11-22T17:50:00.000Z" itemprop="datePublished">2013-11-22</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/socket/">socket</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2013/11/22/2013-11-22-the-inheriting-of-linux-sock-type/">the inheriting of linux sock type</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h3 id="Data-Structure"><a href="#Data-Structure" class="headerlink" title="Data Structure"></a>Data Structure</h3><p>Every <code>xsock</code> has parent sock as its first filed.</p>
-        
-          <p class="article-more-link">
-            <a href="/2013/11/22/2013-11-22-the-inheriting-of-linux-sock-type/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2013/11/22/2013-11-22-the-inheriting-of-linux-sock-type/" data-id="clnfhasrp00aee0mhebztbdc3" data-title="the inheriting of linux sock type" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2013-11-22-inetsw-table" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2013/11/22/2013-11-22-inetsw-table/" class="article-date">
-  <time class="dt-published" datetime="2013-11-22T11:34:00.000Z" itemprop="datePublished">2013-11-22</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2013/11/22/2013-11-22-inetsw-table/">inetsw table</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h3 id="Data-struct"><a href="#Data-struct" class="headerlink" title="Data struct."></a>Data struct.</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">123</span> <span class="comment">/* The inetsw table contains everything that inet_create needs to</span></span><br><span class="line"><span class="comment">124  * build a new socket.</span></span><br><span class="line"><span class="comment">125  */</span></span><br><span class="line"><span class="number">126</span> <span class="type">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">inetsw</span>[<span class="title">SOCK_MAX</span>];</span></span><br><span class="line"><span class="number">127</span> <span class="type">static</span> <span class="title function_">DEFINE_SPINLOCK</span><span class="params">(inetsw_lock)</span>;</span><br></pre></td></tr></table></figure>
-        
-          <p class="article-more-link">
-            <a href="/2013/11/22/2013-11-22-inetsw-table/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2013/11/22/2013-11-22-inetsw-table/" data-id="clnfhasrm00a5e0mhf19t88kv" data-title="inetsw table" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2013-11-22-how-to-create-a-inet-socket" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2013/11/22/2013-11-22-how-to-create-a-inet-socket/" class="article-date">
-  <time class="dt-published" datetime="2013-11-22T11:32:00.000Z" itemprop="datePublished">2013-11-22</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/socket/">socket</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2013/11/22/2013-11-22-how-to-create-a-inet-socket/">how to create a inet socket</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h3 id="Data-Structure"><a href="#Data-Structure" class="headerlink" title="Data Structure"></a>Data Structure</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1019</span> <span class="type">static</span> <span class="type">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">net_proto_family</span> <span class="title">inet_family_ops</span> =</span> &#123;</span><br><span class="line"><span class="number">1020</span>         .family = PF_INET,</span><br><span class="line"><span class="number">1021</span>         .create = inet_create,</span><br><span class="line"><span class="number">1022</span>         .owner  = THIS_MODULE,</span><br><span class="line"><span class="number">1023</span> &#125;;</span><br></pre></td></tr></table></figure>
-
-<h3 id="call-trace"><a href="#call-trace" class="headerlink" title="call trace"></a>call trace</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">&gt; inet_create</span><br><span class="line">&gt; &gt; search the right inetsw <span class="built_in">array</span> element with type/protocol</span><br><span class="line">&gt; &gt; sock-&gt;ops = answer-&gt;ops;</span><br><span class="line">&gt; &gt; k = sk_alloc(net, PF_INET, GFP_KERNEL, answer_prot);</span><br><span class="line">&gt; &gt; sock_init_data(sock, sk);</span><br><span class="line">&gt; &gt; init the sk</span><br></pre></td></tr></table></figure>
-        
-          <p class="article-more-link">
-            <a href="/2013/11/22/2013-11-22-how-to-create-a-inet-socket/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2013/11/22/2013-11-22-how-to-create-a-inet-socket/" data-id="clnfhasrj00a1e0mhgbyzdbco" data-title="how to create a inet socket" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/inet-socket/" rel="tag">inet socket</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2013-11-22-system-call-socket" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2013/11/22/2013-11-22-system-call-socket/" class="article-date">
-  <time class="dt-published" datetime="2013-11-22T11:31:00.000Z" itemprop="datePublished">2013-11-22</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/socket/">socket</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2013/11/22/2013-11-22-system-call-socket/">system call socket</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h3 id="Summary"><a href="#Summary" class="headerlink" title="Summary"></a>Summary</h3><p>System call <code>socket</code> will do two things:</p>
-<ol>
-<li>create a <code>struct socket *sock</code>.<br> Mainly done by <code>__sock_create</code>, which alloc a <code>struct socket *sock</code>,<br>then init it with the <code>creating</code> method of <code>net_families[family]</code>.</li>
-<li>map the <code>sock</code> to a file descriptor by <code>sock_map_fd</code>.<br>TODO…..</li>
-</ol>
-<h3 id="call-trace"><a href="#call-trace" class="headerlink" title="call trace:"></a>call trace:</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">&gt; socket</span><br><span class="line">&gt; &gt; sock_create</span><br><span class="line">&gt; &gt; &gt; __sock_create</span><br><span class="line">&gt; &gt; &gt; &gt; sock = sock_alloc();</span><br><span class="line">&gt; &gt; &gt; &gt; sock-&gt;type = type;</span><br><span class="line">&gt; &gt; &gt; &gt; rcu_read_lock();</span><br><span class="line">&gt; &gt; &gt; &gt; pf = rcu_dereference(net_families[family]);</span><br><span class="line">&gt; &gt; &gt; &gt; try_module_get(pf-&gt;owner))</span><br><span class="line">&gt; &gt; &gt; &gt; rcu_read_unlock();</span><br><span class="line">&gt; &gt; &gt; &gt; pf-&gt;create(net, sock, protocol, kern);</span><br><span class="line">&gt; &gt; &gt; &gt; module_put(pf-&gt;owner)</span><br><span class="line">&gt; &gt; socket_map_fd</span><br></pre></td></tr></table></figure>
-        
-          <p class="article-more-link">
-            <a href="/2013/11/22/2013-11-22-system-call-socket/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2013/11/22/2013-11-22-system-call-socket/" data-id="clnfhasro00ace0mh1p1o187s" data-title="system call socket" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/system-call/" rel="tag">system call</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2013-11-22-socket-net-proto-family" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2013/11/22/2013-11-22-socket-net-proto-family/" class="article-date">
-  <time class="dt-published" datetime="2013-11-22T11:29:00.000Z" itemprop="datePublished">2013-11-22</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/socket/">socket</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2013/11/22/2013-11-22-socket-net-proto-family/">socket net_proto_family</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h3 id="summary"><a href="#summary" class="headerlink" title="summary"></a>summary</h3><p>Each <code>family</code> has a corresponding array element of <code>struct net_proto_family</code>,<br>which will be called in system call <code>socket</code>.</p>
-<h3 id="Data-Structure"><a href="#Data-Structure" class="headerlink" title="Data Structure"></a>Data Structure</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">181</span> <span class="class"><span class="keyword">struct</span> <span class="title">net_proto_family</span> &#123;</span></span><br><span class="line"><span class="number">182</span>         <span class="type">int</span>             family;</span><br><span class="line"><span class="number">183</span>         <span class="type">int</span>             (*create)(<span class="keyword">struct</span> net *net, <span class="keyword">struct</span> socket *sock,</span><br><span class="line"><span class="number">184</span>                                   <span class="type">int</span> protocol, <span class="type">int</span> kern);</span><br><span class="line"><span class="number">185</span>         <span class="class"><span class="keyword">struct</span> <span class="title">module</span>   *<span class="title">owner</span>;</span></span><br><span class="line"><span class="number">186</span> &#125;;</span><br></pre></td></tr></table></figure>
-<p>The <code>create</code> is <em>important</em>, which is first and basic function during<br>system call <code>socket</code>.</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">164</span> <span class="type">static</span> <span class="title function_">DEFINE_SPINLOCK</span><span class="params">(net_family_lock)</span>;</span><br><span class="line"><span class="number">165</span> <span class="type">static</span> <span class="type">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">net_proto_family</span> __<span class="title">rcu</span> *<span class="title">net_families</span>[<span class="title">NPROTO</span>] __<span class="title">read_mostly</span>;</span></span><br></pre></td></tr></table></figure>
-        
-          <p class="article-more-link">
-            <a href="/2013/11/22/2013-11-22-socket-net-proto-family/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2013/11/22/2013-11-22-socket-net-proto-family/" data-id="clnfhasrn00a8e0mh52477ogq" data-title="socket net_proto_family" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/sock/" rel="tag">sock</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2013-11-20-how-to-update-github-page-in-multi-pos" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2013/11/20/2013-11-20-how-to-update-github-page-in-multi-pos/" class="article-date">
-  <time class="dt-published" datetime="2013-11-20T22:42:00.000Z" itemprop="datePublished">2013-11-20</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/git/">git</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2013/11/20/2013-11-20-how-to-update-github-page-in-multi-pos/">how to update github page in multi pos</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h3 id="Requirement"><a href="#Requirement" class="headerlink" title="Requirement"></a>Requirement</h3><p>I want to write blog with github page and octopress in the office<br>and in the home.</p>
-<h3 id="Steps"><a href="#Steps" class="headerlink" title="Steps"></a>Steps</h3><p>The github page has work well done with pc in the home.<br>Now setup the environment in office to write github page.<br>The github page repo:<br>    <a target="_blank" rel="noopener" href="https://github.com/martinbj2008/martinbj2008.github.io">https://github.com/martinbj2008/martinbj2008.github.io</a></p>
-<p>the octopress is pushed to git repo as branch “source”</p>
-<p>How to write blog and sync them to github while avoid conflict with home?</p>
-        
-          <p class="article-more-link">
-            <a href="/2013/11/20/2013-11-20-how-to-update-github-page-in-multi-pos/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2013/11/20/2013-11-20-how-to-update-github-page-in-multi-pos/" data-id="clnfhasri009ye0mhhm5tgg4d" data-title="how to update github page in multi pos" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/octopress/" rel="tag">octopress</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2013-10-10-ipv4-route-fib-table-lookup" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2013/10/10/2013-10-10-ipv4-route-fib-table-lookup/" class="article-date">
-  <time class="dt-published" datetime="2013-10-10T07:34:00.000Z" itemprop="datePublished">2013-10-10</time>
+    <a href="/2015/05/21/2015-05-21-ipvlan-study/" class="article-date">
+  <time class="dt-published" datetime="2015-05-21T09:31:57.000Z" itemprop="datePublished">2015-05-21</time>
 </a>
     
   <div class="article-category">
@@ -443,7 +150,7 @@
         
   
     <h1 itemprop="name">
-      <a class="p-name article-title" href="/2013/10/10/2013-10-10-ipv4-route-fib-table-lookup/">ipv4 route fib table lookup</a>
+      <a class="p-name article-title" href="/2015/05/21/2015-05-21-ipvlan-study/">ipvlan study</a>
     </h1>
   
 
@@ -451,20 +158,31 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <h3 id="calltrace"><a href="#calltrace" class="headerlink" title="calltrace"></a>calltrace</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">&gt; ip_rcv_finish</span><br><span class="line">&gt; &gt; ip_route_input_noref</span><br><span class="line">&gt; &gt; &gt; ip_route_input_slow</span><br><span class="line">&gt; &gt; &gt; &gt; fib_lookup</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; fib_table_lookup with RT_TABLE_LOCAL</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; fib_table_lookup with RT_TABLE_MAIN</span><br><span class="line">&gt; &gt; &gt; &gt; ip_mkroute_input</span><br></pre></td></tr></table></figure>
-        
-          <p class="article-more-link">
-            <a href="/2013/10/10/2013-10-10-ipv4-route-fib-table-lookup/#more">Read More</a>
-          </p>
-        
+        <h4 id="L2-mode"><a href="#L2-mode" class="headerlink" title="L2 mode"></a>L2 mode</h4><h5 id="xmit-packet"><a href="#xmit-packet" class="headerlink" title="xmit packet"></a>xmit packet</h5><h6 id="xmit-a-normal-pkt-to-other-phy-machine"><a href="#xmit-a-normal-pkt-to-other-phy-machine" class="headerlink" title="xmit a normal pkt to other phy machine"></a>xmit a normal pkt to other phy machine</h6><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">==&gt; ipvlan_start_xmit</span><br><span class="line">==&gt; ==&gt; ipvlan_xmit_mode_l2</span><br><span class="line">==&gt; ==&gt; ==&gt; skb-&gt;dev = ipvlan-&gt;phy_dev;</span><br><span class="line">==&gt; ==&gt; ==&gt; <span class="keyword">return</span> dev_queue_xmit(skb);</span><br></pre></td></tr></table></figure>
+
+<h6 id="xmit-a-normal-pkt-to-other-namespace"><a href="#xmit-a-normal-pkt-to-other-namespace" class="headerlink" title="xmit a normal pkt to other namespace"></a>xmit a normal pkt to other namespace</h6><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">==&gt; ipvlan_start_xmit</span><br><span class="line">==&gt; ==&gt; ipvlan_xmit_mode_l2</span><br><span class="line">==&gt; ==&gt; ==&gt; <span class="keyword">if</span> (ether_addr_equal(eth-&gt;h_dest, eth-&gt;h_source))</span><br><span class="line">==&gt; ==&gt; ==&gt; addr = ipvlan_addr_lookup(ipvlan-&gt;port, lyr3h, addr_type, <span class="literal">true</span>);</span><br><span class="line">==&gt; ==&gt; ==&gt; ipvlan_rcv_frame(addr, skb, <span class="literal">true</span>);</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; skb-&gt;dev = dev; &lt;== dst namespace dev</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; dev_forward_skb(ipvlan-&gt;dev, skb)</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; ==&gt; <span class="keyword">return</span> __dev_forward_skb(dev, skb) ?: netif_rx_internal(skb);</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; enqueue_to_backlog(skb, get_cpu(), &amp;qtail);</span><br></pre></td></tr></table></figure>
+<h6 id="xmit-a-mutlicast-pkt"><a href="#xmit-a-mutlicast-pkt" class="headerlink" title="xmit a mutlicast pkt"></a>xmit a mutlicast pkt</h6><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">==&gt; ipvlan_start_xmit</span><br><span class="line">==&gt; ==&gt; ipvlan_xmit_mode_l2</span><br><span class="line">==&gt; ==&gt; ==&gt; <span class="keyword">else</span> <span class="keyword">if</span> (is_multicast_ether_addr(eth-&gt;h_dest))</span><br><span class="line">==&gt; ==&gt; ==&gt; ipvlan_multicast_frame(ipvlan-&gt;port, skb, ipvlan, <span class="literal">true</span>);</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; list_for_each_entry(ipvlan, &amp;port-&gt;ipvlans, pnode)</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; ==&gt; dev_forward_skb or netif_rx(nskb);</span><br></pre></td></tr></table></figure>
+<h5 id="recv-packet"><a href="#recv-packet" class="headerlink" title="recv packet"></a>recv packet</h5><p>All the packet are get by the <code>rx_handler</code>, <code>ipvlan_handle_frame</code>.</p>
+<h6 id="unicast-packet"><a href="#unicast-packet" class="headerlink" title="unicast packet"></a>unicast packet</h6><p>lookup the dest ipvlan port(net_device)<br>by the dst IPv4&#x2F;6 address, and send to it.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">==&gt; ipvlan_handle_frame</span><br><span class="line">==&gt; ==&gt; ipvlan_handle_mode_l2</span><br><span class="line">==&gt; ==&gt; ==&gt; ipvlan_addr_lookup(port, lyr3h, addr_type, <span class="literal">true</span>);</span><br><span class="line">==&gt;  ==&gt; ==&gt; ==&gt; skb-&gt;dev = dev;</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; dev_forward_skb or ret = RX_HANDLER_ANOTHER;</span><br></pre></td></tr></table></figure>
+<h6 id="multicast-packet"><a href="#multicast-packet" class="headerlink" title="multicast packet."></a>multicast packet.</h6><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">==&gt; ipvlan_handle_frame</span><br><span class="line">==&gt; ==&gt; ipvlan_handle_mode_l2</span><br><span class="line">==&gt; ==&gt; ==&gt; <span class="keyword">if</span> (is_multicast_ether_addr(eth-&gt;h_dest)) &#123;</span><br><span class="line">==&gt; ==&gt; ==&gt; ipvlan_addr_lookup(port, lyr3h, addr_type, <span class="literal">true</span>);</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; <span class="keyword">if</span> (ipvlan_external_frame(skb, port))</span><br><span class="line">==&gt; ==&gt;  ==&gt; ==&gt; ==&gt; ipvlan_multicast_frame(port, skb, <span class="literal">NULL</span>, <span class="literal">false</span>);</span><br></pre></td></tr></table></figure>
+
+<h4 id="l3-mode"><a href="#l3-mode" class="headerlink" title="l3 mode"></a>l3 mode</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ipvlan_start_xmit</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">308</span> <span class="type">static</span> <span class="type">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">net_device_ops</span> <span class="title">ipvlan_netdev_ops</span> =</span> &#123;</span><br><span class="line"><span class="number">309</span>         .ndo_init               = ipvlan_init,</span><br><span class="line"><span class="number">310</span>         .ndo_uninit             = ipvlan_uninit,</span><br><span class="line"><span class="number">311</span>         .ndo_open               = ipvlan_open,</span><br><span class="line"><span class="number">312</span>         .ndo_stop               = ipvlan_stop,</span><br><span class="line"><span class="number">313</span>         .ndo_start_xmit         = ipvlan_start_xmit,</span><br><span class="line"><span class="number">314</span>         .ndo_fix_features       = ipvlan_fix_features,</span><br><span class="line"><span class="number">315</span>         .ndo_change_rx_flags    = ipvlan_change_rx_flags,</span><br><span class="line"><span class="number">316</span>         .ndo_set_rx_mode        = ipvlan_set_multicast_mac_filter,</span><br><span class="line"><span class="number">317</span>         .ndo_get_stats64        = ipvlan_get_stats64,</span><br><span class="line"><span class="number">318</span>         .ndo_vlan_rx_add_vid    = ipvlan_vlan_rx_add_vid,</span><br><span class="line"><span class="number">319</span>         .ndo_vlan_rx_kill_vid   = ipvlan_vlan_rx_kill_vid,</span><br><span class="line"><span class="number">320</span> &#125;;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">495</span> <span class="type">int</span> <span class="title function_">ipvlan_queue_xmit</span><span class="params">(<span class="keyword">struct</span> sk_buff *skb, <span class="keyword">struct</span> net_device *dev)</span></span><br><span class="line">496 &#123;</span><br><span class="line"><span class="number">497</span>         <span class="class"><span class="keyword">struct</span> <span class="title">ipvl_dev</span> *<span class="title">ipvlan</span> =</span> netdev_priv(dev);</span><br><span class="line"><span class="number">498</span>         <span class="class"><span class="keyword">struct</span> <span class="title">ipvl_port</span> *<span class="title">port</span> =</span> ipvlan_port_get_rcu(ipvlan-&gt;phy_dev);</span><br><span class="line"><span class="number">499</span></span><br><span class="line"><span class="number">500</span>         <span class="keyword">if</span> (!port)</span><br><span class="line"><span class="number">501</span>                 <span class="keyword">goto</span> out;</span><br><span class="line"><span class="number">502</span></span><br><span class="line"><span class="number">503</span>         <span class="keyword">if</span> (unlikely(!pskb_may_pull(skb, <span class="keyword">sizeof</span>(<span class="keyword">struct</span> ethhdr))))</span><br><span class="line"><span class="number">504</span>                 <span class="keyword">goto</span> out;</span><br><span class="line"><span class="number">505</span></span><br><span class="line"><span class="number">506</span>         <span class="keyword">switch</span>(port-&gt;mode) &#123;</span><br><span class="line"><span class="number">507</span>         <span class="keyword">case</span> IPVLAN_MODE_L2:</span><br><span class="line"><span class="number">508</span>                 <span class="keyword">return</span> ipvlan_xmit_mode_l2(skb, dev);</span><br><span class="line"><span class="number">509</span>         <span class="keyword">case</span> IPVLAN_MODE_L3:</span><br><span class="line"><span class="number">510</span>                 <span class="keyword">return</span> ipvlan_xmit_mode_l3(skb, dev);</span><br><span class="line"><span class="number">511</span>         &#125;</span><br><span class="line"><span class="number">512</span></span><br><span class="line"><span class="number">513</span>         <span class="comment">/* Should not reach here */</span></span><br><span class="line"><span class="number">514</span>         WARN_ONCE(<span class="literal">true</span>, <span class="string">&quot;ipvlan_queue_xmit() called for mode = [%hx]\n&quot;</span>,</span><br><span class="line"><span class="number">515</span>                           port-&gt;mode);</span><br><span class="line"><span class="number">516</span> out:</span><br><span class="line"><span class="number">517</span>         kfree_skb(skb);</span><br><span class="line"><span class="number">518</span>         <span class="keyword">return</span> NET_XMIT_DROP;</span><br><span class="line"><span class="number">519</span> &#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">457</span> <span class="type">static</span> <span class="type">int</span> <span class="title function_">ipvlan_xmit_mode_l2</span><span class="params">(<span class="keyword">struct</span> sk_buff *skb, <span class="keyword">struct</span> net_device *dev)</span></span><br><span class="line">458 &#123;</span><br><span class="line"><span class="number">459</span>         <span class="type">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">ipvl_dev</span> *<span class="title">ipvlan</span> =</span> netdev_priv(dev);</span><br><span class="line"><span class="number">460</span>         <span class="class"><span class="keyword">struct</span> <span class="title">ethhdr</span> *<span class="title">eth</span> =</span> eth_hdr(skb);</span><br><span class="line"><span class="number">461</span>         <span class="class"><span class="keyword">struct</span> <span class="title">ipvl_addr</span> *<span class="title">addr</span>;</span></span><br><span class="line"><span class="number">462</span>         <span class="type">void</span> *lyr3h;</span><br><span class="line"><span class="number">463</span>         <span class="type">int</span> addr_type;</span><br><span class="line"><span class="number">464</span></span><br><span class="line"><span class="number">465</span>         <span class="keyword">if</span> (ether_addr_equal(eth-&gt;h_dest, eth-&gt;h_source)) &#123;</span><br><span class="line"><span class="number">466</span>                 lyr3h = ipvlan_get_L3_hdr(skb, &amp;addr_type);</span><br><span class="line"><span class="number">467</span>                 <span class="keyword">if</span> (lyr3h) &#123;</span><br><span class="line"><span class="number">468</span>                         addr = ipvlan_addr_lookup(ipvlan-&gt;port, lyr3h, addr_type, <span class="literal">true</span>);</span><br><span class="line"><span class="number">469</span>                         <span class="keyword">if</span> (addr)</span><br><span class="line"><span class="number">470</span>                                 <span class="keyword">return</span> ipvlan_rcv_frame(addr, skb, <span class="literal">true</span>);</span><br><span class="line"><span class="number">471</span>                 &#125;</span><br><span class="line"><span class="number">472</span>                 skb = skb_share_check(skb, GFP_ATOMIC);</span><br><span class="line"><span class="number">473</span>                 <span class="keyword">if</span> (!skb)</span><br><span class="line"><span class="number">474</span>                         <span class="keyword">return</span> NET_XMIT_DROP;</span><br><span class="line"><span class="number">475</span></span><br><span class="line"><span class="number">476</span>                 <span class="comment">/* Packet definitely does not belong to any of the</span></span><br><span class="line"><span class="comment">477                  * virtual devices, but the dest is local. So forward</span></span><br><span class="line"><span class="comment">478                  * the skb for the main-dev. At the RX side we just return</span></span><br><span class="line"><span class="comment">479                  * RX_PASS for it to be processed further on the stack.</span></span><br><span class="line"><span class="comment">480                  */</span></span><br><span class="line"><span class="number">481</span>                 <span class="keyword">return</span> dev_forward_skb(ipvlan-&gt;phy_dev, skb);</span><br><span class="line"><span class="number">482</span></span><br><span class="line"><span class="number">483</span>         &#125; <span class="keyword">else</span> <span class="keyword">if</span> (is_multicast_ether_addr(eth-&gt;h_dest)) &#123;</span><br><span class="line"><span class="number">484</span>                 u8 ip_summed = skb-&gt;ip_summed;</span><br><span class="line"><span class="number">485</span></span><br><span class="line"><span class="number">486</span>                 skb-&gt;ip_summed = CHECKSUM_UNNECESSARY;</span><br><span class="line"><span class="number">487</span>                 ipvlan_multicast_frame(ipvlan-&gt;port, skb, ipvlan, <span class="literal">true</span>);</span><br><span class="line"><span class="number">488</span>                 skb-&gt;ip_summed = ip_summed;</span><br><span class="line"><span class="number">489</span>         &#125;</span><br><span class="line"><span class="number">490</span></span><br><span class="line"><span class="number">491</span>         skb-&gt;dev = ipvlan-&gt;phy_dev;</span><br><span class="line"><span class="number">492</span>         <span class="keyword">return</span> dev_queue_xmit(skb);</span><br><span class="line"><span class="number">493</span> &#125;</span><br></pre></td></tr></table></figure>
+
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2013/10/10/2013-10-10-ipv4-route-fib-table-lookup/" data-id="clnfhasrh009ue0mh0bfggs2e" data-title="ipv4 route fib table lookup" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2015/05/21/2015-05-21-ipvlan-study/" data-id="clnfhassp00che0mh7e004hvr" data-title="ipvlan study" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ipv4/" rel="tag">ipv4</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/route/" rel="tag">route</a></li></ul>
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/route/" rel="tag">route</a></li></ul>
 
     </footer>
   </div>
@@ -474,14 +192,14 @@
 
 
   
-    <article id="post-2013-10-07-make-terminal-tab-more-markedness" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+    <article id="post-2014-10-21-ftrace-study" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
-    <a href="/2013/10/07/2013-10-07-make-terminal-tab-more-markedness/" class="article-date">
-  <time class="dt-published" datetime="2013-10-07T18:57:00.000Z" itemprop="datePublished">2013-10-07</time>
+    <a href="/2014/10/21/2014-10-21-ftrace-study/" class="article-date">
+  <time class="dt-published" datetime="2014-10-21T14:45:00.000Z" itemprop="datePublished">2014-10-21</time>
 </a>
     
   <div class="article-category">
-    <a class="article-category-link" href="/categories/others/">others</a>
+    <a class="article-category-link" href="/categories/debug/">debug</a>
   </div>
 
   </div>
@@ -492,7 +210,7 @@
         
   
     <h1 itemprop="name">
-      <a class="p-name article-title" href="/2013/10/07/2013-10-07-make-terminal-tab-more-markedness/">How to make selected tab in terminal more prominent</a>
+      <a class="p-name article-title" href="/2014/10/21/2014-10-21-ftrace-study/">ftrace study</a>
     </h1>
   
 
@@ -500,18 +218,21 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <p>On ubuntu 13.04, create the file ~&#x2F;.config&#x2F;gtk-3.0&#x2F;gtk.css with following lines</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">martin@ubuntu:~$ cat ~/.config/gtk-3.0/gtk.css </span><br><span class="line">TerminalWindow .notebook tab:active &#123;</span><br><span class="line">    background-color: #0000FF;	</span><br><span class="line">    &#125;</span><br><span class="line">martin@ubuntu:~$ </span><br></pre></td></tr></table></figure>
-
-
+        <h3 id="test-case"><a href="#test-case" class="headerlink" title="test case"></a>test case</h3><p>We found ixgbe  rx softirq  poll function <code>ixgbe_poll</code> was called even without pkt coming.<br>how to prove it and who call it?</p>
+<h3 id="analysis"><a href="#analysis" class="headerlink" title="analysis"></a>analysis</h3><p>By browse source <code>ixgbe_poll</code> is called, it should be done by napi schedule.<br>If this is true, <code>__napi_schedule</code> should be called.</p>
+        
+          <p class="article-more-link">
+            <a href="/2014/10/21/2014-10-21-ftrace-study/#more">Read More</a>
+          </p>
+        
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2013/10/07/2013-10-07-make-terminal-tab-more-markedness/" data-id="clnfhasrg009re0mh3oipf4uw" data-title="How to make selected tab in terminal more prominent" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2014/10/21/2014-10-21-ftrace-study/" data-id="clnfhasso00cee0mheu6k6ztx" data-title="ftrace study" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/gtk/" rel="tag">gtk</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/terminal/" rel="tag">terminal</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ubuntu/" rel="tag">ubuntu</a></li></ul>
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/debug/" rel="tag">debug</a></li></ul>
 
     </footer>
   </div>
@@ -521,14 +242,14 @@
 
 
   
-    <article id="post-2013-09-29-ipv4-route-fib-tree-inflate" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+    <article id="post-2014-09-17-netdevice-watchdog-cause-tx-queue-schedule" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
-    <a href="/2013/09/29/2013-09-29-ipv4-route-fib-tree-inflate/" class="article-date">
-  <time class="dt-published" datetime="2013-09-29T17:16:00.000Z" itemprop="datePublished">2013-09-29</time>
+    <a href="/2014/09/17/2014-09-17-netdevice-watchdog-cause-tx-queue-schedule/" class="article-date">
+  <time class="dt-published" datetime="2014-09-17T15:38:00.000Z" itemprop="datePublished">2014-09-17</time>
 </a>
     
   <div class="article-category">
-    <a class="article-category-link" href="/categories/route/">route</a>
+    <a class="article-category-link" href="/categories/netdev/">netdev</a>
   </div>
 
   </div>
@@ -539,7 +260,7 @@
         
   
     <h1 itemprop="name">
-      <a class="p-name article-title" href="/2013/09/29/2013-09-29-ipv4-route-fib-tree-inflate/">IPv4 route fib trie inflate</a>
+      <a class="p-name article-title" href="/2014/09/17/2014-09-17-netdevice-watchdog-cause-tx-queue-schedule/">netdevice watchdog cause tx queue schedule</a>
     </h1>
   
 
@@ -547,19 +268,325 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <p>##summary<br><code>inflate</code> duplicate a new node whose child array is double of orignal node,<br>and put original node’s child into the new node.</p>
+        <h3 id="test-case"><a href="#test-case" class="headerlink" title="test case"></a>test case</h3><p>For ixgbe nic, we want to assign a tx hardware qeueue to each cpu,<br>and the tx softirq should use the corresponding hardware queue.</p>
+<p>each packet will select a softqueue in <code>dev_queue_xmit</code>,<br>we rewrite ixgbe driver <code>ndo_select_queue</code>(<code>ixgbe_select_queue</code>),<br>which will return current cpu index(based 0) when packet select queue.<br>thus for each cpu use its own tx queue.</p>
+<p>but, we found some packet had unmatched queue index when send<br>on specific cpu.</p>
+<p>for example, a packet’s queue index is 5 but is sent by cpu3,<br>thus, cpu3 will operate tx hw queue5, which should only be done by cpu5.</p>
         
           <p class="article-more-link">
-            <a href="/2013/09/29/2013-09-29-ipv4-route-fib-tree-inflate/#more">Read More</a>
+            <a href="/2014/09/17/2014-09-17-netdevice-watchdog-cause-tx-queue-schedule/#more">Read More</a>
           </p>
         
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2013/09/29/2013-09-29-ipv4-route-fib-tree-inflate/" data-id="clnfhasrf009ne0mh7fwlaxbu" data-title="IPv4 route fib trie inflate" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2014/09/17/2014-09-17-netdevice-watchdog-cause-tx-queue-schedule/" data-id="clnfhassn00cae0mhd7xd63nt" data-title="netdevice watchdog cause tx queue schedule" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2014-09-16-ixgbe-queue-index" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2014/09/16/2014-09-16-ixgbe-queue-index/" class="article-date">
+  <time class="dt-published" datetime="2014-09-16T10:58:00.000Z" itemprop="datePublished">2014-09-16</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/netdev/">netdev</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2014/09/16/2014-09-16-ixgbe-queue-index/">how does ixgbe use queue index</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="data-structure"><a href="#data-structure" class="headerlink" title="data structure"></a>data structure</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">7913 static const struct net_device_ops ixgbe_netdev_ops = &#123;</span><br><span class="line">...</span><br><span class="line">7916         .ndo_start_xmit         = ixgbe_xmit_frame,</span><br><span class="line">7917         .ndo_select_queue       = ixgbe_select_queue,</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+<h3 id="receive-skb-record-receive-queue-index"><a href="#receive-skb-record-receive-queue-index" class="headerlink" title="receive skb: record receive queue index"></a>receive skb: record receive queue index</h3><p>record <code>queue_index +1</code>, 0 is used as NOT record.</p>
+<p>####call trace</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">&gt; ixgbe_poll</span><br><span class="line">&gt; &gt; ixgbe_clean_rx_irq</span><br><span class="line">&gt; &gt; &gt; ixgbe_process_skb_fields</span><br><span class="line">&gt; &gt; &gt; &gt; skb_record_rx_queue</span><br></pre></td></tr></table></figure>
+        
+          <p class="article-more-link">
+            <a href="/2014/09/16/2014-09-16-ixgbe-queue-index/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2014/09/16/2014-09-16-ixgbe-queue-index/" data-id="clnfhassl00c7e0mhg3y57f3m" data-title="how does ixgbe use queue index" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2014-09-14-tcpdump-work-with-bonding-interface" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2014/09/14/2014-09-14-tcpdump-work-with-bonding-interface/" class="article-date">
+  <time class="dt-published" datetime="2014-09-14T08:12:00.000Z" itemprop="datePublished">2014-09-14</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/bpf/">bpf</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2014/09/14/2014-09-14-tcpdump-work-with-bonding-interface/">tcpdump work with bonding interface</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="test-case"><a href="#test-case" class="headerlink" title="test case"></a>test case</h3><p>####On redhat5, Why tcpdump could not work on bonding work.<br>OS: redhat 5.<br>There are two 82599 interfaces eth0 and eth1.<br>These two interfaces are used as slave of bond0,<br>eth1 is backup of eth0.</p>
+<p>We ping the default gateway on test machine.<br>ping work OK, and tcpdump on bond0 show the icmp request and icmp require packets.<br>while on eth0 only icmp request, and eth1 has no any packet.</p>
+        
+          <p class="article-more-link">
+            <a href="/2014/09/14/2014-09-14-tcpdump-work-with-bonding-interface/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2014/09/14/2014-09-14-tcpdump-work-with-bonding-interface/" data-id="clnfhassi00c3e0mh7fwebrbp" data-title="tcpdump work with bonding interface" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2014-07-31-how-to-select-source-ip-for-a-tcp-socket" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2014/07/31/2014-07-31-how-to-select-source-ip-for-a-tcp-socket/" class="article-date">
+  <time class="dt-published" datetime="2014-07-31T09:06:00.000Z" itemprop="datePublished">2014-07-31</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/socket/">socket</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2014/07/31/2014-07-31-how-to-select-source-ip-for-a-tcp-socket/">how to select source ip for a tcp socket</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id=""><a href="#" class="headerlink" title=""></a></h2><p>This question should be divided into two parts.</p>
+<h3 id="Part-1-adding-a-route"><a href="#Part-1-adding-a-route" class="headerlink" title="Part 1: adding a route"></a>Part 1: adding a route</h3><h4 id="Add-a-direct-link-route"><a href="#Add-a-direct-link-route" class="headerlink" title="Add a direct(link) route"></a>Add a direct(link) route</h4><h4 id="Add-a-route-with-gateway"><a href="#Add-a-route-with-gateway" class="headerlink" title="Add a route with gateway"></a>Add a route with gateway</h4><h3 id="create-a-socket"><a href="#create-a-socket" class="headerlink" title="create a socket"></a>create a socket</h3><h4 id="for-example-‘connect’-system-call"><a href="#for-example-‘connect’-system-call" class="headerlink" title="for example ‘connect’ system call"></a>for example ‘connect’ system call</h4>
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2014/07/31/2014-07-31-how-to-select-source-ip-for-a-tcp-socket/" data-id="clnfhassh00c0e0mhck3vcr8d" data-title="how to select source ip for a tcp socket" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2014-07-17-register-irq-handler" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2014/07/17/2014-07-17-register-irq-handler/" class="article-date">
+  <time class="dt-published" datetime="2014-07-17T11:41:00.000Z" itemprop="datePublished">2014-07-17</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/irq/">irq</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2014/07/17/2014-07-17-register-irq-handler/">register irq handler</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="call-trace"><a href="#call-trace" class="headerlink" title="call trace"></a>call trace</h3><p>以<code>handle_level_irq</code>为例说明.</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">===&gt; handle_level_irq</span><br><span class="line">==&gt; ==&gt; handle_irq_event</span><br><span class="line">==&gt; ==&gt; ==&gt; handle_irq_event_percpu</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt;action-&gt;handler</span><br></pre></td></tr></table></figure>
+
+<h4 id="where-handler-is-registered"><a href="#where-handler-is-registered" class="headerlink" title="where handler is registered"></a>where handler is registered</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">127 static inline int __must_check</span><br><span class="line">128 request_irq(unsigned int irq, irq_handler_t handler, unsigned long flags,</span><br><span class="line">129             const char *name, void *dev)</span><br><span class="line">130 &#123;</span><br><span class="line">131         return request_threaded_irq(irq, handler, NULL, flags, name, dev);</span><br><span class="line">132 &#125;</span><br></pre></td></tr></table></figure>
+        
+          <p class="article-more-link">
+            <a href="/2014/07/17/2014-07-17-register-irq-handler/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2014/07/17/2014-07-17-register-irq-handler/" data-id="clnfhassg00bwe0mh7n4x4k5k" data-title="register irq handler" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/irq/" rel="tag">irq</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2014-07-17-irq-framework" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2014/07/17/2014-07-17-irq-framework/" class="article-date">
+  <time class="dt-published" datetime="2014-07-17T10:35:00.000Z" itemprop="datePublished">2014-07-17</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/irq/">irq</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2014/07/17/2014-07-17-irq-framework/">irq framework</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="中断处理过程："><a href="#中断处理过程：" class="headerlink" title="中断处理过程："></a>中断处理过程：</h3><h4 id="硬件中断到中断控制器"><a href="#硬件中断到中断控制器" class="headerlink" title="硬件中断到中断控制器"></a>硬件中断到中断控制器</h4><p>reg value–&gt;irq(int) —&gt; struct irq_desc</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">==&gt; 中断时的有一个寄存器会保存中断源的vector值.</span><br><span class="line">==&gt; ==&gt; `arch/x86/kernel/entry_64.S`调用函数`do_IRQ`.</span><br><span class="line">==&gt; ==&gt; ==&gt; `do_IRQ`依据`vector_irq`和vector值, 找到对应的中断号,并调用`handle_irq`.</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; `handle_irq`通过函数irq_to_descdesc,可将中断号转化为`struct irq_desc`.</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; generic_handle_irq_desc(irq, desc);</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; ==&gt; `generic_handle_irq_desc`调用 desc-&gt;handle_irq(irq, desc);</span><br></pre></td></tr></table></figure>
+<p>注:这里的handle_irq不是真正的中断处理函数,而是几大类中断控制器处理函数.<br>如82599, msi等.<br>具体分析见:<a href="http://martinbj2008.github.io/blog/2014/07/17/irq-study">irq study1</a></p>
+<h4 id="中断控制器到具体的中断处理函数"><a href="#中断控制器到具体的中断处理函数" class="headerlink" title="中断控制器到具体的中断处理函数"></a>中断控制器到具体的中断处理函数</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">==&gt; handle_level_irq</span><br><span class="line">==&gt; ==&gt; irqreturn_t handle_irq_event(struct irq_desc *desc)</span><br><span class="line">==&gt; ==&gt; ==&gt; struct irqaction *action = desc-&gt;action</span><br><span class="line">==&gt; ==&gt; ==&gt; ret = handle_irq_event_percpu(desc, action);</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; action-&gt;handler(irq, action-&gt;dev_id);</span><br></pre></td></tr></table></figure>
+<p>这里的<code>action-&gt;handler</code>才是我们使用<code>request_irq</code>注册的中断处理函数.<br>具体分析见:<br>具体分析见:<a href="http://martinbj2008.github.io/blog/2014/07/17/register-irq-handler">irq study2</a></p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2014/07/17/2014-07-17-irq-framework/" data-id="clnfhasse00bpe0mh698335pz" data-title="irq framework" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/irq/" rel="tag">irq</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2014-07-17-irq-study" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2014/07/17/2014-07-17-irq-study/" class="article-date">
+  <time class="dt-published" datetime="2014-07-17T10:35:00.000Z" itemprop="datePublished">2014-07-17</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/irq/">irq</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2014/07/17/2014-07-17-irq-study/">irq vector</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="中断处理过程："><a href="#中断处理过程：" class="headerlink" title="中断处理过程："></a>中断处理过程：</h3><p>reg value–&gt;irq(int) —&gt; struct irq_desc</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">==&gt; 中断时的有一个寄存器会保存中断源的vector值.</span><br><span class="line">==&gt; ==&gt; `arch/x86/kernel/entry_64.S`调用函数`do_IRQ`.</span><br><span class="line">==&gt; ==&gt; ==&gt; `do_IRQ`依据`vector_irq`和vector值, 找到对应的中断号,并调用`handle_irq`.</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; `handle_irq`通过函数irq_to_descdesc,可将中断号转化为`struct irq_desc`.</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; generic_handle_irq_desc(irq, desc);</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; ==&gt; `generic_handle_irq_desc`调用 desc-&gt;handle_irq(irq, desc);</span><br></pre></td></tr></table></figure>
+<p>注:这里的handle_irq不是真正的中断处理函数,而是几大类中断控制器处理函数.<br>如82599, msi等.</p>
+<h4 id="do-IRQ-struct-pt-regs-regs"><a href="#do-IRQ-struct-pt-regs-regs" class="headerlink" title="&#96;do_IRQ(struct pt_regs *regs)"></a>&#96;do_IRQ(struct pt_regs *regs)</h4><p>File: arch&#x2F;x86&#x2F;kernel&#x2F;irq.c</p>
+<p>arch&#x2F;x86&#x2F;kernel&#x2F;entry_64.S<br>will call do_IRQ</p>
+        
+          <p class="article-more-link">
+            <a href="/2014/07/17/2014-07-17-irq-study/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2014/07/17/2014-07-17-irq-study/" data-id="clnfhassf00bte0mhdmm3a5jc" data-title="irq vector" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/irq/" rel="tag">irq</a></li></ul>
+
     </footer>
   </div>
   
@@ -572,7 +599,7 @@
 
   <nav id="page-nav">
     
-    <a class="extend prev" rel="prev" href="/page/4/">&laquo; Prev</a><a class="page-number" href="/">1</a><span class="space">&hellip;</span><a class="page-number" href="/page/3/">3</a><a class="page-number" href="/page/4/">4</a><span class="page-number current">5</span><a class="page-number" href="/page/6/">6</a><a class="page-number" href="/page/7/">7</a><span class="space">&hellip;</span><a class="page-number" href="/page/12/">12</a><a class="extend next" rel="next" href="/page/6/">Next &raquo;</a>
+    <a class="extend prev" rel="prev" href="/page/4/">&laquo; Prev</a><a class="page-number" href="/">1</a><span class="space">&hellip;</span><a class="page-number" href="/page/3/">3</a><a class="page-number" href="/page/4/">4</a><span class="page-number current">5</span><a class="page-number" href="/page/6/">6</a><a class="page-number" href="/page/7/">7</a><span class="space">&hellip;</span><a class="page-number" href="/page/14/">14</a><a class="extend next" rel="next" href="/page/6/">Next &raquo;</a>
   </nav>
 
 </section>
@@ -583,7 +610,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Categories</h3>
     <div class="widget">
-      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IRQs/">IRQs</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/make/">make</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netcore/">netcore</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/virtnet/">virtnet</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
     </div>
   </div>
 
@@ -593,7 +620,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Tags</h3>
     <div class="widget">
-      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IRQ/" rel="tag">IRQ</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SP/" rel="tag">SP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TCPDUMP/" rel="tag">TCPDUMP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/arg/" rel="tag">arg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bash/" rel="tag">bash</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/beep/" rel="tag">beep</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bootmem/" rel="tag">bootmem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/cacahe/" rel="tag">cacahe</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/dump-sa/" rel="tag">dump sa</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ftrace/" rel="tag">ftrace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/glibc/" rel="tag">glibc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gtk/" rel="tag">gtk</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2markdown/" rel="tag">html2markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2text/" rel="tag">html2text</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet/" rel="tag">inet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet-socket/" rel="tag">inet socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv4/" rel="tag">ipv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipvlan/" rel="tag">ipvlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kenel/" rel="tag">kenel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/km/" rel="tag">km</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kthread/" rel="tag">kthread</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kvm/" rel="tag">kvm</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/lc-trie/" rel="tag">lc-trie</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/makefile/" rel="tag">makefile</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mannual/" rel="tag">mannual</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/manpages-dev/" rel="tag">manpages-dev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/marco/" rel="tag">marco</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/markdown/" rel="tag">markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mem/" rel="tag">mem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/minivnc/" rel="tag">minivnc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mmap/" rel="tag">mmap</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/net/" rel="tag">net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/network/" rel="tag">network</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octean/" rel="tag">octean</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octopress/" rel="tag">octopress</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/page/" rel="tag">page</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pernet/" rel="tag">pernet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pfn/" rel="tag">pfn</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/policy/" rel="tag">policy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/qdisc/" rel="tag">qdisc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/reg/" rel="tag">reg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/rss/" rel="tag">rss</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/schedule/" rel="tag">schedule</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sock/" rel="tag">sock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/softirq/" rel="tag">softirq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/subst/" rel="tag">subst</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/summary/" rel="tag">summary</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sunrise/" rel="tag">sunrise</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/system-call/" rel="tag">system call</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/terminal/" rel="tag">terminal</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/timezone/" rel="tag">timezone</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/toolchain/" rel="tag">toolchain</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ubuntu/" rel="tag">ubuntu</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/udp/" rel="tag">udp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/usb/" rel="tag">usb</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/variant/" rel="tag">variant</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vhost/" rel="tag">vhost</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vimdiff/" rel="tag">vimdiff</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vxlan/" rel="tag">vxlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/watchdog/" rel="tag">watchdog</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/workqueue/" rel="tag">workqueue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
     </div>
   </div>
 
@@ -603,7 +630,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Tag Cloud</h3>
     <div class="widget tagcloud">
-      <a href="/tags/IPv4/" style="font-size: 16.25px;">IPv4</a> <a href="/tags/IRQ/" style="font-size: 12.5px;">IRQ</a> <a href="/tags/SP/" style="font-size: 10px;">SP</a> <a href="/tags/TCPDUMP/" style="font-size: 10px;">TCPDUMP</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 11.25px;">address</a> <a href="/tags/arg/" style="font-size: 10px;">arg</a> <a href="/tags/bash/" style="font-size: 10px;">bash</a> <a href="/tags/beep/" style="font-size: 10px;">beep</a> <a href="/tags/bh/" style="font-size: 10px;">bh</a> <a href="/tags/bootmem/" style="font-size: 10px;">bootmem</a> <a href="/tags/cacahe/" style="font-size: 10px;">cacahe</a> <a href="/tags/checksum/" style="font-size: 11.25px;">checksum</a> <a href="/tags/debug/" style="font-size: 10px;">debug</a> <a href="/tags/dump-sa/" style="font-size: 10px;">dump sa</a> <a href="/tags/fib/" style="font-size: 13.75px;">fib</a> <a href="/tags/ftrace/" style="font-size: 10px;">ftrace</a> <a href="/tags/gcc/" style="font-size: 13.75px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/glibc/" style="font-size: 10px;">glibc</a> <a href="/tags/gtk/" style="font-size: 10px;">gtk</a> <a href="/tags/html2markdown/" style="font-size: 10px;">html2markdown</a> <a href="/tags/html2text/" style="font-size: 10px;">html2text</a> <a href="/tags/inet/" style="font-size: 10px;">inet</a> <a href="/tags/inet-socket/" style="font-size: 10px;">inet socket</a> <a href="/tags/ipv4/" style="font-size: 11.25px;">ipv4</a> <a href="/tags/ipv6/" style="font-size: 11.25px;">ipv6</a> <a href="/tags/ipvlan/" style="font-size: 10px;">ipvlan</a> <a href="/tags/irq/" style="font-size: 10px;">irq</a> <a href="/tags/kenel/" style="font-size: 10px;">kenel</a> <a href="/tags/kernel/" style="font-size: 20px;">kernel</a> <a href="/tags/km/" style="font-size: 10px;">km</a> <a href="/tags/kthread/" style="font-size: 10px;">kthread</a> <a href="/tags/kvm/" style="font-size: 10px;">kvm</a> <a href="/tags/lc-trie/" style="font-size: 10px;">lc-trie</a> <a href="/tags/makefile/" style="font-size: 10px;">makefile</a> <a href="/tags/mannual/" style="font-size: 10px;">mannual</a> <a href="/tags/manpages-dev/" style="font-size: 10px;">manpages-dev</a> <a href="/tags/marco/" style="font-size: 10px;">marco</a> <a href="/tags/markdown/" style="font-size: 10px;">markdown</a> <a href="/tags/mem/" style="font-size: 10px;">mem</a> <a href="/tags/memory/" style="font-size: 12.5px;">memory</a> <a href="/tags/minivnc/" style="font-size: 10px;">minivnc</a> <a href="/tags/mmap/" style="font-size: 10px;">mmap</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/net/" style="font-size: 13.75px;">net</a> <a href="/tags/netdev/" style="font-size: 11.25px;">netdev</a> <a href="/tags/netlink/" style="font-size: 15px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/octean/" style="font-size: 10px;">octean</a> <a href="/tags/octopress/" style="font-size: 10px;">octopress</a> <a href="/tags/page/" style="font-size: 10px;">page</a> <a href="/tags/pernet/" style="font-size: 10px;">pernet</a> <a href="/tags/pfn/" style="font-size: 10px;">pfn</a> <a href="/tags/policy/" style="font-size: 10px;">policy</a> <a href="/tags/qdisc/" style="font-size: 11.25px;">qdisc</a> <a href="/tags/reg/" style="font-size: 10px;">reg</a> <a href="/tags/route/" style="font-size: 17.5px;">route</a> <a href="/tags/rss/" style="font-size: 10px;">rss</a> <a href="/tags/sched/" style="font-size: 13.75px;">sched</a> <a href="/tags/schedule/" style="font-size: 10px;">schedule</a> <a href="/tags/sock/" style="font-size: 10px;">sock</a> <a href="/tags/socket/" style="font-size: 18.75px;">socket</a> <a href="/tags/softirq/" style="font-size: 12.5px;">softirq</a> <a href="/tags/subst/" style="font-size: 10px;">subst</a> <a href="/tags/summary/" style="font-size: 10px;">summary</a> <a href="/tags/sunrise/" style="font-size: 10px;">sunrise</a> <a href="/tags/system-call/" style="font-size: 10px;">system call</a> <a href="/tags/tcp/" style="font-size: 10px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 10px;">tcpdump</a> <a href="/tags/terminal/" style="font-size: 10px;">terminal</a> <a href="/tags/timezone/" style="font-size: 10px;">timezone</a> <a href="/tags/toolchain/" style="font-size: 11.25px;">toolchain</a> <a href="/tags/ubuntu/" style="font-size: 11.25px;">ubuntu</a> <a href="/tags/udp/" style="font-size: 10px;">udp</a> <a href="/tags/usb/" style="font-size: 10px;">usb</a> <a href="/tags/variant/" style="font-size: 10px;">variant</a> <a href="/tags/vhost/" style="font-size: 11.25px;">vhost</a> <a href="/tags/vim/" style="font-size: 11.25px;">vim</a> <a href="/tags/vimdiff/" style="font-size: 10px;">vimdiff</a> <a href="/tags/vxlan/" style="font-size: 10px;">vxlan</a> <a href="/tags/watchdog/" style="font-size: 10px;">watchdog</a> <a href="/tags/workqueue/" style="font-size: 13.75px;">workqueue</a> <a href="/tags/xfrm/" style="font-size: 16.25px;">xfrm</a>
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
     </div>
   </div>
 
@@ -612,7 +639,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Archives</h3>
     <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/02/">February 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/12/">December 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
     </div>
   </div>
 
@@ -625,23 +652,23 @@
       <ul>
         
           <li>
-            <a href="/2020/03/25/2020-03-25-kern-ovs-data-struct/">内核OVS的学习总结</a>
+            <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
           </li>
         
           <li>
-            <a href="/2020/03/15/2020-03-15-net-rx-drop-1/">net rx drop(续)</a>
+            <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/">tcp三次握手 --- 逐渐消失的tcp半链接队列</a>
           </li>
         
           <li>
-            <a href="/2020/03/15/2020-03-15-net-rx-drop/">net rx drop</a>
+            <a href="/2025/05/05/tcp-req-queue-length-check/">创建req scoket时的三个长度检查</a>
           </li>
         
           <li>
-            <a href="/2017/05/15/2017-05-15-slabinfo-cause-delay/">slabinfo 惹的祸</a>
+            <a href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
           </li>
         
           <li>
-            <a href="/2016/11/23/2016-11-23-what-is-tfo/">WHAT is TFO</a>
+            <a href="/2025/05/01/netdev-state-flags-part1/">网口状态标志位详解(Part 1/2)</a>
           </li>
         
       </ul>
@@ -657,7 +684,7 @@
   <div class="outer">
     <div id="footer-info" class="inner">
       
-      &copy; 2023 Martinbj2008<br>
+      &copy; 2025 Martinbj2008<br>
       Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
     </div>
   </div>

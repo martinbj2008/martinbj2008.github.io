@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>IPv6: how to support IPv6 ext header | Kernel Study Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="概述与IPv4的几点不同IPv6在扩展头和协议处理上跟IPv4还有些不一样。  IPv6报文格式设计上，上层协议和扩展头都作为IPv6的nexthdr类型串联在一起，不像IPv4那样扩展头是单独的option，上层协议类型放到ip头里的proto字段。 IPv6的扩展头大部分采用tlv格式，大部分扩展头前几个字节会保存nexthdr，本扩展的长度这两个信息，然后跟本扩展头相关的一些数据。 我们无法">
+<meta property="og:type" content="article">
+<meta property="og:title" content="IPv6: how to support IPv6 ext header">
+<meta property="og:url" content="https://martinbj2008.github.io/2020/10/03/IPv6-how-to-support-IPv6-ext-header/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="概述与IPv4的几点不同IPv6在扩展头和协议处理上跟IPv4还有些不一样。  IPv6报文格式设计上，上层协议和扩展头都作为IPv6的nexthdr类型串联在一起，不像IPv4那样扩展头是单独的option，上层协议类型放到ip头里的proto字段。 IPv6的扩展头大部分采用tlv格式，大部分扩展头前几个字节会保存nexthdr，本扩展的长度这两个信息，然后跟本扩展头相关的一些数据。 我们无法">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2020-10-03T20:55:19.000Z">
+<meta property="article:modified_time" content="2025-05-28T12:13:09.569Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IPv6">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel Study Notes</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-IPv6-how-to-support-IPv6-ext-header" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2020/10/03/IPv6-how-to-support-IPv6-ext-header/" class="article-date">
+  <time class="dt-published" datetime="2020-10-03T20:55:19.000Z" itemprop="datePublished">2020-10-03</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/IPv6/">IPv6</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      IPv6: how to support IPv6 ext header
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="概述"><a href="#概述" class="headerlink" title="概述"></a>概述</h2><h3 id="与IPv4的几点不同"><a href="#与IPv4的几点不同" class="headerlink" title="与IPv4的几点不同"></a>与IPv4的几点不同</h3><p>IPv6在扩展头和协议处理上跟IPv4还有些不一样。</p>
+<ol>
+<li>IPv6报文格式设计上，上层协议和扩展头都作为IPv6的<code>nexthdr</code>类型串联在一起，不像IPv4那样扩展头是单独的option，上层协议类型放到ip头里的proto字段。</li>
+<li>IPv6的扩展头大部分采用tlv格式，大部分扩展头前几个字节会保存<code>nexthdr</code>，本扩展的长度这两个信息，然后跟本扩展头相关的一些数据。</li>
+<li>我们无法像IPv4那样通过IP头里的字段就能简洁的判读出报文四层协议类型以及4层协议的offer和lenth等信息。必须逐个解析全部的扩展头。</li>
+</ol>
+<h3 id="原理"><a href="#原理" class="headerlink" title="原理"></a>原理</h3><p>协议栈通过一个<code>inet6_protocol</code>类型的数组，保存IPv6所有的4层处理协议入口。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">struct inet6_protocol __rcu *inet6_protos[MAX_INET_PROTOS] __read_mostly;</span><br><span class="line">EXPORT_SYMBOL(inet6_protos)</span><br></pre></td></tr></table></figure>
+
+<ol>
+<li>数组<code>inet6_protos</code>的下标对应的就是每个扩展协议在IPv6扩展头里的<code>nexthdr</code>值</li>
+</ol>
+<h4 id="inet6-protocol结构体"><a href="#inet6-protocol结构体" class="headerlink" title="inet6_protocol结构体"></a><code>inet6_protocol</code>结构体</h4><ol>
+<li><code>struct inet6_protocol</code>结构体里的handler是扩展头的处理入口函数。</li>
+<li>flags字段有两个标志位: <code>INET6_PROTO_NOPOLICY</code>和<code>INET6_PROTO_FINAL</code></li>
+</ol>
+<ul>
+<li><code>INET6_PROTO_FINAL</code>: 这个扩展是否可以作为IPv6的最后一个扩展， 比如<br>   TCP可以， 但是<code>IPPROTO_DSTOPTS</code>不可以。</li>
+<li><code>INET6_PROTO_NOPOLICY</code>: 这个要求必须有对应的IPsec&#x2F;xfrm <code>XFRM_POLICY_IN</code>的规则<br>这里有个疑问， esp6和ah6 为什么也有这个标志位， 我理解不应该有这个标志位， 有esp和ah头的，必须要有xfrm规则才可。</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">53 struct inet6_protocol &#123;</span><br><span class="line">54         int     (*handler)(struct sk_buff *skb);</span><br><span class="line">55</span><br><span class="line">56         /* This returns an error if we weren&#x27;t able to handle the error. */</span><br><span class="line">57         int     (*err_handler)(struct sk_buff *skb,</span><br><span class="line">58                                struct inet6_skb_parm *opt,</span><br><span class="line">59                                u8 type, u8 code, int offset,</span><br><span class="line">60                                __be32 info);</span><br><span class="line">61</span><br><span class="line">62         unsigned int    flags;  /* INET6_PROTO_xxx */</span><br><span class="line">63         u32             secret;</span><br><span class="line">64 &#125;;</span><br><span class="line">65</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">66 #define INET6_PROTO_NOPOLICY    0x1</span><br><span class="line">67 #define INET6_PROTO_FINAL       0x2</span><br></pre></td></tr></table></figure>
+
+<h3 id="函数调用栈"><a href="#函数调用栈" class="headerlink" title="函数调用栈"></a>函数调用栈</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">==&gt; ipv6_rcv</span><br><span class="line">==&gt; ==&gt; ip6_rcv_finish</span><br><span class="line">==&gt; ==&gt; ==&gt; dst_input(skb); &lt;== ip6_input</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; ip6_input</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ip6_input_finish</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ip6_protocol_deliver_rcu(net, skb, 0, false);</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ipprot = rcu_dereference(inet6_protos[`nexthdr`]);</span><br></pre></td></tr></table></figure>
+
+<h3 id="注册和注销"><a href="#注册和注销" class="headerlink" title="注册和注销"></a>注册和注销</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">52 struct inet6_protocol &#123;</span><br><span class="line">53         int     (*handler)(struct sk_buff *skb);</span><br><span class="line">54</span><br><span class="line">55         /* This returns an error if we weren&#x27;t able to handle the error. */</span><br><span class="line">56         int     (*err_handler)(struct sk_buff *skb,</span><br><span class="line">57                                struct inet6_skb_parm *opt,</span><br><span class="line">58                                u8 type, u8 code, int offset,</span><br><span class="line">59                                __be32 info);</span><br><span class="line">60</span><br><span class="line">61         unsigned int    flags;  /* INET6_PROTO_xxx */</span><br><span class="line">62 &#125;;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">28 int inet6_add_protocol(const struct inet6_protocol *prot, unsigned char protocol)</span><br><span class="line">29 &#123;</span><br><span class="line">30         return !cmpxchg((const struct inet6_protocol **)&amp;inet6_protos[protocol],</span><br><span class="line">31                         NULL, prot) ? 0 : -1;</span><br><span class="line">32 &#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">35 int inet6_del_protocol(const struct inet6_protocol *prot, unsigned char protocol)</span><br><span class="line">36 &#123;</span><br><span class="line">37         int ret;</span><br><span class="line">38</span><br><span class="line">39         ret = (cmpxchg((const struct inet6_protocol **)&amp;inet6_protos[protocol],</span><br><span class="line">40                        prot, NULL) == prot) ? 0 : -1;</span><br><span class="line">41</span><br><span class="line">42         synchronize_net();</span><br><span class="line">43</span><br><span class="line">44         return ret;</span><br><span class="line">45 &#125;</span><br></pre></td></tr></table></figure>
+
+<h4 id="内核总共支持的IPv6四层协议类型。"><a href="#内核总共支持的IPv6四层协议类型。" class="headerlink" title="内核总共支持的IPv6四层协议类型。"></a>内核总共支持的IPv6四层协议类型。</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">➜  linux git:(master) grep inet6_add_protocol net include -Rw</span><br><span class="line">net/dccp/ipv6.c:	err = inet6_add_protocol(&amp;dccp_v6_protocol, IPPROTO_DCCP);</span><br><span class="line">net/l2tp/l2tp_ip6.c:	err = inet6_add_protocol(&amp;l2tp_ip6_protocol, IPPROTO_L2TP);</span><br><span class="line">net/sctp/ipv6.c:	if (inet6_add_protocol(&amp;sctpv6_protocol, IPPROTO_SCTP) &lt; 0)</span><br><span class="line">net/ipv6/udplite.c:	ret = inet6_add_protocol(&amp;udplitev6_protocol, IPPROTO_UDPLITE);</span><br><span class="line">net/ipv6/xfrm6_protocol.c:		if (inet6_add_protocol(netproto(protocol), protocol)) &#123;</span><br><span class="line">net/ipv6/exthdrs.c:	ret = inet6_add_protocol(&amp;rthdr_protocol, IPPROTO_ROUTING);</span><br><span class="line">net/ipv6/exthdrs.c:	ret = inet6_add_protocol(&amp;destopt_protocol, IPPROTO_DSTOPTS);</span><br><span class="line">net/ipv6/exthdrs.c:	ret = inet6_add_protocol(&amp;nodata_protocol, IPPROTO_NONE);</span><br><span class="line">net/ipv6/ip6mr.c:	if (inet6_add_protocol(&amp;pim6_protocol, IPPROTO_PIM) &lt; 0) &#123;</span><br><span class="line">net/ipv6/udp.c:	ret = inet6_add_protocol(&amp;net_hotdata.udpv6_protocol, IPPROTO_UDP);</span><br><span class="line">net/ipv6/ip6_gre.c:	err = inet6_add_protocol(&amp;ip6gre_protocol, IPPROTO_GRE);</span><br><span class="line">net/ipv6/reassembly.c:	ret = inet6_add_protocol(&amp;frag_protocol, IPPROTO_FRAGMENT);</span><br><span class="line">net/ipv6/protocol.c:int inet6_add_protocol(const struct inet6_protocol *prot, unsigned char protocol)</span><br><span class="line">net/ipv6/protocol.c:EXPORT_SYMBOL(inet6_add_protocol);</span><br><span class="line">net/ipv6/tcp_ipv6.c:	ret = inet6_add_protocol(&amp;net_hotdata.tcpv6_protocol, IPPROTO_TCP);</span><br><span class="line">net/ipv6/icmp.c:	if (inet6_add_protocol(&amp;icmpv6_protocol, IPPROTO_ICMPV6) &lt; 0)</span><br><span class="line">net/ipv6/tunnel6.c:	if (inet6_add_protocol(&amp;tunnel6_protocol, IPPROTO_IPV6)) &#123;</span><br><span class="line">net/ipv6/tunnel6.c:	if (inet6_add_protocol(&amp;tunnel46_protocol, IPPROTO_IPIP)) &#123;</span><br><span class="line">net/ipv6/tunnel6.c:	    inet6_add_protocol(&amp;tunnelmpls6_protocol, IPPROTO_MPLS)) &#123;</span><br><span class="line">include/net/protocol.h:int inet6_add_protocol(const struct inet6_protocol *prot, unsigned char num);</span><br><span class="line">➜  linux git:(master)</span><br></pre></td></tr></table></figure>
+
+<h4 id="IPPROTO-ROUTING-字段处理"><a href="#IPPROTO-ROUTING-字段处理" class="headerlink" title="IPPROTO_ROUTING 字段处理"></a><code>IPPROTO_ROUTING</code> 字段处理</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">835 static const struct inet6_protocol rthdr_protocol = &#123;</span><br><span class="line">836         .handler        =       ipv6_rthdr_rcv,</span><br><span class="line">837         .flags          =       INET6_PROTO_NOPOLICY,</span><br><span class="line">838 &#125;;</span><br></pre></td></tr></table></figure>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ret = inet6_add_protocol(&amp;rthdr_protocol, IPPROTO_ROUTING);</span><br></pre></td></tr></table></figure>
+
+<h4 id="TCP协议处理"><a href="#TCP协议处理" class="headerlink" title="TCP协议处理"></a>TCP协议处理</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">2406         net_hotdata.tcpv6_protocol = (struct inet6_protocol) &#123;</span><br><span class="line">2407                 .handler     = tcp_v6_rcv,</span><br><span class="line">2408                 .err_handler = tcp_v6_err,</span><br><span class="line">2409                 .flags       = INET6_PROTO_NOPOLICY | INET6_PROTO_FINAL,</span><br><span class="line">2410         &#125;;</span><br><span class="line">2411         ret = inet6_add_protocol(&amp;net_hotdata.tcpv6_protocol, IPPROTO_TCP);</span><br></pre></td></tr></table></figure>
+
+<h4 id="IPV6-in-IPv4-tunnel协议处理"><a href="#IPV6-in-IPv4-tunnel协议处理" class="headerlink" title="IPV6-in-IPv4 tunnel协议处理"></a>IPV6-in-IPv4 tunnel协议处理</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">239 static const struct inet6_protocol tunnel6_protocol = &#123;</span><br><span class="line">240         .handler        = tunnel6_rcv,</span><br><span class="line">241         .err_handler    = tunnel6_err,</span><br><span class="line">242         .flags          = INET6_PROTO_NOPOLICY|INET6_PROTO_FINAL,</span><br><span class="line">243 &#125;;</span><br><span class="line">...</span><br><span class="line"></span><br><span class="line">257 static int __init tunnel6_init(void)</span><br><span class="line">258 &#123;</span><br><span class="line">259         if (inet6_add_protocol(&amp;tunnel6_protocol, IPPROTO_IPV6)) &#123;</span><br><span class="line">...</span><br><span class="line"></span><br><span class="line"> 52   IPPROTO_IPV6 = 41,            /* IPv6-in-IPv4 tunnelling              */</span><br></pre></td></tr></table></figure>
+
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2020/10/03/IPv6-how-to-support-IPv6-ext-header/" data-id="cmb7wpkqs001q1qoa3kedhyw9" data-title="IPv6: how to support IPv6 ext header" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2021/10/24/how-to-run-hexo-with-docker-image/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          aws上部署hexo步骤记录
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2020/03/25/2020-03-25-kern-ovs-data-struct/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">内核OVS的学习总结</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/12/">December 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/">tcp三次握手 --- 逐渐消失的tcp半链接队列</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/05/tcp-req-queue-length-check/">创建req scoket时的三个长度检查</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/01/netdev-state-flags-part1/">网口状态标志位详解(Part 1/2)</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2025 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

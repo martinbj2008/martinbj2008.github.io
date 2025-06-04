@@ -4,17 +4,17 @@
   <meta charset="utf-8">
   
   
-  <title>Kernel study</title>
+  <title>Kernel Study Notes</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
   <meta property="og:type" content="website">
-<meta property="og:title" content="Kernel study">
+<meta property="og:title" content="Kernel Study Notes">
 <meta property="og:url" content="https://martinbj2008.github.io/index.html">
-<meta property="og:site_name" content="Kernel study">
+<meta property="og:site_name" content="Kernel Study Notes">
 <meta property="og:locale" content="en_US">
 <meta property="article:author" content="Martinbj2008">
 <meta name="twitter:card" content="summary">
   
-    <link rel="alternate" href="/atom.xml" title="Kernel study" type="application/atom+xml">
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
   
   
     <link rel="shortcut icon" href="/favicon.png">
@@ -43,7 +43,7 @@
   <div id="header-outer" class="outer">
     <div id="header-title" class="inner">
       <h1 id="logo-wrap">
-        <a href="/" id="logo">Kernel study</a>
+        <a href="/" id="logo">Kernel Study Notes</a>
       </h1>
       
     </div>
@@ -73,10 +73,10 @@
       <div class="outer">
         <section id="main">
   
-    <article id="post-2020-03-25-kern-ovs-data-struct" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+    <article id="post-tcp-paws-check" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
-    <a href="/2020/03/25/2020-03-25-kern-ovs-data-struct/" class="article-date">
-  <time class="dt-published" datetime="2020-03-25T10:56:08.000Z" itemprop="datePublished">2020-03-25</time>
+    <a href="/2025/05/07/tcp-paws-check/" class="article-date">
+  <time class="dt-published" datetime="2025-05-07T20:53:09.000Z" itemprop="datePublished">2025-05-07</time>
 </a>
     
   </div>
@@ -87,7 +87,7 @@
         
   
     <h1 itemprop="name">
-      <a class="p-name article-title" href="/2020/03/25/2020-03-25-kern-ovs-data-struct/">内核OVS的学习总结</a>
+      <a class="p-name article-title" href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
     </h1>
   
 
@@ -95,22 +95,24 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <hr>
-<p>OVS里最重要的几个元素：vport，flow，datapath。<br>其中datapth是vport和flow的桥梁。</p>
-<p><img src="/images/ovs_kernl_full.png" alt="kernel ovs 核心结构体及其关联"></p>
-<h2 id="VPORT"><a href="#VPORT" class="headerlink" title="VPORT"></a>VPORT</h2><p>内核包含多个datapath（brige），上面包含一个或者多个vport。<br>其中一个VPORT表示一个端口，一个vport只能归于一个特定的datapath。<br>每个vport有自己的<code>type</code>,  对应不同的<code>vport ops</code>.<br>每个内核网口被注册为vport的时候。</p>
-        
-          <p class="article-more-link">
-            <a href="/2020/03/25/2020-03-25-kern-ovs-data-struct/#more">Read More</a>
-          </p>
-        
+        <h2 id="PAWS-检查："><a href="#PAWS-检查：" class="headerlink" title="PAWS 检查："></a>PAWS 检查：</h2><ol>
+<li>tcp_timewait_state_process 中使用，也就是在syn 报文明中了 tw 状态的 socket 山海，才使用。 不是所有syn报文都做检查</li>
+</ol>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"> 91 enum tcp_tw_status</span><br><span class="line"> 92 tcp_timewait_state_process(struct inet_timewait_sock *tw, struct sk_buff *skb,</span><br><span class="line"> 93                            const struct tcphdr *th)</span><br><span class="line"> 94 &#123;</span><br><span class="line"> 95         struct tcp_options_received tmp_opt;</span><br><span class="line"> 96         struct tcp_timewait_sock *tcptw = tcp_twsk((struct sock *)tw);</span><br><span class="line"> 97         bool paws_reject = false;</span><br><span class="line"> 98</span><br><span class="line"> 99         tmp_opt.saw_tstamp = 0;</span><br><span class="line">100         if (th-&gt;doff &gt; (sizeof(*th) &gt;&gt; 2) &amp;&amp; tcptw-&gt;tw_ts_recent_stamp) &#123;</span><br><span class="line">101                 tcp_parse_options(skb, &amp;tmp_opt, 0, NULL);</span><br><span class="line">102</span><br><span class="line">103                 if (tmp_opt.saw_tstamp) &#123;</span><br><span class="line">104                         tmp_opt.rcv_tsecr       -= tcptw-&gt;tw_ts_offset;</span><br><span class="line">105                         tmp_opt.ts_recent       = tcptw-&gt;tw_ts_recent;</span><br><span class="line">106                         tmp_opt.ts_recent_stamp = tcptw-&gt;tw_ts_recent_stamp;</span><br><span class="line">107                         paws_reject = tcp_paws_reject(&amp;tmp_opt, th-&gt;rst);</span><br><span class="line">108                 &#125;</span><br><span class="line">109         &#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line">1142</span><br><span class="line">1143 static inline bool tcp_paws_check(const struct tcp_options_received *rx_opt,</span><br><span class="line">1144                                   int paws_win)</span><br><span class="line">1145 &#123;</span><br><span class="line">1146         if ((s32)(rx_opt-&gt;ts_recent - rx_opt-&gt;rcv_tsval) &lt;= paws_win)</span><br><span class="line">1147                 return true;</span><br><span class="line">1148         if (unlikely(get_seconds() &gt;= rx_opt-&gt;ts_recent_stamp + TCP_PAWS_24DAYS))</span><br><span class="line">1149                 return true;</span><br><span class="line">1150         /*</span><br><span class="line">1151          * Some OSes send SYN and SYNACK messages with tsval=0 tsecr=0,</span><br><span class="line">1152          * then following tcp messages have valid values. Ignore 0 value,</span><br><span class="line">1153          * or else &#x27;negative&#x27; tsval might forbid us to accept their packets.</span><br><span class="line">1154          */</span><br><span class="line">1155         if (!rx_opt-&gt;ts_recent)</span><br><span class="line">1156                 return true;</span><br><span class="line">1157         return false;</span><br><span class="line">1158 &#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">1160 static inline bool tcp_paws_reject(const struct tcp_options_received *rx_opt,</span><br><span class="line">1161                                    int rst)</span><br><span class="line">1162 &#123;</span><br><span class="line">1163         if (tcp_paws_check(rx_opt, 0))</span><br><span class="line">1164                 return false;</span><br><span class="line">1165</span><br><span class="line">1166         /* RST segments are not recommended to carry timestamp,</span><br><span class="line">1167            and, if they do, it is recommended to ignore PAWS because</span><br><span class="line">1168            &quot;their cleanup function should take precedence over timestamps.&quot;</span><br><span class="line">1169            Certainly, it is mistake. It is necessary to understand the reasons</span><br><span class="line">1170            of this constraint to relax it: if peer reboots, clock may go</span><br><span class="line">1171            out-of-sync and half-open connections will not be reset.</span><br><span class="line">1172            Actually, the problem would be not existing if all</span><br><span class="line">1173            the implementations followed draft about maintaining clock</span><br><span class="line">1174            via reboots. Linux-2.2 DOES NOT!</span><br><span class="line">1175</span><br><span class="line">1176            However, we can relax time bounds for RST segments to MSL.</span><br><span class="line">1177          */</span><br><span class="line">1178         if (rst &amp;&amp; get_seconds() &gt;= rx_opt-&gt;ts_recent_stamp + TCP_PAWS_MSL)</span><br><span class="line">1179                 return false;</span><br><span class="line">1180         return true;</span><br><span class="line">1181 &#125;</span><br></pre></td></tr></table></figure>
+
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2020/03/25/2020-03-25-kern-ovs-data-struct/" data-id="clnfhaspc006pe0mh8xmndz5y" data-title="内核OVS的学习总结" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2025/05/07/tcp-paws-check/" data-id="cmb7wpkrk00371qoa01h62zy5" data-title="PAWS 在tcp协议栈中的实现" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li></ul>
+
     </footer>
   </div>
   
@@ -119,288 +121,14 @@
 
 
   
-    <article id="post-2020-03-15-net-rx-drop-1" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+    <article id="post-how-tcp-server-accept-a-new-connection-request" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
-    <a href="/2020/03/15/2020-03-15-net-rx-drop-1/" class="article-date">
-  <time class="dt-published" datetime="2020-03-15T21:20:02.000Z" itemprop="datePublished">2020-03-15</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2020/03/15/2020-03-15-net-rx-drop-1/">net rx drop(续)</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h3 id="接上部"><a href="#接上部" class="headerlink" title="接上部"></a>接上部</h3><p>如上半部分析，导致rx drop值增加的报文有三类</p>
-<ul>
-<li>IPv6</li>
-<li>STP</li>
-<li>LLDP</li>
-</ul>
-<p>至此，为什么drop统计值增加，能够解释清楚了。</p>
-        
-          <p class="article-more-link">
-            <a href="/2020/03/15/2020-03-15-net-rx-drop-1/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2020/03/15/2020-03-15-net-rx-drop-1/" data-id="clnfhaspb006me0mh4cccc4f8" data-title="net rx drop(续)" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2020-03-15-net-rx-drop" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2020/03/15/2020-03-15-net-rx-drop/" class="article-date">
-  <time class="dt-published" datetime="2020-03-15T21:16:54.000Z" itemprop="datePublished">2020-03-15</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2020/03/15/2020-03-15-net-rx-drop/">net rx drop</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="问题来源"><a href="#问题来源" class="headerlink" title="问题来源"></a>问题来源</h2><p>接OP问题报告，监控到部分机器的net rx drop统计值异常，触发报警，<br>需排查具体原因，并确认是否影响业务。</p>
-<h2 id="问题分析"><a href="#问题分析" class="headerlink" title="问题分析"></a>问题分析</h2><h3 id="复现问题"><a href="#复现问题" class="headerlink" title="复现问题"></a>复现问题</h3><p>跟OP同学确认,通过采集<code>/proc/net/dev</code>下的rx drop。<br>登录到出问题的机器上, 确认内核该统计值确实异常。</p>
-<ul>
-<li>异常报文个数不多，大约1s一个左右。</li>
-<li>不是所有机器都有异常，有部分机器drop统计为0.</li>
-</ul>
-<h3 id="相关内核代码"><a href="#相关内核代码" class="headerlink" title="相关内核代码"></a>相关内核代码</h3><p>当一个数据报文经过对端设备（交换机或者网卡）传输到本机物理网卡时候，需要经过<br>    <code>网卡-- 网卡驱动-- 网络协议栈</code><br>这几个模块的处理。我们看到的drop统计值在增加，是在网络协议栈的入口处理部分产生异常导致。</p>
-        
-          <p class="article-more-link">
-            <a href="/2020/03/15/2020-03-15-net-rx-drop/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2020/03/15/2020-03-15-net-rx-drop/" data-id="clnfhaspb006ne0mh3rbk6vfk" data-title="net rx drop" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2017-05-15-slabinfo-cause-delay" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2017/05/15/2017-05-15-slabinfo-cause-delay/" class="article-date">
-  <time class="dt-published" datetime="2017-05-15T10:56:08.000Z" itemprop="datePublished">2017-05-15</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2017/05/15/2017-05-15-slabinfo-cause-delay/">slabinfo 惹的祸</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <p>mysql访问延迟问题分析</p>
-<h2 id="问题背景"><a href="#问题背景" class="headerlink" title="问题背景"></a>问题背景</h2><p>收到数据库同学的问题排查的请求，<br>同一个数据中心里，dbproxy到mysql的连接失败率偏高，其tcp connect调用的超时时间是20ms+。</p>
-        
-          <p class="article-more-link">
-            <a href="/2017/05/15/2017-05-15-slabinfo-cause-delay/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2017/05/15/2017-05-15-slabinfo-cause-delay/" data-id="clnfhaspa006ke0mheztkd6ts" data-title="slabinfo 惹的祸" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2016-11-23-what-is-tfo" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2016/11/23/2016-11-23-what-is-tfo/" class="article-date">
-  <time class="dt-published" datetime="2016-11-23T10:56:08.000Z" itemprop="datePublished">2016-11-23</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2016/11/23/2016-11-23-what-is-tfo/">WHAT is TFO</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="什么是tcp-fast-open（TFO）"><a href="#什么是tcp-fast-open（TFO）" class="headerlink" title="什么是tcp fast open（TFO）"></a>什么是tcp fast open（TFO）</h2><h3 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h3><p>网络上有大量的短连接，传输的数据很少。google统计显示，其访问请求里有30%左右的流量是短连接。     </p>
-<h3 id="原理"><a href="#原理" class="headerlink" title="原理"></a>原理</h3><p>针对tcp 短连接的一个优化。在syn请求里携带请求数据，让server端尽早处理，进而降低一个RTT的延迟。<br>client端发送时候在syn报文里，增加一个tcp option选项(TFO)，server端通过它校验client端的合法性。    </p>
-        
-          <p class="article-more-link">
-            <a href="/2016/11/23/2016-11-23-what-is-tfo/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2016/11/23/2016-11-23-what-is-tfo/" data-id="clnfhasp9006ie0mh4jcg9b0u" data-title="WHAT is TFO" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2016-11-23-configure-rss-for-ixgbe" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2016/11/23/2016-11-23-configure-rss-for-ixgbe/" class="article-date">
-  <time class="dt-published" datetime="2016-11-23T07:33:07.000Z" itemprop="datePublished">2016-11-23</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2016/11/23/2016-11-23-configure-rss-for-ixgbe/">configure rss for ixgbe</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h3 id="配置ixgbe网卡的RSS"><a href="#配置ixgbe网卡的RSS" class="headerlink" title="配置ixgbe网卡的RSS"></a>配置ixgbe网卡的RSS</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">ethtool -K em1 ntuple on</span><br><span class="line">ethtool --show-ntuple em1</span><br><span class="line">ethtool --config-ntuple em1  flow-type tcp4 dst-port 60001 action 1</span><br><span class="line">ethtool --config-ntuple em1  flow-type tcp4 dst-port 60002 action 2</span><br><span class="line">ethtool --show-ntuple em1</span><br></pre></td></tr></table></figure>
-        
-          <p class="article-more-link">
-            <a href="/2016/11/23/2016-11-23-configure-rss-for-ixgbe/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2016/11/23/2016-11-23-configure-rss-for-ixgbe/" data-id="clnfhasp8006ge0mh1ag7di60" data-title="configure rss for ixgbe" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2016-11-07-kpatch-introduction" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2016/11/07/2016-11-07-kpatch-introduction/" class="article-date">
-  <time class="dt-published" datetime="2016-11-07T08:20:10.000Z" itemprop="datePublished">2016-11-07</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2016/11/07/2016-11-07-kpatch-introduction/">How to use kpatch</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h3 id="搭建kpatch-builder"><a href="#搭建kpatch-builder" class="headerlink" title="搭建kpatch builder"></a>搭建kpatch builder</h3><p>以centos7.2为例。</p>
-<p>默认centos7.2的安装的内核版本是<code>3.10.0-327.el7.x86_64</code>,这个内核版本当初是通过<code>gcc 4.8.3</code>编译的。<br>而centos7.2自带gcc rpm包的版本则是 <code>4.8.5</code></p>
-<p>kpatch build命令执行的时候，首先检查gcc的版本是否一致，<br>因为两者的版本不一致，所以kpatch build命令会失败。<br>当然我们可以使用<code>--skip-gcc-check</code>，跳过这个检查，我也测试发现在一些简单补丁下可以打包通过。<br>但是系统不推荐这样做的，会有一定的风险。</p>
-        
-          <p class="article-more-link">
-            <a href="/2016/11/07/2016-11-07-kpatch-introduction/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2016/11/07/2016-11-07-kpatch-introduction/" data-id="clnfhasp6006ce0mh3zqnhnd6" data-title="How to use kpatch" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2016-10-13-udp-rss-hash-cause-low-iperf-perforamnce" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2016/10/26/2016-10-13-udp-rss-hash-cause-low-iperf-perforamnce/" class="article-date">
-  <time class="dt-published" datetime="2016-10-26T03:47:45.000Z" itemprop="datePublished">2016-10-26</time>
+    <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/" class="article-date">
+  <time class="dt-published" datetime="2025-05-06T14:29:11.000Z" itemprop="datePublished">2025-05-06</time>
 </a>
     
   <div class="article-category">
-    <a class="article-category-link" href="/categories/netcore/">netcore</a>
+    <a class="article-category-link" href="/categories/socket/">socket</a>
   </div>
 
   </div>
@@ -411,7 +139,7 @@
         
   
     <h1 itemprop="name">
-      <a class="p-name article-title" href="/2016/10/26/2016-10-13-udp-rss-hash-cause-low-iperf-perforamnce/">udp rss hash causes low iperf perforamnce</a>
+      <a class="p-name article-title" href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/">tcp三次握手 --- 逐渐消失的tcp半链接队列</a>
     </h1>
   
 
@@ -419,74 +147,489 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <h2 id="vxlan下iperf性能问题"><a href="#vxlan下iperf性能问题" class="headerlink" title="vxlan下iperf性能问题"></a>vxlan下iperf性能问题</h2><p>VXlan网络下，在两个容器(分别在两个host上)上，使用iperf进行tcp网络性能测试，带宽只能达到3.5Gb&#x2F;s左右。<br>而两个容器所在的host机器之间是万兆网络环境，host上的网卡是ixgbe 10G网卡</p>
-<h2 id="解决方法"><a href="#解决方法" class="headerlink" title="解决方法"></a>解决方法</h2><ol>
-<li><p>发送端使用多线程参数 <code>-P</code></p>
- <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">iperf  -c 192.168.51.2   -P8 -t 1000</span><br></pre></td></tr></table></figure>
-</li>
-<li><p>接收端IXGBE网卡RSShash使用hash(SrcIP, DstIP, <font color='red'>SrcPort, DstPort</font>)</p>
- <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ethtool -N em2 rx-flow-hash udp4 sdfn</span><br></pre></td></tr></table></figure>
-        
-          <p class="article-more-link">
-            <a href="/2016/10/26/2016-10-13-udp-rss-hash-cause-low-iperf-perforamnce/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2016/10/26/2016-10-13-udp-rss-hash-cause-low-iperf-perforamnce/" data-id="clnfhasp50069e0mhc9bvg2yh" data-title="udp rss hash causes low iperf perforamnce" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/rss/" rel="tag">rss</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/udp/" rel="tag">udp</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/vxlan/" rel="tag">vxlan</a></li></ul>
+        <!-- toc -->
 
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2016-02-26-tcp-ack-study" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2016/02/26/2016-02-26-tcp-ack-study/" class="article-date">
-  <time class="dt-published" datetime="2016-02-26T01:35:58.000Z" itemprop="datePublished">2016-02-26</time>
-</a>
-    
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2016/02/26/2016-02-26-tcp-ack-study/">TCP ack study</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <p>kernel version <code>v4.5</code>    </p>
-<p>两个重要并且容易混淆的函数:   </p>
+<h2 id="概要：十年演进对比"><a href="#概要：十年演进对比" class="headerlink" title="概要：十年演进对比"></a>概要：十年演进对比</h2><h3 id="历史实现-v4-3"><a href="#历史实现-v4-3" class="headerlink" title="历史实现(v4.3)"></a>历史实现(v4.3)</h3><p>网上大部分文档这部分内容讲的比较多，简单来说，可以把半链接队列的逻辑概括如下:</p>
 <ul>
-<li><code>tcp_v4_rcv</code>    </li>
-<li><code>tcp_v4_do_rcv</code></li>
+<li>收到syn报文，查找listen socket。</li>
+<li>创建一个半链接socket(req socket)，并放入listen socket的半链接队列里，发送syn+ack报文</li>
+<li>收到client回复的ack报文，查找到对应的半链接socket(req socket)</li>
+<li>基于半链接socket和ack报文创建child socket</li>
+<li>把child socket(req)加入到accept队列中，等待accept系统调用&#x2F;激活</li>
 </ul>
-<p>类似于中断处理的上半部和下半部，<br>tcp的处理分为了的总入口函数是<code>tcp_v4_rcv</code>,<br>而<code>tcp_v4_do_rcv</code>则是真正处理tcp报文,<br>并传送到用户空间。</p>
-<p>其他的像拥塞控制，乱序调整等都在<code>tcp_v4_do_rcv</code>之前被做掉了。</p>
+<h3 id="当前实现-v6-14"><a href="#当前实现-v6-14" class="headerlink" title="当前实现(v6.14)"></a>当前实现(v6.14)</h3><p>在v6.14内核里，三次握手的处理流程如下：</p>
+<ul>
+<li>step1：收到一个syn请求报文：查找到对应的listen socket</li>
+<li>step2：创建一个半链接socket(req socket)，记录 syn 请求的一些字段信息，如seq, mss等。</li>
+<li>step3：构造并发送syn+ack报文</li>
+<li>step4:  把半链接socket(req socket)放入全局(netns)的ehash链表中，并统计半链接socket个数。通常说的半链接队列长度。<br> + 全局：确切说是，当前netns(net namesapce)。一般默认是指当前物理机的内核协议栈。当有 docker实例（启用网络隔离）时候，全局则是指当前 docker 实例的内核协议栈。docker如何使用netsns隔离，不展开。为了理解方便，这里我们以没有docker 隔离的场景为例。<br> + ehash链表：一个hash 链表，存放有全部establish状态的socket，当然tw状态的也在这个链表里。关联度不高，不展开。<br> <em><strong>不同点 ：使用全局ehash链表，而不是 listen socket的半链接队列</strong></em></li>
+<li>step5：收到client回复的ack报文，查找到对应的半链接socket(req socket)</li>
+<li>step6：基于半链接socket 和ack报文创建child socket</li>
+<li>step7：把新创建的child socket 插入到 ehash链表中。同时把req socket从链上摘掉。</li>
+<li>step8：把req socket加入到listen socket的accept队列中，同时让req下的关联<code>socket</code>指针指向child。</li>
+<li>step9： 发送listen socket的data_ready消息给应用程序， 等待listen socket上的accept系统调用&#x2F;激活。</li>
+<li>step10： accept系统调用把req socket从accept队列上拆除。同时，封装child socket，给用户返回其对应的fd.</li>
+</ul>
+<p> <img src="/images/sock/tcp_handshake_summary.png" alt="tcp三次握手概要图"></p>
+<h3 id="差异点"><a href="#差异点" class="headerlink" title="差异点"></a>差异点</h3><ul>
+<li>使用全局ehash 链表而不是listen socket 下的半链接队列, 来存放半链接(req) socket。<br>  队列只是一个习惯性的叫法，严格意义上说不合适。很早(20+年)之前，内核就已经使用hash链接替换队列存放半链接socket了。</li>
+<li>长度检查：半链接个数(队列长度)和accept队列长度的检查</li>
+<li>ack报文处理逻辑：查找半链接socket，减少锁listen socket的时长。</li>
+</ul>
         
           <p class="article-more-link">
-            <a href="/2016/02/26/2016-02-26-tcp-ack-study/#more">Read More</a>
+            <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/#more">Read More</a>
           </p>
         
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2016/02/26/2016-02-26-tcp-ack-study/" data-id="clnfhasp30066e0mharbs6wdq" data-title="TCP ack study" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2025/05/06/how-tcp-server-accept-a-new-connection-request/" data-id="cmb7wpkr3002d1qoa73ub2ivn" data-title="tcp三次握手 --- 逐渐消失的tcp半链接队列" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-tcp-req-queue-length-check" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/05/05/tcp-req-queue-length-check/" class="article-date">
+  <time class="dt-published" datetime="2025-05-05T23:45:58.000Z" itemprop="datePublished">2025-05-05</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/socket/">socket</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2025/05/05/tcp-req-queue-length-check/">创建req scoket时的三个长度检查</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="创建半链接时的三个长度检查"><a href="#创建半链接时的三个长度检查" class="headerlink" title="创建半链接时的三个长度检查"></a>创建半链接时的三个长度检查</h3><p>在处理TCP-SYN首包时候， <code>tcp_conn_request</code>函数里， 会有三个不同条件的长度检查。 </p>
+<ul>
+<li><code>inet_csk_reqsk_queue_is_full</code> 半链接的个数超过sk_max_ack_backlog， 则丢包。</li>
+<li><code>sk_acceptq_is_full</code>： accept 队列长度超过sk_max_ack_backlog，则丢包。</li>
+<li><code>sysctl_tcp_syncookies</code>禁用(值为0)时, <code>sysctl_max_syn_backlog</code> 与<code>inet_csk_reqsk_queue_len</code>： 队列长度如果超过sysctl_max_syn_backlog的3&#x2F;4则丢包</li>
+</ul>
+<p>其中，</p>
+<ul>
+<li><code>sysctl_max_syn_backlog</code>： 初始化时，最小 128。如果ehash_entries&#x2F;128比128大，取最大值。ehash_entries是 tcp 的 hash 桶个数。</li>
+<li><code>sysctl_tcp_syncookies</code>:  初始值为 1</li>
+</ul>
+<h4 id="判断1：-半链接队列是否溢出-inet-csk-reqsk-queue-is-full"><a href="#判断1：-半链接队列是否溢出-inet-csk-reqsk-queue-is-full" class="headerlink" title="判断1： 半链接队列是否溢出 inet_csk_reqsk_queue_is_full"></a>判断1： 半链接队列是否溢出 inet_csk_reqsk_queue_is_full</h4><p>虽然不再维护半链接队列了, 但是每次创建req socket后，这个统计值都是在增加的。<br>因此如果<code>半链接个数</code>超过了最大值<code>sk_max_ack_backlog</code>，则启用cookie(sysctl_tcp_syncookies为1或2)，如果不支持cookie，则丢弃。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">278 static inline int inet_csk_reqsk_queue_len(const struct sock *sk)</span><br><span class="line">279 &#123;</span><br><span class="line">280         return reqsk_queue_len(&amp;inet_csk(sk)-&gt;icsk_accept_queue);</span><br><span class="line">281 &#125;</span><br><span class="line">282</span><br><span class="line">283 static inline int inet_csk_reqsk_queue_is_full(const struct sock *sk)</span><br><span class="line">284 &#123;</span><br><span class="line">285         return inet_csk_reqsk_queue_len(sk) &gt; READ_ONCE(sk-&gt;sk_max_ack_backlog);</span><br><span class="line">286 &#125;</span><br></pre></td></tr></table></figure>
+<p>当前内核默认启用syncookie机制(sysctl_tcp_syncookies为1)，队列溢出会触发synccookie 机制。<br>只有关闭了tcpcookie(0)后，才会在队列溢出时候丢弃syn报文。</p>
+        
+          <p class="article-more-link">
+            <a href="/2025/05/05/tcp-req-queue-length-check/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2025/05/05/tcp-req-queue-length-check/" data-id="cmb7wpkrm003a1qoagbqc2w3t" data-title="创建req scoket时的三个长度检查" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-netdev-state-flags-part2" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/05/03/netdev-state-flags-part2/" class="article-date">
+  <time class="dt-published" datetime="2025-05-03T17:23:04.000Z" itemprop="datePublished">2025-05-03</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/netdev/">netdev</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <!-- TOC -->
+
+<p>####operstate的小插曲<br>2006年内核引入<code>operstate</code>特性，在当时协议栈的维护者中也是颇有争议的！！！<br><a target="_blank" rel="noopener" href="https://web.git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=b00055aa">引入operstat特性的patch</a><br> <img src="/./images/ip_link/operstate.png" alt="图4: 2006年协议栈加入operstate 特性"></p>
+<h2 id="标志位IFF-UP"><a href="#标志位IFF-UP" class="headerlink" title="标志位IFF_UP"></a>标志位<code>IFF_UP</code></h2><h3 id="设置-清除标志位IFF-UP"><a href="#设置-清除标志位IFF-UP" class="headerlink" title="设置&#x2F;清除标志位IFF_UP"></a>设置&#x2F;清除标志位<code>IFF_UP</code></h3><p><code>ip link set eth0 up</code>:</p>
+<ul>
+<li>每个<code>eth</code>口在内核里有对应的<code>struct net_device</code>。</li>
+<li>每个<code>netdev</code>设备里有一个上的flags用来存放标志位</li>
+<li><code>ip link set eth0 up</code> 设置 eth0口对应的<code>IFF_UP</code>标志。</li>
+<li><code>ip link set eth0 down</code>清除对应的<code>IFF_UP</code>标记。</li>
+</ul>
+<h3 id="ip-link源码实现"><a href="#ip-link源码实现" class="headerlink" title="ip link源码实现"></a>ip link源码实现</h3><p><code>ip link set eth0 up</code>命令实现：</p>
+<ul>
+<li>通过ioctol获取eth0口对应的flags，</li>
+<li>然后将<code>IFF_UP</code>标志位设置到 flags 上，</li>
+<li>再通过ioctol 命令<code>SIOCSIFFLAGS</code>下发会内核。</li>
+</ul>
+<p>具体实现在函数<code>do_set</code>和<code>do_chflags</code>中。</p>
+<ol>
+<li><code>do_set</code>：  解析命令，转换为需要设置的标志位。</li>
+</ol>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line">1370 static int do_set(int argc, char **argv)</span><br><span class="line">1371 &#123;</span><br><span class="line">...</span><br><span class="line">1383         while (argc &gt; 0) &#123;</span><br><span class="line">1384                 if (strcmp(*argv, &quot;up&quot;) == 0) &#123;</span><br><span class="line">1385                         mask |= IFF_UP;</span><br><span class="line">1386                         flags |= IFF_UP;</span><br><span class="line">1387                 &#125; else if (strcmp(*argv, &quot;down&quot;) == 0) &#123;</span><br><span class="line">1388                         mask |= IFF_UP;</span><br><span class="line">1389                         flags &amp;= ~IFF_UP;</span><br><span class="line">...</span><br><span class="line">1536         if (mask)</span><br><span class="line">1537                 return do_chflags(dev, flags, mask);</span><br></pre></td></tr></table></figure>
+
+<ol start="2">
+<li><code>do_chflags</code>: 借助<code>ioctl</code>函数接口，与内核交互。<ul>
+<li>首先，读取内核的网口标志位<code>netdev-&gt;flags</code>，</li>
+<li>把期望更新的标志位更新成期望值。</li>
+<li>最后，把期望的标志位状态下发回内核。</li>
+</ul>
+</li>
+</ol>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">static int do_chflags(const char *dev, __u32 flags, __u32 mask)</span><br><span class="line">...</span><br><span class="line">        err = ioctl(fd, SIOCGIFFLAGS, &amp;ifr);</span><br><span class="line">...</span><br><span class="line">        if ((ifr.ifr_flags^flags)&amp;mask) &#123;</span><br><span class="line">                ifr.ifr_flags &amp;= ~mask;</span><br><span class="line">                ifr.ifr_flags |= mask&amp;flags;</span><br><span class="line">                err = ioctl(fd, SIOCSIFFLAGS, &amp;ifr);</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p>*** 注意: *** ioctol命令参数里，获取和设置的命令名字, 只有一个字母<code>G</code>和<code>S</code>的差别。<br><img src="/./images/ip_link/ioctl.cmd.png"></p>
+<h4 id="内核代码实现"><a href="#内核代码实现" class="headerlink" title="内核代码实现"></a>内核代码实现</h4><p>ioctl在内核的对应实现比较复杂, 避免歪楼，单拉一篇去介绍实现吧。</p>
+<p>内核如何维护网卡设备的RUNNING 状态</p>
+<h3 id="流程概述"><a href="#流程概述" class="headerlink" title="流程概述"></a>流程概述</h3><p>主要几个部分：</p>
+<ol>
+<li>网卡驱动有个看门狗：不同网卡驱动实现可能不太一样 ，功能负责监控网卡硬件上网线的状态， 当网线状态变换的时候，会激发内核的 carrier 处理函数。</li>
+<li>内核两个通用的处理函数：<code>netif_carrier_on</code>和<code>netif_carrier_off</code>。这个函数会<ul>
+<li>设置或者清除<code>netdev-&gt;state</code>上的<code>__LINK_STATE_NOCARRIER</code>标志位。</li>
+<li>发送事件消息给linkwatch，做后续处理.</li>
+<li>如果是网线插好了状态， 会启动一个通用的看门狗，这个看门狗是负责检测tx队列是否’HUNG’了， 如果’HUNG’了就调用网卡对应的处理函数<code>ndo_tx_timeout</code>， 做一些应急补救，比如对网卡队列复位等操作。这里的看门狗跟网卡驱动里的看门狗还不是同一个看门狗。具体差别待研究。</li>
+</ul>
+</li>
+<li>linkwath模块：linkwatch本身是个workqueue 队列，对接受到的消息按照，分为紧急和非紧急两类。紧急的决定立即处理，非紧急的则挂到一个链表里，等定时器超时后，再集中处理。所有事件处理，最终都交给<code>linkwatch_do_dev(struct net_device *dev)</code>函数进行处理。 该函数更新<code>netdev-&gt;operate</code>标志位。同时调用通用的<code>dev_activate</code>或者<code>dev_deactivate</code>对网卡做网卡队列进行处理。 我们这里重点关注跟网卡状态位有管的部分，忽略跟网卡队列的处理。<br> 这里有两个重要函数<code>rfc2863_policy</code>和<code>default_operstate</code> 后面我们重点介绍。</li>
+</ol>
+<h4 id="carrier-on-和-off-函数"><a href="#carrier-on-和-off-函数" class="headerlink" title="carrier on 和 off 函数"></a>carrier on 和 off 函数</h4><p><code>netif_carrier_on</code>和<code>netif_carrier_off</code>: 内核里的两个通用的处理函数，功能基本对称</p>
+<h5 id="carrier标志位"><a href="#carrier标志位" class="headerlink" title="carrier标志位"></a>carrier标志位</h5><p>总结：<br>    <code>dev-&gt;state</code>下的<code>__LINK_STATE_NOCARRIER</code>是 carrier是否OK 的唯一判断标准。</p>
+        
+          <p class="article-more-link">
+            <a href="/2025/05/03/netdev-state-flags-part2/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2025/05/03/netdev-state-flags-part2/" data-id="cmb7wpkrh00311qoaalnta1qz" data-title="网口状态标志位解析part2: 内核如何维护网卡carrier的状态" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-netdev-state-flags-part1" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/05/01/netdev-state-flags-part1/" class="article-date">
+  <time class="dt-published" datetime="2025-05-01T10:24:11.000Z" itemprop="datePublished">2025-05-01</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/netdev/">netdev</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2025/05/01/netdev-state-flags-part1/">网口状态标志位详解(Part 1/2)</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <!-- toc -->
+
+<h1 id="常见问题"><a href="#常见问题" class="headerlink" title="常见问题"></a>常见问题</h1><p>我们在平常定位问题，经常会通过<code>ip link</code>或<code>ifconfig</code>查看网络环境和配置。其中网口的标志位是其中很重要的一个检查环节。在输出结果里，会有两组标志位信息</p>
+<ul>
+<li>一组是尖括弧里包含的值<code>&lt;BROADCAST,MULTICAST,UP,LOWER_UP\&gt;</code>，有很多标志位的组合。</li>
+<li>另一组是 <code>state UP</code>。还有其他状态如<code>DOWN</code>, <code>LOWERLAYERDOWN</code>等。<br><img src="/images/ip_link/iplink.running.png" alt="图1：ip link 输出结果"><br>这些信息有时候看起来是一致的, 有时候是重复的，甚至矛盾的。难免让人产生一些疑惑，这两组标志位分别代表什么？他们是什么关系？下面我们就这两组标志，逐个展开分析下。<br>我们先来看几个场景里，网口在不同状态下，输出的标志位有哪些差异。</li>
+</ul>
+<h2 id="场景1：网线没插，显示NO-CARRIER"><a href="#场景1：网线没插，显示NO-CARRIER" class="headerlink" title="场景1：网线没插，显示NO-CARRIER"></a>场景1：网线没插，显示<code>NO-CARRIER</code></h2><p><img src="/images/ip_link/iplink.no.carrier.png" alt="图2: 拔掉网线后的网口输出结果"></p>
+<ul>
+<li>【Q1】 网口状态标志位里有个明显特征，有个<code>NO-CARRIER</code>标志，但是状态里一个<code>UP</code>,一个<code>DOWN</code>，why? :(
+        
+          <p class="article-more-link">
+            <a href="/2025/05/01/netdev-state-flags-part1/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2025/05/01/netdev-state-flags-part1/" data-id="cmb7wpkrf002y1qoa4kyo0bqm" data-title="网口状态标志位详解(Part 1/2)" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-epoll-frame-summary" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2024/10/03/epoll-frame-summary/" class="article-date">
+  <time class="dt-published" datetime="2024-10-03T21:09:19.000Z" itemprop="datePublished">2024-10-03</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/sched/">sched</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2024/10/03/epoll-frame-summary/">epoll-frame-summary</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="epoll学习笔记"><a href="#epoll学习笔记" class="headerlink" title="epoll学习笔记"></a>epoll学习笔记</h3><ul>
+<li>epoll 相关结构体</li>
+<li>epoll 各个系统调用及内核实现</li>
+</ul>
+<p><img src="/images/epoll/epoll.2.png" alt="epoll相关结构体"><br><img src="/images/epoll/epoll.1.png" alt="epoll调用关联图"><br><img src="/images/epoll/epoll.3.png" alt="epoll调用关联图"><br><img src="/images/epoll/epoll.4.png" alt="epoll调用关联图"></p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2024/10/03/epoll-frame-summary/" data-id="cmb7wpkqv001x1qoa6z0200f8" data-title="epoll-frame-summary" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/sched/" rel="tag">sched</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-struct-group" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2024/09/21/struct-group/" class="article-date">
+  <time class="dt-published" datetime="2024-09-21T00:18:38.000Z" itemprop="datePublished">2024-09-21</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/others/">others</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2024/09/21/struct-group/">struct-group</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="struct-group"><a href="#struct-group" class="headerlink" title="__struct_group"></a><code>__struct_group</code></h2><p>浏览IPv6代码时候，看到这样一个新玩法，<br><code>__struct_group</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">118 struct ipv6hdr &#123;</span><br><span class="line">...</span><br><span class="line">132         __u8                    hop_limit;</span><br><span class="line">133</span><br><span class="line">134         __struct_group(/* no tag */, addrs, /* no attrs */,</span><br><span class="line">135                 struct  in6_addr        saddr;</span><br><span class="line">136                 struct  in6_addr        daddr;</span><br><span class="line">137         );</span><br><span class="line">138 &#125;;</span><br></pre></td></tr></table></figure>
+<p>###用法<br>再看一下用法：</p>
+<pre><code> 922 /* copy IPv6 saddr &amp; daddr to flow_keys, possibly using 64bit load/store
+ 923  * Equivalent to :      flow-&gt;v6addrs.src = iph-&gt;saddr;
+ 924  *                      flow-&gt;v6addrs.dst = iph-&gt;daddr;
+ 925  */
+ 926 static inline void iph_to_flow_copy_v6addrs(struct flow_keys *flow,
+ 927                                             const struct ipv6hdr *iph)
+ 928 &#123;
+ ...
+ 932         memcpy(&amp;flow-&gt;addrs.v6addrs, &amp;iph-&gt;addrs, sizeof(flow-&gt;addrs.v6addrs));
+ ...
+ <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line">###</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+ 11 /**
+ 12  * __struct_group() - Create a mirrored named and anonyomous struct
+ 13  *
+ 14  * @TAG: The tag name for the named sub-struct (usually empty)
+ 15  * @NAME: The identifier name of the mirrored sub-struct
+ 16  * @ATTRS: Any struct attributes (usually empty)
+ 17  * @MEMBERS: The member declarations for the mirrored structs
+ 18  *
+ 19  * Used to create an anonymous union of two structs with identical layout
+ 20  * and size: one anonymous and one named. The former&#39;s members can be used
+ 21  * normally without sub-struct naming, and the latter can be used to
+ 22  * reason about the start, end, and size of the group of struct members.
+ 23  * The named struct can also be explicitly tagged for layer reuse, as well
+ 24  * as both having struct attributes appended.
+ 25  */
+ 26 #define __struct_group(TAG, NAME, ATTRS, MEMBERS...) \
+ 27         union &#123; \
+ 28                 struct &#123; MEMBERS &#125; ATTRS; \
+ 29                 struct TAG &#123; MEMBERS &#125; ATTRS NAME; \
+ 30         &#125; ATTRS
+```
+</code></pre>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2024/09/21/struct-group/" data-id="cmb7wpkrj00341qoa3fd5bfva" data-title="struct-group" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/others/" rel="tag">others</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-ifconfig-alias-nic" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2024/05/03/ifconfig-alias-nic/" class="article-date">
+  <time class="dt-published" datetime="2024-05-03T22:08:32.000Z" itemprop="datePublished">2024-05-03</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/netdev/">netdev</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2024/05/03/ifconfig-alias-nic/">ifconfig通过别名给网口配置多个IP地址</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="内核如何管理-ip-地址"><a href="#内核如何管理-ip-地址" class="headerlink" title="内核如何管理 ip 地址"></a>内核如何管理 ip 地址</h3><p><img src="/images/ifa.png" alt="内核如何管理多网口多 IP 地址"></p>
+<h3 id="命令行操作"><a href="#命令行操作" class="headerlink" title="命令行操作"></a>命令行操作</h3><p>有时候我们需要给一个网口配置的有个 IP 地址，这时候我们有两种配置方法：</p>
+<ul>
+<li>使用 ifconfig 配置到网口别名上。</li>
+<li>使用 ip addr 命令直接配置到网口上。</li>
+</ul>
+<p>两种方法最终在内核实现是一样的，存储位置也一样，并且可以相互读写配置结果。</p>
+<p>比如将<code>9.9.9.199/24</code>配置到 lo 口上，并起个别名<code>lo:9</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">[root@VM-0-12-centos ~]# ifconfig  lo:9 9.9.9.199/24</span><br><span class="line">[root@VM-0-12-centos ~]# ifconfig  lo:9</span><br><span class="line">lo:9: flags=73&lt;UP,LOOPBACK,RUNNING&gt;  mtu 65536</span><br><span class="line">        inet 9.9.9.199  netmask 255.255.255.0</span><br><span class="line">        loop  txqueuelen 1000  (Local Loopback)</span><br><span class="line">[root@VM-0-12-centos ~]#</span><br></pre></td></tr></table></figure>
+<p>ifconfig命令的配置结果，也可以通用<code>ip link</code>命令来查看</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">[root@VM-0-12-centos ~]# ip a show dev lo</span><br><span class="line">1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000</span><br><span class="line">    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00</span><br><span class="line">    inet 127.0.0.1/8 scope host lo</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line">    inet 9.9.9.199/24 scope global lo:9</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line">    inet6 ::1/128 scope host</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br></pre></td></tr></table></figure>
+<p>网口的别名在ip命令里被当做<code>label</code>输出,放在scope字段后面</p>
+        
+          <p class="article-more-link">
+            <a href="/2024/05/03/ifconfig-alias-nic/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2024/05/03/ifconfig-alias-nic/" data-id="cmb7wpkre002v1qoah0q6b4mb" data-title="ifconfig通过别名给网口配置多个IP地址" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2023-12-27-ebpf-and-vlan-filter" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2023/12/27/2023-12-27-ebpf-and-vlan-filter/" class="article-date">
+  <time class="dt-published" datetime="2023-12-27T11:37:38.000Z" itemprop="datePublished">2023-12-27</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2023/12/27/2023-12-27-ebpf-and-vlan-filter/">2023-12-27 ebpf and vlan filter</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2023/12/27/2023-12-27-ebpf-and-vlan-filter/" data-id="cm9m9veje00090hnuduzz5493" data-title="2023-12-27 ebpf and vlan filter" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -498,12 +641,16 @@
 
 
   
-    <article id="post-2016-01-29-hw-timestamp-in-tcpdump" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+    <article id="post-core-entry-function-of-bpf-run" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
-    <a href="/2016/01/29/2016-01-29-hw-timestamp-in-tcpdump/" class="article-date">
-  <time class="dt-published" datetime="2016-01-29T06:15:26.000Z" itemprop="datePublished">2016-01-29</time>
+    <a href="/2022/08/27/core-entry-function-of-bpf-run/" class="article-date">
+  <time class="dt-published" datetime="2022-08-27T01:38:45.000Z" itemprop="datePublished">2022-08-27</time>
 </a>
     
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/bpf/">bpf</a>
+  </div>
+
   </div>
   <div class="article-inner">
     
@@ -512,7 +659,7 @@
         
   
     <h1 itemprop="name">
-      <a class="p-name article-title" href="/2016/01/29/2016-01-29-hw-timestamp-in-tcpdump/">hw timestamp in tcpdump</a>
+      <a class="p-name article-title" href="/2022/08/27/core-entry-function-of-bpf-run/">bfp 在内核运行的核心入口函数及其变形</a>
     </h1>
   
 
@@ -520,20 +667,21 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <h3 id="PCAP-TSTAMP-ADAPTER-and-PCAP-TSTAMP-ADAPTER-UNSYNCED"><a href="#PCAP-TSTAMP-ADAPTER-and-PCAP-TSTAMP-ADAPTER-UNSYNCED" class="headerlink" title="PCAP_TSTAMP_ADAPTER  and PCAP_TSTAMP_ADAPTER_UNSYNCED"></a>PCAP_TSTAMP_ADAPTER  and PCAP_TSTAMP_ADAPTER_UNSYNCED</h3><p><a target="_blank" rel="noopener" href="http://www.tcpdump.org/manpages/pcap-tstamp.7.html">tcpdump help</a></p>
-<h4 id="tcpudmp-use-j-option"><a href="#tcpudmp-use-j-option" class="headerlink" title="tcpudmp use -j option"></a>tcpudmp use -j option</h4><p>tcpdump main function</p>
+        <h2 id="bpf-prog内核运行核心入口函数"><a href="#bpf-prog内核运行核心入口函数" class="headerlink" title="bpf prog内核运行核心入口函数"></a>bpf prog内核运行核心入口函数</h2><h3 id="总结：-bpf-prog-run"><a href="#总结：-bpf-prog-run" class="headerlink" title="总结：___bpf_prog_run"></a>总结：<code>___bpf_prog_run</code></h3><p>bfp 在内核运行的核心入口函数:<code>___bpf_prog_run</code><br><code>___bpf_prog_run</code>是bfp的核心函数入口，该函数被多个不同stack size的函数调用。<br>函数指针数组interpreters这把上面的这些函数汇集到一起。<br>当bpf程序被加载到内核时候，内核创建为它一个bpf_prog结构体，根据prog的stacksize，选择对应的interpreters里的对应的<br>函数，并保存到bpf_prog里的bpf_func上。<br>这样后续hook点运行bpf_prog程序时候，就使用bpf_func运行。</p>
         
           <p class="article-more-link">
-            <a href="/2016/01/29/2016-01-29-hw-timestamp-in-tcpdump/#more">Read More</a>
+            <a href="/2022/08/27/core-entry-function-of-bpf-run/#more">Read More</a>
           </p>
         
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2016/01/29/2016-01-29-hw-timestamp-in-tcpdump/" data-id="clnfhasp10061e0mhds492614" data-title="hw timestamp in tcpdump" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2022/08/27/core-entry-function-of-bpf-run/" data-id="cmb7wpkqt001t1qoahlnl0zhh" data-title="bfp 在内核运行的核心入口函数及其变形" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li></ul>
+
     </footer>
   </div>
   
@@ -546,7 +694,7 @@
 
   <nav id="page-nav">
     
-    <span class="page-number current">1</span><a class="page-number" href="/page/2/">2</a><a class="page-number" href="/page/3/">3</a><span class="space">&hellip;</span><a class="page-number" href="/page/12/">12</a><a class="extend next" rel="next" href="/page/2/">Next &raquo;</a>
+    <span class="page-number current">1</span><a class="page-number" href="/page/2/">2</a><a class="page-number" href="/page/3/">3</a><span class="space">&hellip;</span><a class="page-number" href="/page/14/">14</a><a class="extend next" rel="next" href="/page/2/">Next &raquo;</a>
   </nav>
 
 </section>
@@ -557,7 +705,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Categories</h3>
     <div class="widget">
-      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IRQs/">IRQs</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/make/">make</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netcore/">netcore</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/virtnet/">virtnet</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
     </div>
   </div>
 
@@ -567,7 +715,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Tags</h3>
     <div class="widget">
-      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IRQ/" rel="tag">IRQ</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/SP/" rel="tag">SP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TCPDUMP/" rel="tag">TCPDUMP</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/arg/" rel="tag">arg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bash/" rel="tag">bash</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/beep/" rel="tag">beep</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bootmem/" rel="tag">bootmem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/cacahe/" rel="tag">cacahe</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/dump-sa/" rel="tag">dump sa</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ftrace/" rel="tag">ftrace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/glibc/" rel="tag">glibc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gtk/" rel="tag">gtk</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2markdown/" rel="tag">html2markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/html2text/" rel="tag">html2text</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet/" rel="tag">inet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inet-socket/" rel="tag">inet socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv4/" rel="tag">ipv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipvlan/" rel="tag">ipvlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kenel/" rel="tag">kenel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/km/" rel="tag">km</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kthread/" rel="tag">kthread</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kvm/" rel="tag">kvm</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/lc-trie/" rel="tag">lc-trie</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/makefile/" rel="tag">makefile</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mannual/" rel="tag">mannual</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/manpages-dev/" rel="tag">manpages-dev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/marco/" rel="tag">marco</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/markdown/" rel="tag">markdown</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mem/" rel="tag">mem</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/minivnc/" rel="tag">minivnc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/mmap/" rel="tag">mmap</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/net/" rel="tag">net</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/network/" rel="tag">network</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octean/" rel="tag">octean</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/octopress/" rel="tag">octopress</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/page/" rel="tag">page</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pernet/" rel="tag">pernet</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/pfn/" rel="tag">pfn</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/policy/" rel="tag">policy</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/qdisc/" rel="tag">qdisc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/reg/" rel="tag">reg</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/rss/" rel="tag">rss</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/schedule/" rel="tag">schedule</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sock/" rel="tag">sock</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/softirq/" rel="tag">softirq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/subst/" rel="tag">subst</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/summary/" rel="tag">summary</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sunrise/" rel="tag">sunrise</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/system-call/" rel="tag">system call</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/terminal/" rel="tag">terminal</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/timezone/" rel="tag">timezone</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/toolchain/" rel="tag">toolchain</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ubuntu/" rel="tag">ubuntu</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/udp/" rel="tag">udp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/usb/" rel="tag">usb</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/variant/" rel="tag">variant</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vhost/" rel="tag">vhost</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vimdiff/" rel="tag">vimdiff</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vxlan/" rel="tag">vxlan</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/watchdog/" rel="tag">watchdog</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/workqueue/" rel="tag">workqueue</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
     </div>
   </div>
 
@@ -577,7 +725,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Tag Cloud</h3>
     <div class="widget tagcloud">
-      <a href="/tags/IPv4/" style="font-size: 16.25px;">IPv4</a> <a href="/tags/IRQ/" style="font-size: 12.5px;">IRQ</a> <a href="/tags/SP/" style="font-size: 10px;">SP</a> <a href="/tags/TCPDUMP/" style="font-size: 10px;">TCPDUMP</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 11.25px;">address</a> <a href="/tags/arg/" style="font-size: 10px;">arg</a> <a href="/tags/bash/" style="font-size: 10px;">bash</a> <a href="/tags/beep/" style="font-size: 10px;">beep</a> <a href="/tags/bh/" style="font-size: 10px;">bh</a> <a href="/tags/bootmem/" style="font-size: 10px;">bootmem</a> <a href="/tags/cacahe/" style="font-size: 10px;">cacahe</a> <a href="/tags/checksum/" style="font-size: 11.25px;">checksum</a> <a href="/tags/debug/" style="font-size: 10px;">debug</a> <a href="/tags/dump-sa/" style="font-size: 10px;">dump sa</a> <a href="/tags/fib/" style="font-size: 13.75px;">fib</a> <a href="/tags/ftrace/" style="font-size: 10px;">ftrace</a> <a href="/tags/gcc/" style="font-size: 13.75px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/glibc/" style="font-size: 10px;">glibc</a> <a href="/tags/gtk/" style="font-size: 10px;">gtk</a> <a href="/tags/html2markdown/" style="font-size: 10px;">html2markdown</a> <a href="/tags/html2text/" style="font-size: 10px;">html2text</a> <a href="/tags/inet/" style="font-size: 10px;">inet</a> <a href="/tags/inet-socket/" style="font-size: 10px;">inet socket</a> <a href="/tags/ipv4/" style="font-size: 11.25px;">ipv4</a> <a href="/tags/ipv6/" style="font-size: 11.25px;">ipv6</a> <a href="/tags/ipvlan/" style="font-size: 10px;">ipvlan</a> <a href="/tags/irq/" style="font-size: 10px;">irq</a> <a href="/tags/kenel/" style="font-size: 10px;">kenel</a> <a href="/tags/kernel/" style="font-size: 20px;">kernel</a> <a href="/tags/km/" style="font-size: 10px;">km</a> <a href="/tags/kthread/" style="font-size: 10px;">kthread</a> <a href="/tags/kvm/" style="font-size: 10px;">kvm</a> <a href="/tags/lc-trie/" style="font-size: 10px;">lc-trie</a> <a href="/tags/makefile/" style="font-size: 10px;">makefile</a> <a href="/tags/mannual/" style="font-size: 10px;">mannual</a> <a href="/tags/manpages-dev/" style="font-size: 10px;">manpages-dev</a> <a href="/tags/marco/" style="font-size: 10px;">marco</a> <a href="/tags/markdown/" style="font-size: 10px;">markdown</a> <a href="/tags/mem/" style="font-size: 10px;">mem</a> <a href="/tags/memory/" style="font-size: 12.5px;">memory</a> <a href="/tags/minivnc/" style="font-size: 10px;">minivnc</a> <a href="/tags/mmap/" style="font-size: 10px;">mmap</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/net/" style="font-size: 13.75px;">net</a> <a href="/tags/netdev/" style="font-size: 11.25px;">netdev</a> <a href="/tags/netlink/" style="font-size: 15px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/octean/" style="font-size: 10px;">octean</a> <a href="/tags/octopress/" style="font-size: 10px;">octopress</a> <a href="/tags/page/" style="font-size: 10px;">page</a> <a href="/tags/pernet/" style="font-size: 10px;">pernet</a> <a href="/tags/pfn/" style="font-size: 10px;">pfn</a> <a href="/tags/policy/" style="font-size: 10px;">policy</a> <a href="/tags/qdisc/" style="font-size: 11.25px;">qdisc</a> <a href="/tags/reg/" style="font-size: 10px;">reg</a> <a href="/tags/route/" style="font-size: 17.5px;">route</a> <a href="/tags/rss/" style="font-size: 10px;">rss</a> <a href="/tags/sched/" style="font-size: 13.75px;">sched</a> <a href="/tags/schedule/" style="font-size: 10px;">schedule</a> <a href="/tags/sock/" style="font-size: 10px;">sock</a> <a href="/tags/socket/" style="font-size: 18.75px;">socket</a> <a href="/tags/softirq/" style="font-size: 12.5px;">softirq</a> <a href="/tags/subst/" style="font-size: 10px;">subst</a> <a href="/tags/summary/" style="font-size: 10px;">summary</a> <a href="/tags/sunrise/" style="font-size: 10px;">sunrise</a> <a href="/tags/system-call/" style="font-size: 10px;">system call</a> <a href="/tags/tcp/" style="font-size: 10px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 10px;">tcpdump</a> <a href="/tags/terminal/" style="font-size: 10px;">terminal</a> <a href="/tags/timezone/" style="font-size: 10px;">timezone</a> <a href="/tags/toolchain/" style="font-size: 11.25px;">toolchain</a> <a href="/tags/ubuntu/" style="font-size: 11.25px;">ubuntu</a> <a href="/tags/udp/" style="font-size: 10px;">udp</a> <a href="/tags/usb/" style="font-size: 10px;">usb</a> <a href="/tags/variant/" style="font-size: 10px;">variant</a> <a href="/tags/vhost/" style="font-size: 11.25px;">vhost</a> <a href="/tags/vim/" style="font-size: 11.25px;">vim</a> <a href="/tags/vimdiff/" style="font-size: 10px;">vimdiff</a> <a href="/tags/vxlan/" style="font-size: 10px;">vxlan</a> <a href="/tags/watchdog/" style="font-size: 10px;">watchdog</a> <a href="/tags/workqueue/" style="font-size: 13.75px;">workqueue</a> <a href="/tags/xfrm/" style="font-size: 16.25px;">xfrm</a>
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
     </div>
   </div>
 
@@ -586,7 +734,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Archives</h3>
     <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/02/">February 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/12/">December 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
     </div>
   </div>
 
@@ -599,23 +747,23 @@
       <ul>
         
           <li>
-            <a href="/2020/03/25/2020-03-25-kern-ovs-data-struct/">内核OVS的学习总结</a>
+            <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
           </li>
         
           <li>
-            <a href="/2020/03/15/2020-03-15-net-rx-drop-1/">net rx drop(续)</a>
+            <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/">tcp三次握手 --- 逐渐消失的tcp半链接队列</a>
           </li>
         
           <li>
-            <a href="/2020/03/15/2020-03-15-net-rx-drop/">net rx drop</a>
+            <a href="/2025/05/05/tcp-req-queue-length-check/">创建req scoket时的三个长度检查</a>
           </li>
         
           <li>
-            <a href="/2017/05/15/2017-05-15-slabinfo-cause-delay/">slabinfo 惹的祸</a>
+            <a href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
           </li>
         
           <li>
-            <a href="/2016/11/23/2016-11-23-what-is-tfo/">WHAT is TFO</a>
+            <a href="/2025/05/01/netdev-state-flags-part1/">网口状态标志位详解(Part 1/2)</a>
           </li>
         
       </ul>
@@ -631,7 +779,7 @@
   <div class="outer">
     <div id="footer-info" class="inner">
       
-      &copy; 2023 Martinbj2008<br>
+      &copy; 2025 Martinbj2008<br>
       Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
     </div>
   </div>
