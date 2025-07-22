@@ -73,6 +73,61 @@
       <div class="outer">
         <section id="main">
   
+    <article id="post-how-tcpdump-work-with-vlan-filter" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2019/10/09/how-tcpdump-work-with-vlan-filter/" class="article-date">
+  <time class="dt-published" datetime="2019-10-09T11:42:57.000Z" itemprop="datePublished">2019-10-09</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/bpf/">bpf</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2019/10/09/how-tcpdump-work-with-vlan-filter/">how tcpdump work with vlan filter</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <ul>
+<li><p>问题描述：<br>  tcpdump在网口抓包和读取pcap文件，相同的filter表达式”icmp“，对vlan报文有不同的处理结果。<br>在网口上抓包可以看到vlan和非vlan两种流量， 而读取pcap只能看到非vlan流量一种流量。</p>
+</li>
+<li><p>原因：<br>  kernel里在tcpdump抓包之前会把报文的vlan提前解析掉，并把vlan信息放到skb的metadata里了。<br>所以tcpdump（内核的af_packet对应的ptype_all)处理的报文都是不带vlan的，因此这两类报文都会被过滤出来。<br>而读取pcap时候，因为vlan报文并没有被剥离掉，所以vlan报文不满足过滤条件，被丢弃了。</p>
+</li>
+</ul>
+<p>国外已经有人发现并分析过这个问题<br><code>https://andreaskaris.github.io/blog/networking/bpf-and-tcpdump/</code></p>
+        
+          <p class="article-more-link">
+            <a href="/2019/10/09/how-tcpdump-work-with-vlan-filter/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2019/10/09/how-tcpdump-work-with-vlan-filter/" data-id="cmb7wpkr8002o1qoaa29ngymi" data-title="how tcpdump work with vlan filter" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
     <article id="post-tcpdump-and-ebpf" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2019/10/08/tcpdump-and-ebpf/" class="article-date">
@@ -243,7 +298,7 @@
         
   
     <h1 itemprop="name">
-      <a class="p-name article-title" href="/2018/10/09/fib-how-ipv4-lookup-route-with-rule-route/">fib: how ipv4 lookup route with rule route</a>
+      <a class="p-name article-title" href="/2018/10/09/fib-how-ipv4-lookup-route-with-rule-route/">策略路由的实现</a>
     </h1>
   
 
@@ -251,19 +306,33 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <h2 id="概述"><a href="#概述" class="headerlink" title="概述"></a>概述</h2><h3 id="规则路由（rule-route）"><a href="#规则路由（rule-route）" class="headerlink" title="规则路由（rule route）"></a>规则路由（rule route）</h3><p>这部分详见ip rule命令帮助手册，<br>    <code>https://man7.org/linux/man-pages/man8/ip-rule.8.html</code><br>简要总结:</p>
+        <h2 id="概述"><a href="#概述" class="headerlink" title="概述"></a>概述</h2><p><img src="/images/route/ip.rule.route.png" alt="IPv4 rule route 配置示意图"></p>
+<h2 id="测路路由介绍"><a href="#测路路由介绍" class="headerlink" title="测路路由介绍"></a>测路路由介绍</h2><p>关于策略路由是什么，为什么需要策略路由， man手册里写的这一段，我认为是最经典的一个解释。<br>清晰明了，这里借用并翻译下。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">Classic routing algorithms used in the Internet make routing</span><br><span class="line">decisions based only on the destination address of packets (and</span><br><span class="line">in theory, but not in practice, on the TOS field).</span><br><span class="line"></span><br><span class="line">In some circumstances, we want to route packets differently</span><br><span class="line">depending not only on destination addresses but also on other</span><br><span class="line">packet fields: source address, IP protocol, transport protocol</span><br><span class="line">ports or even packet payload.  This task is called &#x27;policy</span><br><span class="line">routing&#x27;.</span><br><span class="line"></span><br><span class="line">To solve this task, the conventional destination based routing</span><br><span class="line">table, ordered according to the longest match rule, is replaced</span><br><span class="line">with a &#x27;routing policy database&#x27; (or RPDB), which selects routes</span><br><span class="line">by executing some set of rules.</span><br></pre></td></tr></table></figure>
+
+<p>尝试翻译下：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">传统的路由方法，是基于报文的目的地地址做路由查找（理论上支持，但没啥卵用的 TOS 字段就不讨论了）</span><br><span class="line"></span><br><span class="line">在一些场景下， 我们不仅想根据你报文的目的地做选择路由， 同时还想根据报文的其他字段：源地址、ip 协议、tcp 端口 甚至是报文负载，选择路由。</span><br><span class="line">这个功能就被称为&quot;测路路由(policy route)&quot;</span><br><span class="line"></span><br><span class="line">为了实现这个功能，传统的基于路由表和最长匹配规则的路由查找方式，就被&#x27;routing policy database(RPDB)&#x27;取代(包装+升级)了。RPDB通过执行一些规则路由集合来选择路由。</span><br></pre></td></tr></table></figure>
+<p>对需求背景说的非常清楚，具体实现，后续我们展开讲解。<br><em><strong>取代</strong></em>，我个人任务这里用<code>replaced</code> 不够严谨：<br>    这里的RPDB取代传统路由，是在原有传统路由的基础上，增加新的模块，提供更多样的路由查找方式。也许原作想表达的是路由查找接口被取掉。<br>    所以这里保留直译。</p>
+<h2 id="如何使用"><a href="#如何使用" class="headerlink" title="如何使用"></a>如何使用</h2><p>假设一个场景：为了方便，这里使用一个容器做实验，容器有三个网口，veth0，veth2，veth4, 并配有&#x2F;24掩码的IP地址。<br>veth0: 192.168.0.1&#x2F;24<br>veth2: 192.168.2.1&#x2F;24<br>veth4: 192.168.4.1&#x2F;24<br>系统配置一条缺省路由指向<code>veth4</code></p>
+<h3 id="添加rule"><a href="#添加rule" class="headerlink" title="添加rule"></a>添加rule</h3><h3 id="添加table"><a href="#添加table" class="headerlink" title="添加table"></a>添加table</h3><h3 id="规则路由（rule-route）"><a href="#规则路由（rule-route）" class="headerlink" title="规则路由（rule route）"></a>规则路由（rule route）</h3><p>这部分详见ip rule命令帮助手册，<br>    <code>https://man7.org/linux/man-pages/man8/ip-rule.8.html</code><br>简要总结:</p>
 <ul>
-<li>支持多种形式的路由查找，不再仅仅局限于根据目的地址查找一种模式。</li>
+<li>支持多种形式的路由查找，不再仅仅局限于传统路由，根据目的地址查找一种模式。</li>
+<li>每条规则(rule) 都有一个优先级， 内核按照priority从高到底按顺序放到一个链表中。priority值越小，优先级越高，0对应优先级最高。</li>
 <li>rule route采用了类似match-action模式， 不过rule route称之为<code>SELECTOR</code>和<code>ACTION</code>。</li>
 <li><code>SELECTOR</code> 支持多种形式，比如IP、PORT、进出网口、tos以及非操作(<code>not</code>)</li>
 <li><code>ACTION</code> 中几个重要的类型：<ul>
 <li>table：到指定的TABLE_ID对应的路由表里查找（所以这里要求必须支持多table）</li>
-<li>nat:  支持IP地址nat</li>
-<li>goto： 跳转到指定的rule route，通过这个可以做成多级级联。</li>
+<li>goto： 跳转到指定的rule。这里只能往链表中，当前节点后面的节点去跳，不能往前跳。</li>
+<li>nat:  支持IP地址nat(TODO nat 废弃？)</li>
 </ul>
 </li>
+<li>路由查找时候使用，按链表里顺序（优先级）依次比较每个节点的的match 条件，如果满足则执行对应的 action，否则跳到下一个节点，继续执行。如果满足<ul>
+<li>ACTION 是跳转，则直接跳过中间节点，继续匹配链表剩余节点。</li>
+<li>action是table X，则使用目的地ip去路由表table X里查找最长匹配的路由，查找的路由结果即为最终路由查找结果。<br>说明:</li>
 </ul>
-<h4 id="几点说明"><a href="#几点说明" class="headerlink" title="几点说明"></a>几点说明</h4><h5 id="优先级"><a href="#优先级" class="headerlink" title="优先级"></a>优先级</h5><p>rule route是支持优先级的。 通过<code> ip rule show</code>命令我们可以看到每条rule对应的优先级。添加rule时候，默认的是当前除0以外最高优先级的值-1， 即默认新建的rule优先级高。</p>
+</li>
+<li>route里goto 可以反复多次嵌套多条rule，其他action均不能嵌套执行。比如lookup，table查找的结果就是最终结果，不会再有其他跳转和嵌套。</li>
+</ul>
         
           <p class="article-more-link">
             <a href="/2018/10/09/fib-how-ipv4-lookup-route-with-rule-route/#more">Read More</a>
@@ -272,7 +341,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2018/10/09/fib-how-ipv4-lookup-route-with-rule-route/" data-id="cmb7wpkqw001z1qoaco5f4tdm" data-title="fib: how ipv4 lookup route with rule route" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2018/10/09/fib-how-ipv4-lookup-route-with-rule-route/" data-id="cmb7wpkqw001z1qoaco5f4tdm" data-title="策略路由的实现" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -535,61 +604,6 @@
 
 
   
-    <article id="post-2016-10-13-udp-rss-hash-cause-low-iperf-perforamnce" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2016/10/26/2016-10-13-udp-rss-hash-cause-low-iperf-perforamnce/" class="article-date">
-  <time class="dt-published" datetime="2016-10-26T03:47:45.000Z" itemprop="datePublished">2016-10-26</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/netdev/">netdev</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2016/10/26/2016-10-13-udp-rss-hash-cause-low-iperf-perforamnce/">udp rss hash causes low iperf perforamnce</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="vxlan下iperf性能问题"><a href="#vxlan下iperf性能问题" class="headerlink" title="vxlan下iperf性能问题"></a>vxlan下iperf性能问题</h2><p>VXlan网络下，在两个容器(分别在两个host上)上，使用iperf进行tcp网络性能测试，带宽只能达到3.5Gb&#x2F;s左右。<br>而两个容器所在的host机器之间是万兆网络环境，host上的网卡是ixgbe 10G网卡</p>
-<h2 id="解决方法"><a href="#解决方法" class="headerlink" title="解决方法"></a>解决方法</h2><ol>
-<li><p>发送端使用多线程参数 <code>-P</code></p>
- <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">iperf  -c 192.168.51.2   -P8 -t 1000</span><br></pre></td></tr></table></figure>
-</li>
-<li><p>接收端IXGBE网卡RSShash使用hash(SrcIP, DstIP, <font color='red'>SrcPort, DstPort</font>)</p>
- <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">ethtool -N em2 rx-flow-hash udp4 sdfn</span><br></pre></td></tr></table></figure>
-        
-          <p class="article-more-link">
-            <a href="/2016/10/26/2016-10-13-udp-rss-hash-cause-low-iperf-perforamnce/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2016/10/26/2016-10-13-udp-rss-hash-cause-low-iperf-perforamnce/" data-id="clnfhasp50069e0mhc9bvg2yh" data-title="udp rss hash causes low iperf perforamnce" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
 
 
   <nav id="page-nav">
@@ -634,7 +648,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Archives</h3>
     <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/12/">December 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/06/">June 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/12/">December 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
     </div>
   </div>
 
@@ -645,6 +659,10 @@
     <h3 class="widget-title">Recent Posts</h3>
     <div class="widget">
       <ul>
+        
+          <li>
+            <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
+          </li>
         
           <li>
             <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
@@ -660,10 +678,6 @@
         
           <li>
             <a href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
-          </li>
-        
-          <li>
-            <a href="/2025/05/01/netdev-state-flags-part1/">网口状态标志位详解(Part 1/2)</a>
           </li>
         
       </ul>

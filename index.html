@@ -73,6 +73,70 @@
       <div class="outer">
         <section id="main">
   
+    <article id="post-tcpdump-and-PROMISC-state-label" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/" class="article-date">
+  <time class="dt-published" datetime="2025-06-23T02:07:07.000Z" itemprop="datePublished">2025-06-23</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2025/06/23/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <!-- TOC -->
+<h2 id="问题现象"><a href="#问题现象" class="headerlink" title="问题现象"></a>问题现象</h2><p>tcpdump&#x2F;iproute2 是很多网络问题下的调试工具，大家也都很熟他的一些特性。比如，</p>
+<ul>
+<li>执行tcpdump命令后，如果没有使用<code>-p</code>参数, 网口会进入PROMISC状态。</li>
+<li>通过ip link命令可以查看网口状态，其中状态位里有个<code>PROMISC</code>标志。<br>但是，后台执行一个在 eth0 口上抓包的tcpdump命令，就会发现一个问题：</li>
+</ul>
+<ol>
+<li>当tcpdump命令在后台运行时，通过查看<code>ip link</code>结果，对应网口的状态标志位没有<code>PROMISC</code>标志位，也没有其他变化。<br><img src="/images/tcpdump/promisc.tcpdump.png" alt="tcpdump 执行时， 网口标志位里没有PROMiSC"><br>为了避免干扰，关闭tcpdump 后，我们又做了另外一个验证操作。</li>
+</ol>
+<ul>
+<li>执行<code>ip link set dev eth0 promisc on</code>命令，设置网口混杂模式。这时，网口的<code>PROMISC</code>标志位能正常显示出来。<br><img src="/images/tcpdump/promisc.iplink.png" alt="ip link设置网口标志位PROMiSC"><br>这样看来，<code>PROMISC</code>标志位只受 <code>ip link</code>命令控制，与在网口上是否运行tcpdump无关。</li>
+</ul>
+<p>看到这里，不免就有疑问了</p>
+<ul>
+<li>Q1： tcpdump执行时候，对应网口到底进没进入<code>PROMISC</code>混杂模式呢？<br>A：进入<code>PROMISC</code>状态了。  因为对应时间段里，<code>dmesg</code>内核日志有明确的记录。</li>
+</ul>
+ <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">[5828194.373058] virtio_net virtio0 eth0: entered promiscuous mode</span><br><span class="line">[5828198.130489] virtio_net virtio0 eth0: left promiscuous mode</span><br></pre></td></tr></table></figure>
+<p> 注意，ip link 命令设置 on 的时候，网口也会进入<code>PROMISC</code>混杂模式。</p>
+<ul>
+<li>Q2:  既然tcpdump和 iplink都能使网口进入混杂模式，这两个命令又可以独立执行。运行tcpdump命令抓包时，被ip link命令设置了<code>promisc off</code>, 网卡会退出混杂模式，会不会对tcdpump抓包造成影响？<br> A：命令可以并发执行，不会相互干扰。这个场景下，ip link不会让网口退出混杂模式，也不会影响后续的 tcpdump 抓包。<code>promisc off</code> 命令只会让 ip link 显示的网口的状态标志位里的<code>PROMISC</code>被清除掉。</li>
+<li>Q3:  多个tcpdum并行抓包，退出有先后，会不会相互影响？<br>A： 并行tcpdump执行，不会影响网口<code>PROMISC</code>。内核有引用计数机制，保证最后一个 tcpdump 退出时候，网口也跟着关闭混杂模式。</li>
+</ul>
+        
+          <p class="article-more-link">
+            <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2025/06/23/tcpdump-and-PROMISC-state-label/" data-id="cmc8gjxdd0000hqoa9t13gxhy" data-title="tcpdump命令与网口`PROMISC`状态标志位" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
     <article id="post-tcp-paws-check" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2025/05/07/tcp-paws-check/" class="article-date">
@@ -288,7 +352,7 @@
       
         <!-- TOC -->
 
-<p>####operstate的小插曲<br>2006年内核引入<code>operstate</code>特性，在当时协议栈的维护者中也是颇有争议的！！！<br><a target="_blank" rel="noopener" href="https://web.git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=b00055aa">引入operstat特性的patch</a><br> <img src="/images/ip_link/operstate.png" alt="图4: 2006年协议栈加入operstate 特性"></p>
+<h4 id="operstate的小插曲"><a href="#operstate的小插曲" class="headerlink" title="operstate的小插曲"></a>operstate的小插曲</h4><p>2006年内核引入<code>operstate</code>特性，在当时协议栈的维护者中也是颇有争议的！！！<br><a target="_blank" rel="noopener" href="https://web.git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=b00055aa">引入operstat特性的patch</a><br> <img src="/images/ip_link/operstate.png" alt="图4: 2006年协议栈加入operstate 特性"></p>
 <h2 id="标志位IFF-UP"><a href="#标志位IFF-UP" class="headerlink" title="标志位IFF_UP"></a>标志位<code>IFF_UP</code></h2><h3 id="设置-清除标志位IFF-UP"><a href="#设置-清除标志位IFF-UP" class="headerlink" title="设置&#x2F;清除标志位IFF_UP"></a>设置&#x2F;清除标志位<code>IFF_UP</code></h3><p><code>ip link set eth0 up</code>:</p>
 <ul>
 <li>每个<code>eth</code>口在内核里有对应的<code>struct net_device</code>。</li>
@@ -603,9 +667,9 @@
 
 
   
-    <article id="post-2023-12-27-ebpf-and-vlan-filter" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+    <article id="post-ebpf-and-vlan-filter" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
-    <a href="/2023/12/27/2023-12-27-ebpf-and-vlan-filter/" class="article-date">
+    <a href="/2023/12/27/ebpf-and-vlan-filter/" class="article-date">
   <time class="dt-published" datetime="2023-12-27T11:37:38.000Z" itemprop="datePublished">2023-12-27</time>
 </a>
     
@@ -617,7 +681,7 @@
         
   
     <h1 itemprop="name">
-      <a class="p-name article-title" href="/2023/12/27/2023-12-27-ebpf-and-vlan-filter/">2023-12-27 ebpf and vlan filter</a>
+      <a class="p-name article-title" href="/2023/12/27/ebpf-and-vlan-filter/">2023-12-27 tcpdump/ebpf如何解析过滤条件&#34;vlan&#34;</a>
     </h1>
   
 
@@ -625,63 +689,29 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2023/12/27/2023-12-27-ebpf-and-vlan-filter/" data-id="cm9m9veje00090hnuduzz5493" data-title="2023-12-27 ebpf and vlan filter" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-    </footer>
-  </div>
-  
-</article>
+        <!--TOC-->
 
-
-
-  
-    <article id="post-core-entry-function-of-bpf-run" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2022/08/27/core-entry-function-of-bpf-run/" class="article-date">
-  <time class="dt-published" datetime="2022-08-27T01:38:45.000Z" itemprop="datePublished">2022-08-27</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/bpf/">bpf</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2022/08/27/core-entry-function-of-bpf-run/">bfp 在内核运行的核心入口函数及其变形</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="bpf-prog内核运行核心入口函数"><a href="#bpf-prog内核运行核心入口函数" class="headerlink" title="bpf prog内核运行核心入口函数"></a>bpf prog内核运行核心入口函数</h2><h3 id="总结：-bpf-prog-run"><a href="#总结：-bpf-prog-run" class="headerlink" title="总结：___bpf_prog_run"></a>总结：<code>___bpf_prog_run</code></h3><p>bfp 在内核运行的核心入口函数:<code>___bpf_prog_run</code><br><code>___bpf_prog_run</code>是bfp的核心函数入口，该函数被多个不同stack size的函数调用。<br>函数指针数组interpreters这把上面的这些函数汇集到一起。<br>当bpf程序被加载到内核时候，内核创建为它一个bpf_prog结构体，根据prog的stacksize，选择对应的interpreters里的对应的<br>函数，并保存到bpf_prog里的bpf_func上。<br>这样后续hook点运行bpf_prog程序时候，就使用bpf_func运行。</p>
+<h2 id="问题场景"><a href="#问题场景" class="headerlink" title="问题场景"></a>问题场景</h2><pre><code>tcpdump在网口直接抓包和读取pcap文件两种场景下，同一个filter表达式”icmp“，对vlan报文有不同的处理结果。
+</code></pre>
+<ul>
+<li>在网口上抓包可以看到vlan和非vlan两种流量</li>
+<li>读取pcap只能看到非vlan流量一种流量。</li>
+</ul>
+<p>【Q1】：在读取pcap文件时候，为什么不能读取到vlan报文呢？</p>
+<h2 id="分析结论"><a href="#分析结论" class="headerlink" title="分析结论"></a>分析结论</h2><p>内核协议栈：<br>1.过滤条件 <code>icmp</code> ：tcpdump 解析出来的 ebpf 指令，是要求报文是<code>eth+IP+ICMP</code>格式。通过ETH&#x2F;IP 头里的协议类型分别做了限制: IPv4(0x8000)+ICMP(1)。<br>2. 在网口上抓包：内核代码里，在tcpdump抓包过滤的钩子函数之前，会把报文的vlan解析并剔除掉。被剥离的vlan头信息，被保存到skb的metadata里了。所以 tcpdump(af_packet)在内核里，通过钩子函数运行过滤条件的 ebpf 指令时，被处理的报文已经不带vlan头了。因此只要满足icmp 头，带和不带 vlan头的报文都会被抓取到。<br>3. 读取pcap文件：tcpdump 直接读取文件内容，vlan头并没有被剥离掉，所以vlan报文不满足过滤条件(<code>eth+IP+ICMP</code>)，被丢弃了。</p>
+<p>国外已经有人发现并分析过这个问题<br>[<a target="_blank" rel="noopener" href="https://andreaskaris.github.io/blog/networking/bpf-and-tcpdump/]">https://andreaskaris.github.io/blog/networking/bpf-and-tcpdump/]</a>(BPF and tcpdump)</p>
         
           <p class="article-more-link">
-            <a href="/2022/08/27/core-entry-function-of-bpf-run/#more">Read More</a>
+            <a href="/2023/12/27/ebpf-and-vlan-filter/#more">Read More</a>
           </p>
         
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2022/08/27/core-entry-function-of-bpf-run/" data-id="cmb7wpkqt001t1qoahlnl0zhh" data-title="bfp 在内核运行的核心入口函数及其变形" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2023/12/27/ebpf-and-vlan-filter/" data-id="cmcalcg5c0000nsoa1ej8a7rj" data-title="2023-12-27 tcpdump/ebpf如何解析过滤条件&#34;vlan&#34;" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li></ul>
-
     </footer>
   </div>
   
@@ -734,7 +764,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Archives</h3>
     <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/12/">December 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/06/">June 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/12/">December 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
     </div>
   </div>
 
@@ -745,6 +775,10 @@
     <h3 class="widget-title">Recent Posts</h3>
     <div class="widget">
       <ul>
+        
+          <li>
+            <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
+          </li>
         
           <li>
             <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
@@ -760,10 +794,6 @@
         
           <li>
             <a href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
-          </li>
-        
-          <li>
-            <a href="/2025/05/01/netdev-state-flags-part1/">网口状态标志位详解(Part 1/2)</a>
           </li>
         
       </ul>

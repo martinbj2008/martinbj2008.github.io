@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>tcpdump命令与网口`PROMISC`状态标志位 | Kernel Study Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="问题现象tcpdump&#x2F;iproute2 是很多网络问题下的调试工具，大家也都很熟他的一些特性。比如，  执行tcpdump命令后，如果没有使用-p参数, 网口会进入PROMISC状态。 通过ip link命令可以查看网口状态，其中状态位里有个PROMISC标志。但是，后台执行一个在 eth0 口上抓包的tcpdump命令，就会发现一个问题：   当tcpdump命令在后台运行时，通过">
+<meta property="og:type" content="article">
+<meta property="og:title" content="tcpdump命令与网口&#96;PROMISC&#96;状态标志位">
+<meta property="og:url" content="https://martinbj2008.github.io/2025/06/23/tcpdump-and-PROMISC-state-label/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="问题现象tcpdump&#x2F;iproute2 是很多网络问题下的调试工具，大家也都很熟他的一些特性。比如，  执行tcpdump命令后，如果没有使用-p参数, 网口会进入PROMISC状态。 通过ip link命令可以查看网口状态，其中状态位里有个PROMISC标志。但是，后台执行一个在 eth0 口上抓包的tcpdump命令，就会发现一个问题：   当tcpdump命令在后台运行时，通过">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/tcpdump/promisc.tcpdump.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/tcpdump/promisc.iplink.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/tcpdump/pormisc.kernel.flags.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/tcpdump/promisc.iplink.bit.flags">
+<meta property="article:published_time" content="2025-06-23T02:07:07.000Z">
+<meta property="article:modified_time" content="2025-06-23T02:50:40.673Z">
+<meta property="article:author" content="Martinbj2008">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/tcpdump/promisc.tcpdump.png">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<meta name="generator" content="Hexo 6.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel Study Notes</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-tcpdump-and-PROMISC-state-label" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/" class="article-date">
+  <time class="dt-published" datetime="2025-06-23T02:07:07.000Z" itemprop="datePublished">2025-06-23</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      tcpdump命令与网口`PROMISC`状态标志位
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <!-- TOC -->
+<h2 id="问题现象"><a href="#问题现象" class="headerlink" title="问题现象"></a>问题现象</h2><p>tcpdump&#x2F;iproute2 是很多网络问题下的调试工具，大家也都很熟他的一些特性。比如，</p>
+<ul>
+<li>执行tcpdump命令后，如果没有使用<code>-p</code>参数, 网口会进入PROMISC状态。</li>
+<li>通过ip link命令可以查看网口状态，其中状态位里有个<code>PROMISC</code>标志。<br>但是，后台执行一个在 eth0 口上抓包的tcpdump命令，就会发现一个问题：</li>
+</ul>
+<ol>
+<li>当tcpdump命令在后台运行时，通过查看<code>ip link</code>结果，对应网口的状态标志位没有<code>PROMISC</code>标志位，也没有其他变化。<br><img src="/images/tcpdump/promisc.tcpdump.png" alt="tcpdump 执行时， 网口标志位里没有PROMiSC"><br>为了避免干扰，关闭tcpdump 后，我们又做了另外一个验证操作。</li>
+</ol>
+<ul>
+<li>执行<code>ip link set dev eth0 promisc on</code>命令，设置网口混杂模式。这时，网口的<code>PROMISC</code>标志位能正常显示出来。<br><img src="/images/tcpdump/promisc.iplink.png" alt="ip link设置网口标志位PROMiSC"><br>这样看来，<code>PROMISC</code>标志位只受 <code>ip link</code>命令控制，与在网口上是否运行tcpdump无关。</li>
+</ul>
+<p>看到这里，不免就有疑问了</p>
+<ul>
+<li>Q1： tcpdump执行时候，对应网口到底进没进入<code>PROMISC</code>混杂模式呢？<br>A：进入<code>PROMISC</code>状态了。  因为对应时间段里，<code>dmesg</code>内核日志有明确的记录。</li>
+</ul>
+ <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">[5828194.373058] virtio_net virtio0 eth0: entered promiscuous mode</span><br><span class="line">[5828198.130489] virtio_net virtio0 eth0: left promiscuous mode</span><br></pre></td></tr></table></figure>
+<p> 注意，ip link 命令设置 on 的时候，网口也会进入<code>PROMISC</code>混杂模式。</p>
+<ul>
+<li>Q2:  既然tcpdump和 iplink都能使网口进入混杂模式，这两个命令又可以独立执行。运行tcpdump命令抓包时，被ip link命令设置了<code>promisc off</code>, 网卡会退出混杂模式，会不会对tcdpump抓包造成影响？<br> A：命令可以并发执行，不会相互干扰。这个场景下，ip link不会让网口退出混杂模式，也不会影响后续的 tcpdump 抓包。<code>promisc off</code> 命令只会让 ip link 显示的网口的状态标志位里的<code>PROMISC</code>被清除掉。</li>
+<li>Q3:  多个tcpdum并行抓包，退出有先后，会不会相互影响？<br>A： 并行tcpdump执行，不会影响网口<code>PROMISC</code>。内核有引用计数机制，保证最后一个 tcpdump 退出时候，网口也跟着关闭混杂模式。</li>
+</ul>
+<span id="more"></span>
+
+<h2 id="原理"><a href="#原理" class="headerlink" title="原理"></a>原理</h2><p>在内核里，针对每个网口上，会维护3 个标志位，来相应上层命令，并控制并记录网口的<code>PROMISC</code>状态。</p>
+<ul>
+<li>gflags</li>
+<li>promiscuity</li>
+<li>flags<br><img src="/images/tcpdump/pormisc.kernel.flags.png" alt="状态标志位PROMISC的实现原理"></li>
+</ul>
+<p><em><strong>net_device：gflags</strong></em><br>    + 其中有一个bit 被用作<code>PROMISC</code>标志位，是一个promisc开关(标志位)。<br>    + 跟ip link命令里设置<code>promisc on/off</code>对应，跟网口状态没有直接关联。每当ip link命令设置<code>promisc on</code>时候，就设置标志位。同理，off时候就清除标志位。<br>    +  ip link命令的结果中，在网口状态中的<code>PROMISC</code>标记是这个bit的状态。 <img src="/images/tcpdump/promisc.iplink.bit.flags"><br>    + 连续重复的on命令，等同一次on命令。同理，off也是。+ 只有on&#x2F;off状态切换时候，才会操作下面的<code>promiscuity</code>。</p>
+<p> <em><strong>net_device: promiscuity</strong></em></p>
+<ul>
+<li>这是个引用计数值，默认值0，对应网口处在非<code>PROMISC</code>模式。<ul>
+<li>每次有上层命令（tcpdump，gflags切换）才会增加和减少。</li>
+<li><pre><code>+ 如果promiscuity 从正整数变为0，则网口退出混杂模式。相反则进入混杂模式。负数就麻烦了，吃出BUG了 :(
+</code></pre>
+</li>
+<li>引用计数+1的操作场景：<ul>
+<li><pre><code>gflags从 off 变为 on
+</code></pre>
+</li>
+<li>tcpdump 开始执行时</li>
+</ul>
+</li>
+<li><pre><code>引用计数+1的操作场景：
+</code></pre>
+<ul>
+<li><pre><code>gflags从 on 变为 off
+</code></pre>
+</li>
+<li>tcpdump  退出时</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p> <em><strong>net_device: flags</strong></em></p>
+<ul>
+<li>flags：这里也有一个bit 被用作<code>PROMISC</code>标志位。并且位置是跟前面的gflags位置相同。这个<code>PROMISC</code>状态标志位，与物理网口的<code>PROMISC</code>状态是保持一致的，是真正的网口混杂模式的标志。驱动代码里根据这个标志位，来决定设置&#x2F;清除硬件寄存器，进而打开或者关闭网口的混杂模式。</li>
+</ul>
+<h2 id="ip-link代码分析"><a href="#ip-link代码分析" class="headerlink" title="ip link代码分析"></a>ip link代码分析</h2><p>命令<code>ip link set promisc on</code>的函数调用栈</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">int main(int argc, char **argv)</span><br><span class="line">    |-&gt; do_cmd(basename+2, argc, argv, false);</span><br><span class="line">          |-&gt; c-&gt;func(argc-1, argv+1)); //相当于 do_iplink  </span><br><span class="line">               do_iplink</span><br><span class="line">               |-&gt; iplink_modify(RTM_NEWLINK, 0, argc-1, argv+1);</span><br><span class="line">                    |-&gt; iplink_parse(argc, argv, &amp;req, &amp;type); </span><br><span class="line">                        |-&gt; if (strcmp(*argv, &quot;promisc&quot;) == 0) &#123;</span><br><span class="line">                            |-&gt; req-&gt;i.ifi_change |= IFF_PROMISC;  </span><br><span class="line">                            |-&gt; req-&gt;i.ifi_flags |= IFF_PROMISC;</span><br><span class="line">                    |-&gt; .n.nlmsg_type = cmd; //RTM_SETLINK        </span><br><span class="line">                    |-&gt; rtnl_talk(&amp;rth, &amp;req.n, NULL);</span><br></pre></td></tr></table></figure>
+<p>这里有几点需要关注：</p>
+<ul>
+<li>netlink 命令类型是<code>RTM_SETLINK </code>, 这决定了内核处理请求时候，对应的消息处理函数。</li>
+<li><code>req-&gt;i.ifi_flags</code>：保存了需要设置或清除的标志位的预期值。比如<code>IFF_PROMISC</code>标志位。</li>
+<li>req-&gt;i.ifi_change：需要设置或清除的标志位的掩码。</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">693                 &#125; else if (strcmp(*argv, &quot;promisc&quot;) == 0) &#123;</span><br><span class="line">694                         NEXT_ARG();</span><br><span class="line">695                         req-&gt;i.ifi_change |= IFF_PROMISC;   //设置掩码</span><br><span class="line">696</span><br><span class="line">697                         if (strcmp(*argv, &quot;on&quot;) == 0)</span><br><span class="line">698                                 req-&gt;i.ifi_flags |= IFF_PROMISC;    //如果是 on，则设置标志位</span><br><span class="line">699                         else if (strcmp(*argv, &quot;off&quot;) == 0)</span><br><span class="line">700                                 req-&gt;i.ifi_flags &amp;= ~IFF_PROMISC;      //如果是 off，则清除标志位</span><br></pre></td></tr></table></figure>
+<h2 id="ip-link的内核实现"><a href="#ip-link的内核实现" class="headerlink" title="ip link的内核实现"></a>ip link的内核实现</h2><h3 id="数据结构"><a href="#数据结构" class="headerlink" title="数据结构"></a>数据结构</h3><p><code>struct net_device</code>里有3个跟 <code>PROMISC</code> 相关的变量</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">2084 struct net_device &#123;</span><br><span class="line">...</span><br><span class="line">2133         unsigned int            flags;</span><br><span class="line">...</span><br><span class="line">2192         unsigned short          gflags;</span><br><span class="line">...</span><br><span class="line">2268         unsigned int            promiscuity;</span><br></pre></td></tr></table></figure>
+<p>如前原理所述，ip link打印的<code>PROMISC</code>标记是来自于<code>dev-&gt;gflags</code>。<br><code>promiscuity</code>是个计数器，决定了<code>flags</code>里的<code>PROMISC</code>标记，<code>flags</code>跟物理网口混杂模式相对应。<br> <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">93         IFF_PROMISC                     = 1&lt;&lt;8,  /* sysfs */</span><br></pre></td></tr></table></figure></p>
+<h3 id="函数调用栈"><a href="#函数调用栈" class="headerlink" title="函数调用栈"></a>函数调用栈</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">int rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh, struct netlink_ext_ack *extack)</span><br><span class="line">     |-&gt; __rtnl_newlink(skb, nlh, ops, tgt_net, link_net, peer_net, tbs, data, extack);</span><br><span class="line">          |-&gt; rtnl_changelink(skb, nlh, ops, dev, tgt_net, tbs, data, extack);     </span><br><span class="line">               |-&gt; do_setlink(skb, dev, tgt_net, nlmsg_data(nlh), extack, tb, status);</span><br><span class="line">                    |-&gt; if (ifm-&gt;ifi_flags || ifm-&gt;ifi_change) &#123;</span><br><span class="line">                         |-&gt; netif_change_flags(dev, rtnl_dev_combine_flags(dev, ifm), extack);</span><br><span class="line">                             |-&gt; __dev_change_flags(dev, flags, extack);</span><br><span class="line">                                 |-&gt;  inc = (flags &amp; IFF_PROMISC) ? 1 : -1;</span><br><span class="line">                                 |-&gt;  __dev_set_promiscuity(dev, inc, false) </span><br><span class="line">                             |-&gt; __dev_notify_flags(dev, old_flags, changes, 0, NULL);</span><br></pre></td></tr></table></figure>
+<p>备注1：这里真正改变网口标志位的函数是<code>__dev_change_flags</code>,<br>还有一个函数<code>__dev_notify_flags</code>是用来通知其他模块， 网口标志位变化的。如<code>UP</code>&#x2F;<code>DOWN</code>标志位对路由和IP地址模块会有影响。在<code>PROMISC</code>场景下，关联模块影响不大，不展开讨论。</p>
+<p>备注 2：***<code>rtnl_setlink</code>***<br>对于<code>RTM_SETLINK</code>类型的命令请求，内核对应的处理函数是<code>rtnl_newlink</code><br>内核的 netlink详细处理机制， 先不展开。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">7053         &#123;.msgtype = RTM_SETLINK, .doit = rtnl_setlink,</span><br></pre></td></tr></table></figure>
+<h3 id="函数-rtnl-dev-combine-flags"><a href="#函数-rtnl-dev-combine-flags" class="headerlink" title="函数 rtnl_dev_combine_flags"></a>函数 <code>rtnl_dev_combine_flags</code></h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">1092 static unsigned int rtnl_dev_combine_flags(const struct net_device *dev,</span><br><span class="line">1093                                            const struct ifinfomsg *ifm)</span><br><span class="line">1094 &#123;</span><br><span class="line">1095         unsigned int flags = ifm-&gt;ifi_flags;</span><br><span class="line">1096</span><br><span class="line">1097         /* bugwards compatibility: ifi_change == 0 is treated as ~0 */</span><br><span class="line">1098         if (ifm-&gt;ifi_change)</span><br><span class="line">1099                 flags = (flags &amp; ifm-&gt;ifi_change) |</span><br><span class="line">1100                         (rtnl_dev_get_flags(dev) &amp; ~ifm-&gt;ifi_change);</span><br><span class="line">1101</span><br><span class="line">1102         return flags;</span><br><span class="line">1103 &#125;</span><br></pre></td></tr></table></figure>
+<p>这里<code> ifm-&gt;ifi_flags</code>是<code>ip link</code>根据命令行解析，并传递给内核的。同样传递给内核的<code>ifm-&gt;ifi_change</code>，对应希望变化的那些标志位的掩码。<br>rtnl_dev_combine_flags根据掩码<code>ifm-&gt;ifi_change</code>，把这些标记位从将当前 netdev 的标志位上清除(与操作置零)，然后设置为上层应用期望设置的值(预期值放在ifm-&gt;ifi_flags)。</p>
+<h3 id="函数-rtnl-dev-get-flags"><a href="#函数-rtnl-dev-get-flags" class="headerlink" title="函数 rtnl_dev_get_flags"></a>函数 <code>rtnl_dev_get_flags</code></h3><p>netdev设备对应的标志位不是存放在一个变量里，而是函数<code>dev_get_flags</code>拟合成的。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">1086 static unsigned int rtnl_dev_get_flags(const struct net_device *dev)</span><br><span class="line">1087 &#123;</span><br><span class="line">1088         return (dev-&gt;flags &amp; ~(IFF_PROMISC | IFF_ALLMULTI)) |</span><br><span class="line">1089                (dev-&gt;gflags &amp; (IFF_PROMISC | IFF_ALLMULTI));</span><br><span class="line">1090 &#125;</span><br></pre></td></tr></table></figure>
+<h3 id="函数-dev-change-flags"><a href="#函数-dev-change-flags" class="headerlink" title="函数 __dev_change_flags"></a>函数 <code>__dev_change_flags</code></h3><p><em><strong><code>PROMISC</code>不是更新到<code>dev-&gt;flags</code>，而是更新到<code>dev-&gt;gflags</code>.</strong></em></p>
+<p>参数<code>flags</code>存放着期望的标志位。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"> 9420 int __dev_change_flags(struct net_device *dev, unsigned int flags,</span><br><span class="line"> 9421                        struct netlink_ext_ack *extack)</span><br><span class="line"> 9422 &#123;</span><br><span class="line"> ...</span><br><span class="line"> 9461         if ((flags ^ dev-&gt;gflags) &amp; IFF_PROMISC) &#123;    // 判读PROMISC 位是否需要更新， 重复的 ON/OFF 也在这里被滤掉</span><br><span class="line"> 9462                 int inc = (flags &amp; IFF_PROMISC) ? 1 : -1;</span><br><span class="line"> 9463                 old_flags = dev-&gt;flags;</span><br><span class="line"> 9464</span><br><span class="line"> 9465                 dev-&gt;gflags ^= IFF_PROMISC;		//更新IFF_PROMISC标志位，跟 flags 里的一致。</span><br><span class="line"> 9466</span><br><span class="line"> 9467                 if (__dev_set_promiscuity(dev, inc, false) &gt;= 0)   //更新promiscuity计数，和dev-&gt;flags的PROMISC</span><br><span class="line"> 9468                         if (dev-&gt;flags != old_flags)    //PROMISC位别修改了</span><br><span class="line"> 9469                                 dev_set_rx_mode(dev);   </span><br><span class="line"> 9470         &#125;</span><br><span class="line">... </span><br></pre></td></tr></table></figure>
+<p>注意__dev_set_promiscuity函数主要更新<code>promiscuity</code>, 只有 0 和非零切换时候，才会调整<code>dev-&gt;flags</code>里的<code>IFF_PROMISC</code>。<br>9468 这行的 <code>dev-&gt;flags != old_flags</code>, 针对的就是<code>dev-&gt;flags</code>更新了<code>IFF_PROMISC</code>标志位的场景。</p>
+<h3 id="函数-dev-set-promiscuity"><a href="#函数-dev-set-promiscuity" class="headerlink" title="函数 __dev_set_promiscuity"></a>函数<code> __dev_set_promiscuity</code></h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line"> 9244 static int __dev_set_promiscuity(struct net_device *dev, int inc, bool notify)</span><br><span class="line"> 9245 &#123;</span><br><span class="line">...</span><br><span class="line"> 9253         promiscuity = dev-&gt;promiscuity + inc;  //根据调用要求更新引用计数，并更新IFF_PROMISC的标志位。</span><br><span class="line"> 9254         if (promiscuity == 0) &#123;</span><br><span class="line">...</span><br><span class="line"> 9263                 flags = old_flags &amp; ~IFF_PROMISC;  //如果计数为0， 则是清除标志位。如果非0，设置标志位。最新的标志位会被更新到***`dev-&gt;flags`***。</span><br><span class="line"> 9264         &#125; else &#123;</span><br><span class="line"> 9265                 flags = old_flags | IFF_PROMISC;</span><br><span class="line"> 9266         &#125;</span><br><span class="line"> 9267         WRITE_ONCE(dev-&gt;promiscuity, promiscuity);</span><br><span class="line"> 9268         if (flags != old_flags) &#123;</span><br><span class="line"> 9269                 WRITE_ONCE(dev-&gt;flags, flags);		//回写`IFF_PROMISC`位到`dev-&gt;flags`</span><br><span class="line"> ...</span><br><span class="line"> 9285                 dev_change_rx_flags(dev, IFF_PROMISC);</span><br><span class="line"> 9286         &#125;</span><br></pre></td></tr></table></figure>
+<p>最后会调用<code> dev_change_rx_flags(dev, IFF_PROMISC);</code>， 但除了个别虚拟口（如 vlan）有动作，大部分网口，其实是在<code>__dev_change_flags</code>里，当<code>__dev_set_promiscuity</code>的成功返回后，调用<code>dev_set_rx_mode</code>去更新网口的<code>PROMISC</code>状态。</p>
+<p>注意：<br>这个函数是个基础函数， tcpdump时，最终也会调用到这个函数。</p>
+<h3 id="函数dev-set-rx-mode"><a href="#函数dev-set-rx-mode" class="headerlink" title="函数dev_set_rx_mode"></a>函数<code>dev_set_rx_mode</code></h3><p>对于<code>PROMISC</code>标志，会去调用驱动的对应函数设置。<br> <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">9382 void dev_set_rx_mode(struct net_device *dev)</span><br><span class="line">9383 &#123;</span><br><span class="line">9384         netif_addr_lock_bh(dev);</span><br><span class="line">9385         __dev_set_rx_mode(dev);</span><br><span class="line">9386         netif_addr_unlock_bh(dev);</span><br><span class="line">9387 &#125;</span><br></pre></td></tr></table></figure></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"> 9354 void __dev_set_rx_mode(struct net_device *dev)</span><br><span class="line"> 9355 &#123;</span><br><span class="line">...</span><br><span class="line"> 9378         if (ops-&gt;ndo_set_rx_mode)</span><br><span class="line"> 9379                 ops-&gt;ndo_set_rx_mode(dev);</span><br><span class="line"> 9380 &#125;</span><br></pre></td></tr></table></figure>
+<h3 id="网口驱动的-ndo-set-rx-mode"><a href="#网口驱动的-ndo-set-rx-mode" class="headerlink" title="网口驱动的 ndo_set_rx_mode"></a>网口驱动的 <code>ndo_set_rx_mode</code></h3><p>以e1000网卡驱动为例，如果网口<code>flags</code>里有<code>PROMISC</code>标志，设置对应网口的硬件寄存器标志位。<br>具体逻辑见 2254～2256。<br>这里涉及到网口支持多个单播的 MAC 地址，就不展开讨论代码实现。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line">2235 static void e1000_set_rx_mode(struct net_device *netdev)</span><br><span class="line">2236 &#123;</span><br><span class="line">...</span><br><span class="line">2252         rctl = er32(RCTL);</span><br><span class="line">2253</span><br><span class="line">2254         if (netdev-&gt;flags &amp; IFF_PROMISC) &#123;</span><br><span class="line">2255                 rctl |= (E1000_RCTL_UPE | E1000_RCTL_MPE);</span><br><span class="line">2256                 rctl &amp;= ~E1000_RCTL_VFE;</span><br><span class="line">2257         &#125; else &#123;</span><br><span class="line">2258                 if (netdev-&gt;flags &amp; IFF_ALLMULTI)</span><br><span class="line">2259                         rctl |= E1000_RCTL_MPE;</span><br><span class="line">2260                 else</span><br><span class="line">2261                         rctl &amp;= ~E1000_RCTL_MPE;</span><br><span class="line">2262                 /* Enable VLAN filter if there is a VLAN */</span><br><span class="line">2263                 if (e1000_vlan_used(adapter))</span><br><span class="line">2264                         rctl |= E1000_RCTL_VFE;</span><br><span class="line">2265         &#125;</span><br><span class="line">2266</span><br><span class="line">2267         if (netdev_uc_count(netdev) &gt; rar_entries - 1) &#123;</span><br><span class="line">2268                 rctl |= E1000_RCTL_UPE;</span><br><span class="line">2269         &#125; else if (!(netdev-&gt;flags &amp; IFF_PROMISC)) &#123;</span><br><span class="line">2270                 rctl &amp;= ~E1000_RCTL_UPE;</span><br><span class="line">2271                 use_uc = true;</span><br><span class="line">2272         &#125;</span><br><span class="line">2273</span><br><span class="line">2274         ew32(RCTL, rctl);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">1810 #define E1000_RCTL_UPE            0x00000008    /* unicast promiscuous enable */</span><br><span class="line">1811 #define E1000_RCTL_MPE            0x00000010    /* multicast promiscuous enab */</span><br><span class="line">1838 #define E1000_RCTL_VFE            0x00040000    /* vlan filter enable */</span><br></pre></td></tr></table></figure>
+
+<h3 id="函数dev-get-flags"><a href="#函数dev-get-flags" class="headerlink" title="函数dev_get_flags"></a>函数<code>dev_get_flags</code></h3><p>ip link 读取网口状态时，<code>PROMISC</code>标志位是通过读写<code>dev-&gt;gflags</code>的，而不是<code>dev-&gt;flags</code>。<br>这个跟前面设置<code>PROMISC</code>相对应。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">9395 unsigned int dev_get_flags(const struct net_device *dev)</span><br><span class="line">9396 &#123;</span><br><span class="line">9397         unsigned int flags;</span><br><span class="line">9398</span><br><span class="line">9399         flags = (READ_ONCE(dev-&gt;flags) &amp; ~(IFF_PROMISC |</span><br><span class="line">9400                                 IFF_ALLMULTI |</span><br><span class="line">9401                                 IFF_RUNNING |</span><br><span class="line">9402                                 IFF_LOWER_UP |</span><br><span class="line">9403                                 IFF_DORMANT)) |</span><br><span class="line">9404                 (READ_ONCE(dev-&gt;gflags) &amp; (IFF_PROMISC |</span><br><span class="line">9405                                 IFF_ALLMULTI));</span><br><span class="line">9406</span><br></pre></td></tr></table></figure>
+
+<h2 id="tcpdump-libpcap-代码分析"><a href="#tcpdump-libpcap-代码分析" class="headerlink" title="tcpdump&#x2F;libpcap 代码分析"></a>tcpdump&#x2F;libpcap 代码分析</h2><h3 id="函数调用栈-1"><a href="#函数调用栈-1" class="headerlink" title="函数调用栈"></a>函数调用栈</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">main</span><br><span class="line">|-&gt; pd = open_interface(device, ndo, ebuf);</span><br><span class="line">     |-&gt; status = pcap_activate(pc);</span><br><span class="line">            |-&gt; status = p-&gt;activate_op(p);    // handle-&gt;activate_op = pcap_activate_linux;</span><br><span class="line">            相当于 pcap_activate_linux</span><br><span class="line">                  |-&gt; ret = setup_socket(handle, is_any_device);</span><br><span class="line">                       |-&gt; mr.mr_ifindex = handlep-&gt;ifindex;</span><br><span class="line">                       |-&gt; mr.mr_type    = PACKET_MR_PROMISC;</span><br><span class="line">                       |-&gt; if (setsockopt(sock_fd, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &amp;mr, sizeof(mr)) == -1)</span><br></pre></td></tr></table></figure>
+<h3 id="tcpdump抓包"><a href="#tcpdump抓包" class="headerlink" title="tcpdump抓包"></a>tcpdump抓包</h3><p>命令行：<code>tcpdump -i eth0</code>， 这里没有<code>-p</code>参数。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">1493 main(int argc, char **argv)</span><br><span class="line">1494 &#123;</span><br><span class="line">...</span><br><span class="line">1820                 case &#x27;p&#x27;:</span><br><span class="line">1821                         ++pflag;</span><br><span class="line">1822                         break;</span><br><span class="line">...</span><br><span class="line">2229                 pd = open_interface(device, ndo, ebuf);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">1259 static pcap_t *</span><br><span class="line">1260 open_interface(const char *device, netdissect_options *ndo, char *ebuf)</span><br><span class="line">1261 &#123;</span><br><span class="line">...</span><br><span class="line">1473         pc = pcap_open_live(device, ndo-&gt;ndo_snaplen, !pflag, timeout, ebuf);</span><br></pre></td></tr></table></figure>
+<p>默认 tcpdump 命令不会使用<code>-p</code>参数，因此打开网口抓包时候，需要把网口设置成混杂模式。<br>对应代码逻辑是，命令不使用<code>-p</code>参数，pflag保持初始值0，对应pcap_open_live的 &#96;&#96;参数 1，启用混杂模式.</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">pcap_open_live(const char *device, int snaplen, int promisc, int to_ms, char *errbuf)</span><br></pre></td></tr></table></figure>
+<h3 id="libpcap代码分析"><a href="#libpcap代码分析" class="headerlink" title="libpcap代码分析"></a>libpcap代码分析</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line">2874         status = pcap_set_promisc(p, promisc);</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">2600 int</span><br><span class="line">2601 pcap_set_promisc(pcap_t *p, int promisc)</span><br><span class="line">2602 &#123;</span><br><span class="line">...</span><br><span class="line">2605         p-&gt;opt.promisc = promisc;</span><br><span class="line">2606         return (0);</span><br><span class="line">2607 &#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="函数setup-socket"><a href="#函数setup-socket" class="headerlink" title="函数setup_socket"></a>函数<code>setup_socket</code></h3><p>如果指定了网口(is_any_device为0)抓包，并且有 PROMISC 要求，则通过 socketopt 设置网口进入 promisc 状态。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">2324 static int</span><br><span class="line">2325 setup_socket(pcap_t *handle, int is_any_device)</span><br><span class="line">2326 &#123;</span><br><span class="line">...</span><br><span class="line">2595         if (!is_any_device &amp;&amp; handle-&gt;opt.promisc) &#123;</span><br><span class="line">2596                 memset(&amp;mr, 0, sizeof(mr));</span><br><span class="line">2597                 mr.mr_ifindex = handlep-&gt;ifindex;</span><br><span class="line">2598                 mr.mr_type    = PACKET_MR_PROMISC;</span><br><span class="line">2599                 if (setsockopt(sock_fd, SOL_PACKET, PACKET_ADD_MEMBERSHIP,</span><br><span class="line">2600                     &amp;mr, sizeof(mr)) == -1) &#123;</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+<h2 id="tcpdump的内核实现"><a href="#tcpdump的内核实现" class="headerlink" title="tcpdump的内核实现"></a>tcpdump的内核实现</h2><h3 id="函数调用栈-2"><a href="#函数调用栈-2" class="headerlink" title="函数调用栈"></a>函数调用栈</h3><p>tcpdump 的内核实现比较复杂，这里只摘录跟设置<code>PROMISC</code>状态相关的代码。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">packet_setsockopt</span><br><span class="line"> |-&gt; packet_mc_add(sk, &amp;mreq);</span><br><span class="line">      |-&gt;  packet_dev_mc(dev, i, 1);</span><br><span class="line">            |-&gt; dev_set_promiscuity(dev, what); //what是上一行调用时的最后参数，`1`</span><br><span class="line">                  |-&gt; netif_set_promiscuity(dev, inc);</span><br></pre></td></tr></table></figure>
+<h3 id="函数packet-setsockopt"><a href="#函数packet-setsockopt" class="headerlink" title="函数packet_setsockopt"></a>函数<code>packet_setsockopt</code></h3><p>tcpdump 对应的 socket 类型是<code>af_packet</code>, 对应的 socket opt 的处理函数为<code>packet_setsockopt</code>。<br>对应<code>setsockopt</code>调用时候，传递的两个参数<code>SOL_PACKET</code> 和<code>PACKET_ADD_MEMBERSHIP</code>。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">3833 static int</span><br><span class="line">3834 packet_setsockopt(struct socket *sock, int level, int optname, sockptr_t optval,</span><br><span class="line">3835                   unsigned int optlen)</span><br><span class="line">3836 &#123;</span><br><span class="line">...</span><br><span class="line">3859                 if (optname == PACKET_ADD_MEMBERSHIP)</span><br><span class="line">3860                         ret = packet_mc_add(sk, &amp;mreq);</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+<h3 id="函数packet-mc-add"><a href="#函数packet-mc-add" class="headerlink" title="函数packet_mc_add"></a>函数<code>packet_mc_add</code></h3><p>这里会把 tcpdump 传递下来的参数，网口index值<code>mr_ifindex</code>和类型<code>PACKET_MR_PROMISC</code>，<br>为后续打开网口混杂模式做准备。<br>这里最后一个参数是<code>1</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">3730 static int packet_mc_add(struct sock *sk, struct packet_mreq_max *mreq)</span><br><span class="line">3731 &#123;</span><br><span class="line">...</span><br><span class="line">3766         i-&gt;type = mreq-&gt;mr_type;</span><br><span class="line">3767         i-&gt;ifindex = mreq-&gt;mr_ifindex;</span><br><span class="line">...</span><br><span class="line">3775         err = packet_dev_mc(dev, i, 1);</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+<h3 id="函数packet-dev-mc"><a href="#函数packet-dev-mc" class="headerlink" title="函数packet_dev_mc"></a>函数<code>packet_dev_mc</code></h3><p>这个函数里会调用协议栈的基础<code>dev_set_promiscuity</code>函数设置网口进入混杂模式。<br>其他部分跟<code>PROMISC</code>无关，处理的是多个组播或者单播地址的场景。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">3685 static int packet_dev_mc(struct net_device *dev, struct packet_mclist *i,</span><br><span class="line">3686                          int what)</span><br><span class="line">3687 &#123;</span><br><span class="line">3688         switch (i-&gt;type) &#123;</span><br><span class="line">...</span><br><span class="line">3697         case PACKET_MR_PROMISC:</span><br><span class="line">3698                 return dev_set_promiscuity(dev, what);</span><br><span class="line">...</span><br><span class="line">3713 &#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="函数dev-set-promiscuity"><a href="#函数dev-set-promiscuity" class="headerlink" title="函数dev_set_promiscuity"></a>函数<code>dev_set_promiscuity</code></h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">282 int dev_set_promiscuity(struct net_device *dev, int inc)</span><br><span class="line">283 &#123;</span><br><span class="line">284         int ret;</span><br><span class="line">285</span><br><span class="line">286         netdev_lock_ops(dev);</span><br><span class="line">287         ret = netif_set_promiscuity(dev, inc);</span><br><span class="line">288         netdev_unlock_ops(dev);</span><br><span class="line">289</span><br><span class="line">290         return ret;</span><br><span class="line">291 &#125;</span><br><span class="line">292 EXPORT_SYMBOL(dev_set_promiscuity);</span><br></pre></td></tr></table></figure>
+
+<h3 id="函数netif-set-promiscuity"><a href="#函数netif-set-promiscuity" class="headerlink" title="函数netif_set_promiscuity"></a>函数<code>netif_set_promiscuity</code></h3><p>注意__dev_set_promiscuity函数主要更新<code>promiscuity</code>, 只有 0 和非零切换时候，才会调整<code>dev-&gt;flags</code>里的<code>IFF_PROMISC</code>。如果更新了<code>IFF_PROMISC</code>标志位， 就会满足 if 判断条件， 调用dev_set_rx_mode(dev)。 由网口根据dev-&gt;flags里<code>IFF_PROMISC</code>标志位，状态去更新网口，进入或者退出混杂模式。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">9300 int netif_set_promiscuity(struct net_device *dev, int inc)</span><br><span class="line">9301 &#123;</span><br><span class="line"></span><br><span class="line">9305         err = __dev_set_promiscuity(dev, inc, true);</span><br><span class="line">9306         if (err &lt; 0)</span><br><span class="line">9307                 return err;</span><br><span class="line">9308         if (dev-&gt;flags != old_flags)</span><br><span class="line">9309                 dev_set_rx_mode(dev);</span><br><span class="line">9310         return err;</span><br><span class="line">9311 &#125;</span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2025/06/23/tcpdump-and-PROMISC-state-label/" data-id="cmc8gjxdd0000hqoa9t13gxhy" data-title="tcpdump命令与网口`PROMISC`状态标志位" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2025/05/07/tcp-paws-check/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">PAWS 在tcp协议栈中的实现</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/06/">June 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2023/12/">December 2023</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/">tcp三次握手 --- 逐渐消失的tcp半链接队列</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/05/tcp-req-queue-length-check/">创建req scoket时的三个长度检查</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2025 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
