@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>IPv4 route study part 1: basic fun | Kernel Study Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="In order to understand kernel route LC-Trie,summary the basic functions here.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="IPv4 route study part 1: basic fun">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/08/26/2013-08-26-ipv4-route-study-basic-fun/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="In order to understand kernel route LC-Trie,summary the basic functions here.">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/fib_trie/tkey_extract_bits.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/fib_trie/tkey_mismatch.png">
+<meta property="article:published_time" content="2013-08-26T03:05:00.000Z">
+<meta property="article:modified_time" content="2026-03-06T23:09:06.614Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IPv4">
+<meta property="article:tag" content="route">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/fib_trie/tkey_extract_bits.png">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.1"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel Study Notes</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-2013-08-26-ipv4-route-study-basic-fun" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2013/08/26/2013-08-26-ipv4-route-study-basic-fun/" class="article-date">
+  <time class="dt-published" datetime="2013-08-26T03:05:00.000Z" itemprop="datePublished">2013-08-26</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/route/">route</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      IPv4 route study part 1: basic fun
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>In order to understand kernel route LC-Trie,<br>summary the basic functions here.</p>
+<span id="more"></span>
+
+<h2 id="NODE-vs-LEAF"><a href="#NODE-vs-LEAF" class="headerlink" title="NODE vs LEAF"></a>NODE vs LEAF</h2><p><code>node</code> and <code>leaf</code> have two same head elements</p>
+<ol>
+<li><code>unsigned long parent</code></li>
+<li><code>t_key key</code></li>
+</ol>
+<p>We can treat <code>leaf</code> as <code>node</code>+<code>leaf extention</code></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">leaf</span> &#123;</span></span><br><span class="line">		<span class="class"><span class="keyword">struct</span> <span class="title">node</span>;</span></span><br><span class="line">	....</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="node"><a href="#node" class="headerlink" title="node"></a>node</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"> <span class="number">98</span> <span class="class"><span class="keyword">struct</span> <span class="title">node</span> &#123;</span></span><br><span class="line"> <span class="number">99</span>         <span class="type">unsigned</span> <span class="type">long</span> parent;</span><br><span class="line"><span class="number">100</span>         t_key key;</span><br><span class="line"><span class="number">101</span> &#125;;</span><br></pre></td></tr></table></figure>
+<h3 id="leaf"><a href="#leaf" class="headerlink" title="leaf"></a>leaf</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">103</span> <span class="class"><span class="keyword">struct</span> <span class="title">leaf</span> &#123;</span></span><br><span class="line"><span class="number">104</span>         <span class="type">unsigned</span> <span class="type">long</span> parent;</span><br><span class="line"><span class="number">105</span>         t_key key;</span><br><span class="line"><span class="number">106</span>         <span class="class"><span class="keyword">struct</span> <span class="title">hlist_head</span> <span class="title">list</span>;</span></span><br><span class="line"><span class="number">107</span>         <span class="class"><span class="keyword">struct</span> <span class="title">rcu_head</span> <span class="title">rcu</span>;</span></span><br><span class="line"><span class="number">108</span> &#125;;</span><br></pre></td></tr></table></figure>
+
+<h2 id="PARENT"><a href="#PARENT" class="headerlink" title="PARENT"></a>PARENT</h2><p>It is a common method, hide some bit flags into the low bits of a pointer.<br>because the low bits always is zero(becauase of CACHE).</p>
+<p>###the lowest 1 bit of <code>parent</code> is used to different <code>node</code> or <code>leaf</code>.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">90</span> <span class="meta">#<span class="keyword">define</span> T_TNODE 0</span></span><br><span class="line"><span class="number">91</span> <span class="meta">#<span class="keyword">define</span> T_LEAF  1</span></span><br><span class="line"><span class="number">92</span> <span class="meta">#<span class="keyword">define</span> NODE_TYPE_MASK  0x1UL</span></span><br><span class="line"><span class="number">93</span> <span class="meta">#<span class="keyword">define</span> NODE_TYPE(node) ((node)-&gt;parent &amp; NODE_TYPE_MASK)</span></span><br><span class="line"><span class="number">94</span> </span><br><span class="line"><span class="number">95</span> <span class="meta">#<span class="keyword">define</span> IS_TNODE(n) (!(n-&gt;parent &amp; T_LEAF))</span></span><br><span class="line"><span class="number">96</span> <span class="meta">#<span class="keyword">define</span> IS_LEAF(n) (n-&gt;parent &amp; T_LEAF)</span></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">180</span> <span class="type">static</span> <span class="keyword">inline</span> <span class="keyword">struct</span> tnode *<span class="title function_">node_parent</span><span class="params">(<span class="keyword">struct</span> node *node)</span></span><br><span class="line">181 &#123;</span><br><span class="line"><span class="number">182</span>         <span class="keyword">return</span> (<span class="keyword">struct</span> tnode *)(node-&gt;parent &amp; ~NODE_TYPE_MASK);</span><br><span class="line"><span class="number">183</span> &#125;</span><br><span class="line"><span class="number">184</span> </span><br><span class="line"><span class="number">185</span> <span class="type">static</span> <span class="keyword">inline</span> <span class="keyword">struct</span> tnode *<span class="title function_">node_parent_rcu</span><span class="params">(<span class="keyword">struct</span> node *node)</span></span><br><span class="line">186 &#123;</span><br><span class="line"><span class="number">187</span>         <span class="class"><span class="keyword">struct</span> <span class="title">tnode</span> *<span class="title">ret</span> =</span> node_parent(node);</span><br><span class="line"><span class="number">188</span> </span><br><span class="line"><span class="number">189</span>          rcu_dereference_rtnl(ret);</span><br><span class="line"><span class="number">190</span> &#125;</span><br><span class="line"><span class="number">191</span> </span><br><span class="line"><span class="number">192</span> <span class="comment">/* Same as rcu_assign_pointer</span></span><br><span class="line"><span class="comment">193  * but that macro() assumes that value is a pointer.</span></span><br><span class="line"><span class="comment">194  */</span></span><br><span class="line"><span class="number">195</span> <span class="type">static</span> <span class="keyword">inline</span> <span class="type">void</span> <span class="title function_">node_set_parent</span><span class="params">(<span class="keyword">struct</span> node *node, <span class="keyword">struct</span> tnode *ptr)</span></span><br><span class="line">196 &#123;</span><br><span class="line"><span class="number">197</span>         smp_wmb();</span><br><span class="line"><span class="number">198</span>         node-&gt;parent = (<span class="type">unsigned</span> <span class="type">long</span>)ptr | NODE_TYPE(node);</span><br><span class="line"><span class="number">199</span> &#125;</span><br></pre></td></tr></table></figure>
+
+<p>##BIT OPS</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">220</span> <span class="type">static</span> <span class="keyword">inline</span> t_key <span class="title function_">mask_pfx</span><span class="params">(t_key k, <span class="type">unsigned</span> <span class="type">short</span> l)</span></span><br><span class="line">221 &#123;</span><br><span class="line"><span class="number">222</span>         <span class="keyword">return</span> (l == <span class="number">0</span>) ? <span class="number">0</span> : k &gt;&gt; (KEYLENGTH-l) &lt;&lt; (KEYLENGTH-l);</span><br><span class="line"><span class="number">223</span> &#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="tkey-extract-bits"><a href="#tkey-extract-bits" class="headerlink" title="tkey_extract_bits"></a><code>tkey_extract_bits</code></h3><p>Get value of key’s bits from the <code>offset</code> bit.<br>取 从第offset位开始的 bits位的值</p>
+<p><img src="/images/fib_trie/tkey_extract_bits.png" alt="tkey_extract_bits"></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">225</span> <span class="type">static</span> <span class="keyword">inline</span> t_key <span class="title function_">tkey_extract_bits</span><span class="params">(t_key a, <span class="type">int</span> offset, <span class="type">int</span> bits)</span></span><br><span class="line">226 &#123;</span><br><span class="line"><span class="number">227</span>         <span class="keyword">if</span> (offset &lt; KEYLENGTH)</span><br><span class="line"><span class="number">228</span>                 <span class="keyword">return</span> ((t_key)(a &lt;&lt; offset)) &gt;&gt; (KEYLENGTH - bits);</span><br><span class="line"><span class="number">229</span>         <span class="keyword">else</span></span><br><span class="line"><span class="number">230</span>                 <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"><span class="number">231</span> &#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="tkey-equals"><a href="#tkey-equals" class="headerlink" title="tkey_equals"></a><code>tkey_equals</code></h3><p><code>tkey a</code> is equal with <code>tkey b</code></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">233</span> <span class="type">static</span> <span class="keyword">inline</span> <span class="type">int</span> <span class="title function_">tkey_equals</span><span class="params">(t_key a, t_key b)</span></span><br><span class="line">234 &#123;</span><br><span class="line"><span class="number">235</span>         <span class="keyword">return</span> a == b;</span><br><span class="line"><span class="number">236</span> &#125;</span><br></pre></td></tr></table></figure>
+<h3 id="tkey-sub-equals"><a href="#tkey-sub-equals" class="headerlink" title="tkey_sub_equals"></a><code>tkey_sub_equals</code></h3><p>simlar with <code>tkey_equals</code>, while it only compare the <code>bits</code> bits from the<br><code>offset</code>st bit.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">238</span> <span class="type">static</span> <span class="keyword">inline</span> <span class="type">int</span> <span class="title function_">tkey_sub_equals</span><span class="params">(t_key a, <span class="type">int</span> offset, <span class="type">int</span> bits, t_key b)</span></span><br><span class="line">239 &#123;</span><br><span class="line"><span class="number">240</span>         <span class="keyword">if</span> (bits == <span class="number">0</span> || offset &gt;= KEYLENGTH)</span><br><span class="line"><span class="number">241</span>                 <span class="keyword">return</span> <span class="number">1</span>;</span><br><span class="line"><span class="number">242</span>         bits = bits &gt; KEYLENGTH ? KEYLENGTH : bits;</span><br><span class="line"><span class="number">243</span>         <span class="keyword">return</span> ((a ^ b) &lt;&lt; offset) &gt;&gt; (KEYLENGTH - bits) == <span class="number">0</span>;</span><br><span class="line"><span class="number">244</span> &#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="tkey-mismatch"><a href="#tkey-mismatch" class="headerlink" title="tkey_mismatch"></a><code>tkey_mismatch</code></h3><p>find out the first different bit after the <code>offset</code>st bit<br>between <code>tkey a</code> and <code>tkey b</code>.</p>
+<p>after the operation <code>a ^ b</code>, the first bit with &#96;1’ will<br>be the first different bit.</p>
+<p><img src="/images/fib_trie/tkey_mismatch.png" alt="tkey_mismatch"></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">246</span> <span class="type">static</span> <span class="keyword">inline</span> <span class="type">int</span> <span class="title function_">tkey_mismatch</span><span class="params">(t_key a, <span class="type">int</span> offset, t_key b)</span></span><br><span class="line">247 &#123;</span><br><span class="line"><span class="number">248</span>         t_key diff = a ^ b;</span><br><span class="line"><span class="number">249</span>         <span class="type">int</span> i = offset;</span><br><span class="line"><span class="number">250</span> </span><br><span class="line"><span class="number">251</span>         <span class="keyword">if</span> (!diff)</span><br><span class="line"><span class="number">252</span>                 <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"><span class="number">253</span>         <span class="keyword">while</span> ((diff &lt;&lt; i) &gt;&gt; (KEYLENGTH<span class="number">-1</span>) == <span class="number">0</span>)</span><br><span class="line"><span class="number">254</span>                 i++;</span><br><span class="line"><span class="number">255</span>         <span class="keyword">return</span> i;</span><br><span class="line"><span class="number">256</span> &#125;</span><br></pre></td></tr></table></figure>
+
+<h3 id="mask-pfx"><a href="#mask-pfx" class="headerlink" title="mask_pfx"></a><code>mask_pfx</code></h3><p>保留<code>key</code>的前<code>l</code>位，并将<code>l</code>位之后的所有位清零。<code>l</code>相当于掩码长度。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">238</span> <span class="type">static</span> <span class="keyword">inline</span> t_key <span class="title function_">mask_pfx</span><span class="params">(t_key k, <span class="type">unsigned</span> <span class="type">int</span> l)</span></span><br><span class="line">239 &#123; </span><br><span class="line"><span class="number">240</span>         <span class="keyword">return</span> (l == <span class="number">0</span>) ? <span class="number">0</span> : k &gt;&gt; (KEYLENGTH-l) &lt;&lt; (KEYLENGTH-l); </span><br><span class="line"><span class="number">241</span> &#125; </span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2013/08/26/2013-08-26-ipv4-route-study-basic-fun/" data-id="cuidtKgY9kiYPEp6_my1waZYU" data-title="IPv4 route study part 1: basic fun" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/route/" rel="tag">route</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2013/08/26/2013-08-26-how-does-xfrm-km-work/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          How does xfrm km work
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2013/08/23/2013-08-23-debug-kernel-with-jprobe/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">debug kernel with jprobe</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/06/">June 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/">tcp三次握手 --- 逐渐消失的tcp半链接队列</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/05/tcp-req-queue-length-check/">创建req scoket时的三个长度检查</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

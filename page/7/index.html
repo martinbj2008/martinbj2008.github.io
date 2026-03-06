@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>Kernel Study Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta property="og:type" content="website">
+<meta property="og:title" content="Kernel Study Notes">
+<meta property="og:url" content="https://martinbj2008.github.io/page/7/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:locale" content="en_US">
+<meta property="article:author" content="Martinbj2008">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.1"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel Study Notes</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main">
+  
+    <article id="post-2014-01-14-how-tcp-server-accept-a-new-connection-request" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2014/01/14/2014-01-14-how-tcp-server-accept-a-new-connection-request/" class="article-date">
+  <time class="dt-published" datetime="2014-01-14T08:01:00.000Z" itemprop="datePublished">2014-01-14</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/socket/">socket</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2014/01/14/2014-01-14-how-tcp-server-accept-a-new-connection-request/">how does tcp server accept a new connection request</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h4 id="summary"><a href="#summary" class="headerlink" title="summary"></a>summary</h4><p>Two packets will be proessed by tcp server side:</p>
+<ol>
+<li>SYN pakcet: For the first packet(syn) of handshake, it first lookup the listen socket,<br>and create a req socket as temporary. Send SYN+ACK packet to client.</li>
+<li>ACK packet: For the third packet(ack) of handshake, it will lookup the req socket created<br>in previous steps.</li>
+</ol>
+<h4 id="SYN-报文calltrace"><a href="#SYN-报文calltrace" class="headerlink" title="SYN 报文calltrace"></a>SYN 报文calltrace</h4><p>内核版本 v6.14</p>
+<h4 id=""><a href="#" class="headerlink" title=""></a></h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line">=&gt; tcp_v4_rcv(struct sk_buff *skb)</span><br><span class="line">=&gt; =&gt; sk = __inet_lookup_skb(&amp;tcp_hashinfo, skb, th-&gt;source, th-&gt;dest);</span><br><span class="line">=&gt; =&gt; tcp_v4_do_rcv(sk, skb);</span><br><span class="line">=&gt; =&gt; =&gt; struct sock *nsk = tcp_v4_hnd_req(sk, skb)</span><br><span class="line">=&gt; =&gt; =&gt; tcp_rcv_state_process</span><br><span class="line">=&gt; =&gt; =&gt; =&gt; if (icsk-&gt;icsk_af_ops-&gt;conn_request(sk, skb) &lt; 0) 相当 tcp_v4_conn_request</span><br><span class="line">=&gt; =&gt; =&gt; =&gt; tcp_v4_conn_request(&amp;tcp_request_sock_ops, &amp;tcp_request_sock_ipv4_ops, sk, skb);</span><br><span class="line">=&gt; =&gt; =&gt; =&gt; =&gt; inet_reqsk_alloc</span><br><span class="line">=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; struct request_sock *req = reqsk_alloc(ops, sk_listener, attach_listener);</span><br><span class="line">=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; ireq-&gt;ireq_state = TCP_NEW_SYN_RECV; //#define ireq_state req.__req_common.skc_state</span><br><span class="line">=&gt; =&gt; =&gt; =&gt; =&gt; tcp_openreq_init(req, &amp;tmp_opt, skb);</span><br><span class="line">=&gt; =&gt; =&gt; =&gt; =&gt; inet_csk_reqsk_queue_hash_add</span><br><span class="line">=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; reqsk_queue_hash_req</span><br><span class="line">=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; inet_ehash_insert  //将 req sock放到 establish hash链表里</span><br><span class="line">=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; inet_csk_reqsk_queue_added</span><br><span class="line">=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; reqsk_queue_added(&amp;inet_csk(sk)-&gt;icsk_accept_queue); //半链接队列，真实名字叫 accept。 功能也只有计数能力了，没有队列了。</span><br><span class="line">=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; atomic_inc(&amp;queue-&gt;young);</span><br><span class="line">=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; atomic_inc(&amp;queue-&gt;qlen);</span><br><span class="line">=&gt; =&gt; =&gt; =&gt; =&gt; af_ops-&gt;send_synack  //发送synack报文</span><br><span class="line">=&gt; =&gt; =&gt; =&gt; return // tcp_v4_conn_request</span><br><span class="line">=&gt; =&gt; =&gt; return; // tcp_rcv_state_process</span><br></pre></td></tr></table></figure>
+
+<h5 id="注意"><a href="#注意" class="headerlink" title="注意"></a>注意</h5><ul>
+<li><code>tcp_request_sock_ops</code>： 是一个结构体的名字，同时又是一个变量的名字。</li>
+<li><code>icsk_accept_queue</code>: 在结构体<code>struct inet_connection_sock</code>里的这个队列并不在保存半链接队列的 req socket，而是计数。</li>
+</ul>
+        
+          <p class="article-more-link">
+            <a href="/2014/01/14/2014-01-14-how-tcp-server-accept-a-new-connection-request/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2014/01/14/2014-01-14-how-tcp-server-accept-a-new-connection-request/" data-id="cuid688XvA7eRS4ywq63nTPTR" data-title="how does tcp server accept a new connection request" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2013-11-25-net-protocol-handler-for-tcp-udp" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2013/11/25/2013-11-25-net-protocol-handler-for-tcp-udp/" class="article-date">
+  <time class="dt-published" datetime="2013-11-25T02:54:00.000Z" itemprop="datePublished">2013-11-25</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/socket/">socket</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2013/11/25/2013-11-25-net-protocol-handler-for-tcp-udp/">How does IPV4/6 process input tcp/udp packet</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>For the packet to localhost, <code>ip_local_deliver_finish</code> will be the<br>last funciton called by network layer.</p>
+<p>In <code>ip_local_deliver_finish</code>, it will be process the protocol<br>hander of a array element of <code>inet_protos</code> according the <code>protocol</code> value<br>in IPv4 header.</p>
+<p>IPv6 is very similar vs IPv4 except the name is a bit different.</p>
+        
+          <p class="article-more-link">
+            <a href="/2013/11/25/2013-11-25-net-protocol-handler-for-tcp-udp/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2013/11/25/2013-11-25-net-protocol-handler-for-tcp-udp/" data-id="cuidY6DzUivjas2YyYP6dvFYQ" data-title="How does IPV4/6 process input tcp/udp packet" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2013-11-22-the-inheriting-of-linux-sock-type" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2013/11/22/2013-11-22-the-inheriting-of-linux-sock-type/" class="article-date">
+  <time class="dt-published" datetime="2013-11-22T09:50:00.000Z" itemprop="datePublished">2013-11-22</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/socket/">socket</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2013/11/22/2013-11-22-the-inheriting-of-linux-sock-type/">the inheriting of linux sock type</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="Data-Structure"><a href="#Data-Structure" class="headerlink" title="Data Structure"></a>Data Structure</h3><p>Every <code>xsock</code> has parent sock as its first filed.</p>
+        
+          <p class="article-more-link">
+            <a href="/2013/11/22/2013-11-22-the-inheriting-of-linux-sock-type/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2013/11/22/2013-11-22-the-inheriting-of-linux-sock-type/" data-id="cuidiPUzdQdg9pgXFSdkhe_LX" data-title="the inheriting of linux sock type" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2013-11-22-inetsw-table" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2013/11/22/2013-11-22-inetsw-table/" class="article-date">
+  <time class="dt-published" datetime="2013-11-22T03:34:00.000Z" itemprop="datePublished">2013-11-22</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/socket/">socket</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2013/11/22/2013-11-22-inetsw-table/">inetsw table</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="Data-struct"><a href="#Data-struct" class="headerlink" title="Data struct."></a>Data struct.</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">123</span> <span class="comment">/* The inetsw table contains everything that inet_create needs to</span></span><br><span class="line"><span class="comment">124  * build a new socket.</span></span><br><span class="line"><span class="comment">125  */</span></span><br><span class="line"><span class="number">126</span> <span class="type">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">inetsw</span>[<span class="title">SOCK_MAX</span>];</span></span><br><span class="line"><span class="number">127</span> <span class="type">static</span> <span class="title function_">DEFINE_SPINLOCK</span><span class="params">(inetsw_lock)</span>;</span><br></pre></td></tr></table></figure>
+        
+          <p class="article-more-link">
+            <a href="/2013/11/22/2013-11-22-inetsw-table/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2013/11/22/2013-11-22-inetsw-table/" data-id="cuid4JC2hxnY2VDhSlVVOYfu2" data-title="inetsw table" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2013-11-22-how-to-create-a-inet-socket" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2013/11/22/2013-11-22-how-to-create-a-inet-socket/" class="article-date">
+  <time class="dt-published" datetime="2013-11-22T03:32:00.000Z" itemprop="datePublished">2013-11-22</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/socket/">socket</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2013/11/22/2013-11-22-how-to-create-a-inet-socket/">how to create a inet socket</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="Data-Structure"><a href="#Data-Structure" class="headerlink" title="Data Structure"></a>Data Structure</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1019</span> <span class="type">static</span> <span class="type">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">net_proto_family</span> <span class="title">inet_family_ops</span> =</span> &#123;</span><br><span class="line"><span class="number">1020</span>         .family = PF_INET,</span><br><span class="line"><span class="number">1021</span>         .create = inet_create,</span><br><span class="line"><span class="number">1022</span>         .owner  = THIS_MODULE,</span><br><span class="line"><span class="number">1023</span> &#125;;</span><br></pre></td></tr></table></figure>
+
+<h3 id="call-trace"><a href="#call-trace" class="headerlink" title="call trace"></a>call trace</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">&gt; inet_create</span><br><span class="line">&gt; &gt; search the right inetsw <span class="built_in">array</span> element with type/protocol</span><br><span class="line">&gt; &gt; sock-&gt;ops = answer-&gt;ops;</span><br><span class="line">&gt; &gt; k = sk_alloc(net, PF_INET, GFP_KERNEL, answer_prot);</span><br><span class="line">&gt; &gt; sock_init_data(sock, sk);</span><br><span class="line">&gt; &gt; init the sk</span><br></pre></td></tr></table></figure>
+        
+          <p class="article-more-link">
+            <a href="/2013/11/22/2013-11-22-how-to-create-a-inet-socket/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2013/11/22/2013-11-22-how-to-create-a-inet-socket/" data-id="cuidRZzrXIHwTl2JNvzJKi_wL" data-title="how to create a inet socket" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2013-11-22-system-call-socket" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2013/11/22/2013-11-22-system-call-socket/" class="article-date">
+  <time class="dt-published" datetime="2013-11-22T03:31:00.000Z" itemprop="datePublished">2013-11-22</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/socket/">socket</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2013/11/22/2013-11-22-system-call-socket/">system call socket</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="Summary"><a href="#Summary" class="headerlink" title="Summary"></a>Summary</h3><p>System call <code>socket</code> will do two things:</p>
+<ol>
+<li>create a <code>struct socket *sock</code>.<br> Mainly done by <code>__sock_create</code>, which alloc a <code>struct socket *sock</code>,<br>then init it with the <code>creating</code> method of <code>net_families[family]</code>.</li>
+<li>map the <code>sock</code> to a file descriptor by <code>sock_map_fd</code>.<br>TODO…..</li>
+</ol>
+<h3 id="call-trace"><a href="#call-trace" class="headerlink" title="call trace:"></a>call trace:</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">&gt; socket</span><br><span class="line">&gt; &gt; sock_create</span><br><span class="line">&gt; &gt; &gt; __sock_create</span><br><span class="line">&gt; &gt; &gt; &gt; sock = sock_alloc();</span><br><span class="line">&gt; &gt; &gt; &gt; sock-&gt;type = type;</span><br><span class="line">&gt; &gt; &gt; &gt; rcu_read_lock();</span><br><span class="line">&gt; &gt; &gt; &gt; pf = rcu_dereference(net_families[family]);</span><br><span class="line">&gt; &gt; &gt; &gt; try_module_get(pf-&gt;owner))</span><br><span class="line">&gt; &gt; &gt; &gt; rcu_read_unlock();</span><br><span class="line">&gt; &gt; &gt; &gt; pf-&gt;create(net, sock, protocol, kern);</span><br><span class="line">&gt; &gt; &gt; &gt; module_put(pf-&gt;owner)</span><br><span class="line">&gt; &gt; socket_map_fd</span><br></pre></td></tr></table></figure>
+        
+          <p class="article-more-link">
+            <a href="/2013/11/22/2013-11-22-system-call-socket/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2013/11/22/2013-11-22-system-call-socket/" data-id="cuiddYcnlJeqLF7wAKdDbRoeA" data-title="system call socket" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2013-11-22-socket-net-proto-family" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2013/11/22/2013-11-22-socket-net-proto-family/" class="article-date">
+  <time class="dt-published" datetime="2013-11-22T03:29:00.000Z" itemprop="datePublished">2013-11-22</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/socket/">socket</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2013/11/22/2013-11-22-socket-net-proto-family/">socket net_proto_family</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="summary"><a href="#summary" class="headerlink" title="summary"></a>summary</h3><p>Each <code>family</code> has a corresponding array element of <code>struct net_proto_family</code>,<br>which will be called in system call <code>socket</code>.</p>
+<h3 id="Data-Structure"><a href="#Data-Structure" class="headerlink" title="Data Structure"></a>Data Structure</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">181</span> <span class="class"><span class="keyword">struct</span> <span class="title">net_proto_family</span> &#123;</span></span><br><span class="line"><span class="number">182</span>         <span class="type">int</span>             family;</span><br><span class="line"><span class="number">183</span>         <span class="type">int</span>             (*create)(<span class="keyword">struct</span> net *net, <span class="keyword">struct</span> socket *sock,</span><br><span class="line"><span class="number">184</span>                                   <span class="type">int</span> protocol, <span class="type">int</span> kern);</span><br><span class="line"><span class="number">185</span>         <span class="class"><span class="keyword">struct</span> <span class="title">module</span>   *<span class="title">owner</span>;</span></span><br><span class="line"><span class="number">186</span> &#125;;</span><br></pre></td></tr></table></figure>
+<p>The <code>create</code> is <em>important</em>, which is first and basic function during<br>system call <code>socket</code>.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">164</span> <span class="type">static</span> <span class="title function_">DEFINE_SPINLOCK</span><span class="params">(net_family_lock)</span>;</span><br><span class="line"><span class="number">165</span> <span class="type">static</span> <span class="type">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">net_proto_family</span> __<span class="title">rcu</span> *<span class="title">net_families</span>[<span class="title">NPROTO</span>] __<span class="title">read_mostly</span>;</span></span><br></pre></td></tr></table></figure>
+        
+          <p class="article-more-link">
+            <a href="/2013/11/22/2013-11-22-socket-net-proto-family/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2013/11/22/2013-11-22-socket-net-proto-family/" data-id="cuidqip34p0YkOT0amxy0zqXI" data-title="socket net_proto_family" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2013-11-20-how-to-update-github-page-in-multi-pos" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2013/11/20/2013-11-20-how-to-update-github-page-in-multi-pos/" class="article-date">
+  <time class="dt-published" datetime="2013-11-20T14:42:00.000Z" itemprop="datePublished">2013-11-20</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/git/">git</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2013/11/20/2013-11-20-how-to-update-github-page-in-multi-pos/">how to update github page in multi pos</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="Requirement"><a href="#Requirement" class="headerlink" title="Requirement"></a>Requirement</h3><p>I want to write blog with github page and octopress in the office<br>and in the home.</p>
+<h3 id="Steps"><a href="#Steps" class="headerlink" title="Steps"></a>Steps</h3><p>The github page has work well done with pc in the home.<br>Now setup the environment in office to write github page.<br>The github page repo:<br>    <a target="_blank" rel="noopener" href="https://github.com/martinbj2008/martinbj2008.github.io">https://github.com/martinbj2008/martinbj2008.github.io</a></p>
+<p>the octopress is pushed to git repo as branch “source”</p>
+<p>How to write blog and sync them to github while avoid conflict with home?</p>
+        
+          <p class="article-more-link">
+            <a href="/2013/11/20/2013-11-20-how-to-update-github-page-in-multi-pos/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2013/11/20/2013-11-20-how-to-update-github-page-in-multi-pos/" data-id="cuidS7gIXDC6ItbKszpTBF9sr" data-title="how to update github page in multi pos" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/git/" rel="tag">git</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2013-10-10-ipv4-route-fib-table-lookup" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2013/10/10/2013-10-10-ipv4-route-fib-table-lookup/" class="article-date">
+  <time class="dt-published" datetime="2013-10-09T23:34:00.000Z" itemprop="datePublished">2013-10-10</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/route/">route</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2013/10/10/2013-10-10-ipv4-route-fib-table-lookup/">ipv4 route fib table lookup</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="calltrace"><a href="#calltrace" class="headerlink" title="calltrace"></a>calltrace</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">&gt; ip_rcv_finish</span><br><span class="line">&gt; &gt; ip_route_input_noref</span><br><span class="line">&gt; &gt; &gt; ip_route_input_slow</span><br><span class="line">&gt; &gt; &gt; &gt; fib_lookup</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; fib_table_lookup with RT_TABLE_LOCAL</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; fib_table_lookup with RT_TABLE_MAIN</span><br><span class="line">&gt; &gt; &gt; &gt; ip_mkroute_input</span><br></pre></td></tr></table></figure>
+        
+          <p class="article-more-link">
+            <a href="/2013/10/10/2013-10-10-ipv4-route-fib-table-lookup/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2013/10/10/2013-10-10-ipv4-route-fib-table-lookup/" data-id="cuid6As8VyUpS9xrAapoXzcfm" data-title="ipv4 route fib table lookup" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/route/" rel="tag">route</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2013-10-07-make-terminal-tab-more-markedness" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2013/10/07/2013-10-07-make-terminal-tab-more-markedness/" class="article-date">
+  <time class="dt-published" datetime="2013-10-07T10:57:00.000Z" itemprop="datePublished">2013-10-07</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/others/">others</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2013/10/07/2013-10-07-make-terminal-tab-more-markedness/">How to make selected tab in terminal more prominent</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>On ubuntu 13.04, create the file ~&#x2F;.config&#x2F;gtk-3.0&#x2F;gtk.css with following lines</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">martin@ubuntu:~$ cat ~/.config/gtk-3.0/gtk.css </span><br><span class="line">TerminalWindow .notebook tab:active &#123;</span><br><span class="line">    background-color: #0000FF;	</span><br><span class="line">    &#125;</span><br><span class="line">martin@ubuntu:~$ </span><br></pre></td></tr></table></figure>
+
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2013/10/07/2013-10-07-make-terminal-tab-more-markedness/" data-id="cuidb8z9S3wjPrbWlf2Bm74DN" data-title="How to make selected tab in terminal more prominent" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+
+
+  <nav id="page-nav">
+    
+    <a class="extend prev" rel="prev" href="/page/6/">&laquo; Prev</a><a class="page-number" href="/">1</a><span class="space">&hellip;</span><a class="page-number" href="/page/5/">5</a><a class="page-number" href="/page/6/">6</a><span class="page-number current">7</span><a class="page-number" href="/page/8/">8</a><a class="page-number" href="/page/9/">9</a><span class="space">&hellip;</span><a class="page-number" href="/page/14/">14</a><a class="extend next" rel="next" href="/page/8/">Next &raquo;</a>
+  </nav>
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/06/">June 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/">tcp三次握手 --- 逐渐消失的tcp半链接队列</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/05/tcp-req-queue-length-check/">创建req scoket时的三个长度检查</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>draft: how to select a realtime task when schedule | Kernel Study Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="##summary There is a struct rt_rq in struct rq. struct rt_rq is used to store allthe realtime task in current struct rq. which has a struct rt_prio_array active.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="draft: how to select a realtime task when schedule">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/07/26/2013-07-26-draft-how-to-select-a-realtime-task-when-schedule/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="##summary There is a struct rt_rq in struct rq. struct rt_rq is used to store allthe realtime task in current struct rq. which has a struct rt_prio_array active.">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2013-07-26T01:00:00.000Z">
+<meta property="article:modified_time" content="2026-03-06T23:09:06.613Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="sched">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.1"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel Study Notes</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-2013-07-26-draft-how-to-select-a-realtime-task-when-schedule" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2013/07/26/2013-07-26-draft-how-to-select-a-realtime-task-when-schedule/" class="article-date">
+  <time class="dt-published" datetime="2013-07-26T01:00:00.000Z" itemprop="datePublished">2013-07-26</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/sched/">sched</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      draft: how to select a realtime task when schedule
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>##summary</p>
+<p>There is a <code>struct rt_rq</code> in <code>struct rq</code>. <code>struct rt_rq</code> is used to store all<br>the realtime task in current <code>struct rq</code>. which has a <code>struct rt_prio_array active</code>.</p>
+<span id="more"></span>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">rq</span> &#123;</span></span><br><span class="line">	...</span><br><span class="line">	<span class="class"><span class="keyword">struct</span> <span class="title">rt_rq</span> &#123;</span></span><br><span class="line">		...</span><br><span class="line">		<span class="class"><span class="keyword">struct</span> <span class="title">rt_prio_array</span> <span class="title">active</span> &#123;</span></span><br><span class="line">			DECLARE_BITMAP(bitmap, MAX_RT_PRIO+<span class="number">1</span>); <span class="comment">/* include 1 bit for delimiter */</span></span><br><span class="line">			<span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">queue</span>[<span class="title">MAX_RT_PRIO</span>];</span></span><br><span class="line">		&#125;</span><br><span class="line">		...</span><br><span class="line">	&#125;</span><br><span class="line">	...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><em>for a</em> <code>rq</code>:<br>All the realtime tasks are stored by a bit map and a list array.</p>
+<ol>
+<li><p><code>DECLARE_BITMAP(bitmap, MAX_RT_PRIO+1)</code><br>This is a bit map to show if a priority level has task to be selected.<br>One bit set to 1 means one or more task(s).</p>
+</li>
+<li><p><code>struct list_head queue[MAX_RT_PRIO]</code><br>This is list array, each element is a list head.<br>All tasks are linked into different lists according their priority by<br>  <code>struct sched_rt_entity</code>‘s <code>struct list_head run_list</code>.</p>
+</li>
+</ol>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1001</span> <span class="class"><span class="keyword">struct</span> <span class="title">sched_rt_entity</span> &#123;</span></span><br><span class="line"><span class="number">1002</span>         <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">run_list</span></span></span><br></pre></td></tr></table></figure>
+<p>   Each list has a corresponding bit in previous bitmap.</p>
+<p>When we need pick a task, we find find the first bit in the map,<br>and then select one task from the corresponding list.</p>
+<p>Q1: what is group_rt_rq? what is it used for?<br>  CONFIG_RT_GROUP_SCHED??</p>
+<h3 id="Call-Trac"><a href="#Call-Trac" class="headerlink" title="Call Trac"></a>Call Trac</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">&gt; pick_next_task</span><br><span class="line">&gt; &gt; for_each_class(class) &#123;</span><br><span class="line">        p = class-&gt;pick_next_task(rq);</span><br><span class="line">&gt; &gt; &gt; pick_next_task_rt</span><br><span class="line">&gt; &gt; &gt; &gt; _pick_next_task_rt</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; pick_next_rt_entity</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; sched_find_first_bit(<span class="built_in">array</span>-&gt;bitmap);</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; &gt; list_entry(<span class="built_in">queue</span>-&gt;next, <span class="keyword">struct</span> sched_rt_entity, run_list);</span><br></pre></td></tr></table></figure>
+
+<p>##Data Structure</p>
+<h3 id="realtime-runqueue-struct-rt-rq"><a href="#realtime-runqueue-struct-rt-rq" class="headerlink" title="realtime runqueue struct rt_rq"></a>realtime runqueue <code>struct rt_rq</code></h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">332</span> <span class="comment">/* Real-Time classes&#x27; related field in a runqueue: */</span></span><br><span class="line"><span class="number">333</span> <span class="class"><span class="keyword">struct</span> <span class="title">rt_rq</span> &#123;</span></span><br><span class="line"><span class="number">334</span>         <span class="class"><span class="keyword">struct</span> <span class="title">rt_prio_array</span> <span class="title">active</span>;</span></span><br><span class="line"><span class="number">335</span>         <span class="type">unsigned</span> <span class="type">int</span> rt_nr_running;</span><br><span class="line"><span class="number">336</span> <span class="meta">#<span class="keyword">if</span> defined CONFIG_SMP || defined CONFIG_RT_GROUP_SCHED</span></span><br><span class="line"><span class="number">337</span>         <span class="class"><span class="keyword">struct</span> &#123;</span></span><br><span class="line"><span class="number">338</span>                 <span class="type">int</span> curr; <span class="comment">/* highest queued rt task prio */</span></span><br><span class="line"><span class="number">339</span> <span class="meta">#<span class="keyword">ifdef</span> CONFIG_SMP</span></span><br><span class="line"><span class="number">340</span>                 <span class="type">int</span> next; <span class="comment">/* next highest */</span></span><br><span class="line"><span class="number">341</span> <span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"><span class="number">342</span>         &#125; highest_prio;</span><br><span class="line"><span class="number">343</span> <span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"><span class="number">344</span> <span class="meta">#<span class="keyword">ifdef</span> CONFIG_SMP</span></span><br><span class="line"><span class="number">345</span>         <span class="type">unsigned</span> <span class="type">long</span> rt_nr_migratory;</span><br><span class="line"><span class="number">346</span>         <span class="type">unsigned</span> <span class="type">long</span> rt_nr_total;</span><br><span class="line"><span class="number">347</span>         <span class="type">int</span> overloaded;</span><br><span class="line"><span class="number">348</span>         <span class="class"><span class="keyword">struct</span> <span class="title">plist_head</span> <span class="title">pushable_tasks</span>;</span></span><br><span class="line"><span class="number">349</span> <span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"><span class="number">350</span>         <span class="type">int</span> rt_throttled;</span><br><span class="line"><span class="number">351</span>         u64 rt_time;</span><br><span class="line"><span class="number">352</span>         u64 rt_runtime;</span><br><span class="line"><span class="number">353</span>         <span class="comment">/* Nests inside the rq lock: */</span></span><br><span class="line"><span class="number">354</span>         <span class="type">raw_spinlock_t</span> rt_runtime_lock;</span><br><span class="line"><span class="number">355</span> </span><br><span class="line"><span class="number">356</span> <span class="meta">#<span class="keyword">ifdef</span> CONFIG_RT_GROUP_SCHED</span></span><br><span class="line"><span class="number">357</span>         <span class="type">unsigned</span> <span class="type">long</span> rt_nr_boosted;</span><br><span class="line"><span class="number">358</span> </span><br><span class="line"><span class="number">359</span>         <span class="class"><span class="keyword">struct</span> <span class="title">rq</span> *<span class="title">rq</span>;</span></span><br><span class="line"><span class="number">360</span>         <span class="class"><span class="keyword">struct</span> <span class="title">task_group</span> *<span class="title">tg</span>;</span></span><br><span class="line"><span class="number">361</span> <span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"><span class="number">362</span> &#125;;</span><br><span class="line"><span class="number">363</span> </span><br></pre></td></tr></table></figure>
+
+<h3 id="struct-rt-prio-array"><a href="#struct-rt-prio-array" class="headerlink" title="struct rt_prio_array"></a><code>struct rt_prio_array</code></h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"> <span class="number">95</span> <span class="comment">/*</span></span><br><span class="line"><span class="comment"> 96  * This is the priority-queue data structure of the RT scheduling class:</span></span><br><span class="line"><span class="comment"> 97  */</span></span><br><span class="line"> <span class="number">98</span> <span class="class"><span class="keyword">struct</span> <span class="title">rt_prio_array</span> &#123;</span></span><br><span class="line"> <span class="number">99</span>         DECLARE_BITMAP(bitmap, MAX_RT_PRIO+<span class="number">1</span>); <span class="comment">/* include 1 bit for delimiter */</span></span><br><span class="line"><span class="number">100</span>         <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">queue</span>[<span class="title">MAX_RT_PRIO</span>];</span></span><br><span class="line"><span class="number">101</span> &#125;;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1001</span> <span class="class"><span class="keyword">struct</span> <span class="title">sched_rt_entity</span> &#123;</span></span><br><span class="line"><span class="number">1002</span>         <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span> <span class="title">run_list</span>;</span></span><br><span class="line"><span class="number">1003</span>         <span class="type">unsigned</span> <span class="type">long</span> timeout;  </span><br><span class="line"><span class="number">1004</span>         <span class="type">unsigned</span> <span class="type">long</span> watchdog_stamp;</span><br><span class="line"><span class="number">1005</span>         <span class="type">unsigned</span> <span class="type">int</span> time_slice;</span><br><span class="line"><span class="number">1006</span> </span><br><span class="line"><span class="number">1007</span>         <span class="class"><span class="keyword">struct</span> <span class="title">sched_rt_entity</span> *<span class="title">back</span>;</span></span><br><span class="line"><span class="number">1008</span> <span class="meta">#<span class="keyword">ifdef</span> CONFIG_RT_GROUP_SCHED</span></span><br><span class="line"><span class="number">1009</span>         <span class="class"><span class="keyword">struct</span> <span class="title">sched_rt_entity</span>  *<span class="title">parent</span>;</span></span><br><span class="line"><span class="number">1010</span>         <span class="comment">/* rq on which this entity is (to be) queued: */</span></span><br><span class="line"><span class="number">1011</span>         <span class="class"><span class="keyword">struct</span> <span class="title">rt_rq</span>            *<span class="title">rt_rq</span>;</span></span><br><span class="line"><span class="number">1012</span>         <span class="comment">/* rq &quot;owned&quot; by this entity/group: */</span></span><br><span class="line"><span class="number">1013</span>         <span class="class"><span class="keyword">struct</span> <span class="title">rt_rq</span>            *<span class="title">my_q</span>;</span></span><br><span class="line"><span class="number">1014</span> <span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"><span class="number">1015</span> &#125;;</span><br></pre></td></tr></table></figure>
+
+
+<h3 id="pick-next-task-rt"><a href="#pick-next-task-rt" class="headerlink" title="pick_next_task_rt"></a><code>pick_next_task_rt</code></h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1323</span> <span class="type">static</span> <span class="keyword">struct</span> task_struct *<span class="title function_">pick_next_task_rt</span><span class="params">(<span class="keyword">struct</span> rq *rq)</span></span><br><span class="line">1324 &#123;</span><br><span class="line"><span class="number">1325</span>         <span class="class"><span class="keyword">struct</span> <span class="title">task_struct</span> *<span class="title">p</span> =</span> _pick_next_task_rt(rq);</span><br><span class="line"><span class="number">1326</span> </span><br><span class="line"><span class="number">1327</span>         <span class="comment">/* The running task is never eligible for pushing */</span></span><br><span class="line"><span class="number">1328</span>         <span class="keyword">if</span> (p)</span><br><span class="line"><span class="number">1329</span>                 dequeue_pushable_task(rq, p);</span><br><span class="line"><span class="number">1330</span> </span><br><span class="line"><span class="number">1331</span> <span class="meta">#<span class="keyword">ifdef</span> CONFIG_SMP</span></span><br><span class="line"><span class="number">1332</span>         <span class="comment">/*</span></span><br><span class="line"><span class="comment">1333          * We detect this state here so that we can avoid taking the RQ</span></span><br><span class="line"><span class="comment">1334          * lock again later if there is no need to push</span></span><br><span class="line"><span class="comment">1335          */</span></span><br><span class="line"><span class="number">1336</span>         rq-&gt;post_schedule = has_pushable_tasks(rq);</span><br><span class="line"><span class="number">1337</span> <span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"><span class="number">1338</span> </span><br><span class="line"><span class="number">1339</span>         <span class="keyword">return</span> p;</span><br><span class="line"><span class="number">1340</span> &#125;</span><br></pre></td></tr></table></figure>
+
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2013/07/26/2013-07-26-draft-how-to-select-a-realtime-task-when-schedule/" data-id="cuid6wmf_By4RB5LSXjhbf3e5" data-title="draft: how to select a realtime task when schedule" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/sched/" rel="tag">sched</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2013/08/02/2013-08-02-unregister-a-new-device/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          unregister a net device
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2013/07/26/2013-07-26-how-to-pick-next-task/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">draft: how to pick next task</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/06/">June 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/">tcp三次握手 --- 逐渐消失的tcp半链接队列</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/05/tcp-req-queue-length-check/">创建req scoket时的三个长度检查</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

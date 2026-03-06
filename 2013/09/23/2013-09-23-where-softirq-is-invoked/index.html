@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>where softirq is invoked | Kernel Study Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="##summarysoftirq 真正干活的函数是__do_softirq。linuxv3.11内核里能够执行__do_softirq,有如下调用,这里指真正执行softirq的地方，不是触发(设置)softirq标志 !!!  每个硬中断退出的时。 当bh使能的时。 发送回环报文时。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="where softirq is invoked">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/09/23/2013-09-23-where-softirq-is-invoked/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="##summarysoftirq 真正干活的函数是__do_softirq。linuxv3.11内核里能够执行__do_softirq,有如下调用,这里指真正执行softirq的地方，不是触发(设置)softirq标志 !!!  每个硬中断退出的时。 当bh使能的时。 发送回环报文时。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2013-09-23T02:36:00.000Z">
+<meta property="article:modified_time" content="2026-03-06T23:09:06.615Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="bh">
+<meta property="article:tag" content="irq">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.1"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel Study Notes</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-2013-09-23-where-softirq-is-invoked" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2013/09/23/2013-09-23-where-softirq-is-invoked/" class="article-date">
+  <time class="dt-published" datetime="2013-09-23T02:36:00.000Z" itemprop="datePublished">2013-09-23</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/irq/">irq</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      where softirq is invoked
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>##summary<br>softirq 真正干活的函数是<code>__do_softirq</code>。<br>linuxv3.11内核里能够执行<code>__do_softirq</code>,有如下调用,<br>这里指真正执行softirq的地方，不是触发(设置)softirq标志 !!!</p>
+<ol>
+<li>每个硬中断退出的时。</li>
+<li>当bh使能的时。</li>
+<li>发送回环报文时。</li>
+</ol>
+<span id="more"></span>
+
+<h3 id="case1-每个硬中断退出的时候。"><a href="#case1-每个硬中断退出的时候。" class="headerlink" title="case1 每个硬中断退出的时候。"></a>case1 每个硬中断退出的时候。</h3><h4 id="call-trace"><a href="#call-trace" class="headerlink" title="call trace"></a>call trace</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">&gt; irq_exit</span><br><span class="line">&gt; &gt; invoke_softirq</span><br><span class="line">&gt; &gt; &gt; __do_softirq</span><br></pre></td></tr></table></figure>
+<h4 id="irq-exit"><a href="#irq-exit" class="headerlink" title="irq_exit"></a><code>irq_exit</code></h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">350</span> <span class="comment">/*</span></span><br><span class="line"><span class="comment">351  * Exit an interrupt context. Process softirqs if needed and possible:</span></span><br><span class="line"><span class="comment">352  */</span></span><br><span class="line"><span class="number">353</span> <span class="type">void</span> <span class="title function_">irq_exit</span><span class="params">(<span class="type">void</span>)</span></span><br><span class="line">354 &#123;</span><br><span class="line"><span class="number">355</span> <span class="meta">#<span class="keyword">ifndef</span> __ARCH_IRQ_EXIT_IRQS_DISABLED</span></span><br><span class="line"><span class="number">356</span>         local_irq_disable();</span><br><span class="line"><span class="number">357</span> <span class="meta">#<span class="keyword">else</span></span></span><br><span class="line"><span class="number">358</span>         WARN_ON_ONCE(!irqs_disabled());</span><br><span class="line"><span class="number">359</span> <span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"><span class="number">360</span></span><br><span class="line"><span class="number">361</span>         account_irq_exit_time(current);</span><br><span class="line"><span class="number">362</span>         trace_hardirq_exit();</span><br><span class="line"><span class="number">363</span>         sub_preempt_count(HARDIRQ_OFFSET);</span><br><span class="line"><span class="number">364</span>         <span class="keyword">if</span> (!in_interrupt() &amp;&amp; local_softirq_pending())</span><br><span class="line"><span class="number">365</span>                 invoke_softirq();</span><br><span class="line"><span class="number">366</span></span><br><span class="line"><span class="number">367</span>         tick_irq_exit();</span><br><span class="line"><span class="number">368</span>         rcu_irq_exit();</span><br><span class="line"><span class="number">369</span> &#125;</span><br></pre></td></tr></table></figure>
+
+<h4 id="invoke-softirq"><a href="#invoke-softirq" class="headerlink" title="invoke_softirq"></a><code>invoke_softirq</code></h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">329</span> <span class="type">static</span> <span class="keyword">inline</span> <span class="type">void</span> <span class="title function_">invoke_softirq</span><span class="params">(<span class="type">void</span>)</span></span><br><span class="line">330 &#123;</span><br><span class="line"><span class="number">331</span>         <span class="keyword">if</span> (!force_irqthreads)</span><br><span class="line"><span class="number">332</span>                 __do_softirq();</span><br><span class="line"><span class="number">333</span>         <span class="keyword">else</span></span><br><span class="line"><span class="number">334</span>                 wakeup_softirqd();</span><br><span class="line"><span class="number">335</span> &#125;</span><br></pre></td></tr></table></figure>
+
+
+<h3 id="case2-使能bh的时候"><a href="#case2-使能bh的时候" class="headerlink" title="case2 使能bh的时候"></a>case2 使能bh的时候</h3><h4 id="call-trace-1"><a href="#call-trace-1" class="headerlink" title="call trace"></a>call trace</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">&gt; local_bh_enable</span><br><span class="line">&gt; &gt; _local_bh_enable_ip</span><br><span class="line">&gt; &gt; &gt; do_softirq</span><br><span class="line">&gt; &gt; &gt; &gt; (x86_64特有的)call_softirq</span><br><span class="line">&gt; &gt; &gt; &gt; __do_softirq</span><br></pre></td></tr></table></figure>
+
+<h4 id="local-bh-enable"><a href="#local-bh-enable" class="headerlink" title="local_bh_enable"></a><code>local_bh_enable</code></h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">184</span> <span class="type">void</span> <span class="title function_">local_bh_enable</span><span class="params">(<span class="type">void</span>)</span></span><br><span class="line">185 &#123;</span><br><span class="line"><span class="number">186</span>         _local_bh_enable_ip(_RET_IP_);</span><br><span class="line"><span class="number">187</span> &#125;</span><br><span class="line"><span class="number">188</span> EXPORT_SYMBOL(local_bh_enable);</span><br></pre></td></tr></table></figure>
+
+<h4 id="local-bh-enable-ip"><a href="#local-bh-enable-ip" class="headerlink" title="_local_bh_enable_ip"></a><code>_local_bh_enable_ip</code></h4><p>NOTE: 使能bh的时候，刚开始抢占还是禁止的。只有软中断处理完了后，抢占才使能的。<br>顺便说一下，使能bh时，有可能发生进程切换(见<code>preempt_check_resched</code>).</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">157</span> <span class="type">static</span> <span class="keyword">inline</span> <span class="type">void</span> _local_bh_enable_ip(<span class="type">unsigned</span> <span class="type">long</span> ip)</span><br><span class="line"><span class="number">158</span> &#123;</span><br><span class="line"><span class="number">159</span>         WARN_ON_ONCE(in_irq() || irqs_disabled());</span><br><span class="line"><span class="number">160</span> <span class="meta">#<span class="keyword">ifdef</span> CONFIG_TRACE_IRQFLAGS</span></span><br><span class="line"><span class="number">161</span>         local_irq_disable();</span><br><span class="line"><span class="number">162</span> <span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"><span class="number">163</span>         <span class="comment">/*</span></span><br><span class="line"><span class="comment">164          * Are softirqs going to be turned on now:</span></span><br><span class="line"><span class="comment">165          */</span></span><br><span class="line"><span class="number">166</span>         <span class="keyword">if</span> (softirq_count() == SOFTIRQ_DISABLE_OFFSET)</span><br><span class="line"><span class="number">167</span>                 trace_softirqs_on(ip);</span><br><span class="line"><span class="number">168</span>         <span class="comment">/*</span></span><br><span class="line"><span class="comment">169          * Keep preemption disabled until we are done with</span></span><br><span class="line"><span class="comment">170          * softirq processing:</span></span><br><span class="line"><span class="comment">171          */</span></span><br><span class="line"><span class="number">172</span>         sub_preempt_count(SOFTIRQ_DISABLE_OFFSET - <span class="number">1</span>);</span><br><span class="line"><span class="number">173</span> </span><br><span class="line"><span class="number">174</span>         <span class="keyword">if</span> (unlikely(!in_interrupt() &amp;&amp; local_softirq_pending()))</span><br><span class="line"><span class="number">175</span>                 do_softirq();</span><br><span class="line"><span class="number">176</span>    </span><br><span class="line"><span class="number">177</span>         dec_preempt_count();</span><br><span class="line"><span class="number">178</span> <span class="meta">#<span class="keyword">ifdef</span> CONFIG_TRACE_IRQFLAGS</span></span><br><span class="line"><span class="number">179</span>         local_irq_enable();</span><br><span class="line"><span class="number">180</span> <span class="meta">#<span class="keyword">endif</span>                  </span></span><br><span class="line"><span class="number">181</span>         preempt_check_resched();</span><br><span class="line"><span class="number">182</span> &#125;</span><br></pre></td></tr></table></figure>
+
+<h4 id="do-softirq根据不同的体系机构有不同的版本。"><a href="#do-softirq根据不同的体系机构有不同的版本。" class="headerlink" title="do_softirq根据不同的体系机构有不同的版本。"></a><code>do_softirq</code>根据不同的体系机构有不同的版本。</h4><p>当对应的硬件体系里没有定义<code>do_softirq</code>时，使用<br><code>kernel/softirq.c</code>中通用的do_softirq&#96;.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">286</span> <span class="meta">#<span class="keyword">ifndef</span> __ARCH_HAS_DO_SOFTIRQ</span></span><br><span class="line"><span class="number">287</span> </span><br><span class="line"><span class="number">288</span> asmlinkage <span class="type">void</span> <span class="title function_">do_softirq</span><span class="params">(<span class="type">void</span>)</span></span><br><span class="line">289 &#123;</span><br><span class="line"><span class="number">290</span>         __u32 pending;</span><br><span class="line"><span class="number">291</span>         <span class="type">unsigned</span> <span class="type">long</span> flags;</span><br><span class="line"><span class="number">292</span> </span><br><span class="line"><span class="number">293</span>         <span class="keyword">if</span> (in_interrupt())</span><br><span class="line"><span class="number">294</span>                 <span class="keyword">return</span>;</span><br><span class="line"><span class="number">295</span> </span><br><span class="line"><span class="number">296</span>         local_irq_save(flags);</span><br><span class="line"><span class="number">297</span> </span><br><span class="line"><span class="number">298</span>         pending = local_softirq_pending();</span><br><span class="line"><span class="number">299</span> </span><br><span class="line"><span class="number">300</span>         <span class="keyword">if</span> (pending)</span><br><span class="line"><span class="number">301</span>                 __do_softirq();</span><br><span class="line"><span class="number">302</span> </span><br><span class="line"><span class="number">303</span>         local_irq_restore(flags);</span><br><span class="line"><span class="number">304</span> &#125;</span><br><span class="line"><span class="number">305</span> </span><br><span class="line"><span class="number">306</span> <span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
+<p>而对于X86_64,有其自己的定义。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"> <span class="number">92</span> <span class="keyword">extern</span> <span class="type">void</span> <span class="title function_">call_softirq</span><span class="params">(<span class="type">void</span>)</span>;</span><br><span class="line"> <span class="number">93</span> </span><br><span class="line"> <span class="number">94</span> asmlinkage <span class="type">void</span> <span class="title function_">do_softirq</span><span class="params">(<span class="type">void</span>)</span></span><br><span class="line"> 95 &#123;</span><br><span class="line"> <span class="number">96</span>         __u32 pending;</span><br><span class="line"> <span class="number">97</span>         <span class="type">unsigned</span> <span class="type">long</span> flags;</span><br><span class="line"> <span class="number">98</span> </span><br><span class="line"> <span class="number">99</span>         <span class="keyword">if</span> (in_interrupt())</span><br><span class="line"><span class="number">100</span>                 <span class="keyword">return</span>;</span><br><span class="line"><span class="number">101</span> </span><br><span class="line"><span class="number">102</span>         local_irq_save(flags);</span><br><span class="line"><span class="number">103</span>         pending = local_softirq_pending();</span><br><span class="line"><span class="number">104</span>         <span class="comment">/* Switch to interrupt stack */</span></span><br><span class="line"><span class="number">105</span>         <span class="keyword">if</span> (pending) &#123;</span><br><span class="line"><span class="number">106</span>                 call_softirq();</span><br><span class="line"><span class="number">107</span>                 WARN_ON_ONCE(softirq_count());</span><br><span class="line"><span class="number">108</span>         &#125;</span><br><span class="line"><span class="number">109</span>         local_irq_restore(flags);</span><br><span class="line"><span class="number">110</span> &#125;</span><br></pre></td></tr></table></figure>
+<p>其中<code>call_softirq</code>是个用汇编语言写的一个函数定义在 arch&#x2F;x86&#x2F;kernel&#x2F;entry_64.S</p>
+<h3 id="netif-rx-ni"><a href="#netif-rx-ni" class="headerlink" title="netif_rx_ni"></a><code>netif_rx_ni</code></h3><p>这一块的理解不是很透，仅以一个具体的例子来说明。<code>发送回环报文</code>.</p>
+<h4 id="发送回环报文"><a href="#发送回环报文" class="headerlink" title="发送回环报文"></a>发送回环报文</h4><h4 id="call-trace-2"><a href="#call-trace-2" class="headerlink" title="call trace"></a>call trace</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">&gt; dev_loopback_xmit</span><br><span class="line">&gt; &gt; netif_rx_ni</span><br><span class="line">&gt; &gt; do_softirq</span><br><span class="line">&gt; &gt; &gt; __do_softirq</span><br></pre></td></tr></table></figure>
+
+<p>loopback 报文会通过<code>netif_rx</code>函数，被重新放回到<br>per_cpu变量<code>softnet_data</code>下的队列<code>input_pkt_queue</code>里，<br>同时激发napi调用，进而激发软中断调用(只是设置标志位，不是真正调用）</p>
+<p>另外，注意<code>netif_rx_ni</code>里没有禁止bh调度，而是只是禁止了抢占(<code>preempt_disable</code>).</p>
+<h5 id="dev-loopback-xmit"><a href="#dev-loopback-xmit" class="headerlink" title="dev_loopback_xmit"></a><code>dev_loopback_xmit</code></h5><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">2765</span> <span class="type">int</span> <span class="title function_">dev_loopback_xmit</span><span class="params">(<span class="keyword">struct</span> sk_buff *skb)</span></span><br><span class="line">2766 &#123;</span><br><span class="line"><span class="number">2767</span>         skb_reset_mac_header(skb);</span><br><span class="line"><span class="number">2768</span>         __skb_pull(skb, skb_network_offset(skb));</span><br><span class="line"><span class="number">2769</span>         skb-&gt;pkt_type = PACKET_LOOPBACK;</span><br><span class="line"><span class="number">2770</span>         skb-&gt;ip_summed = CHECKSUM_UNNECESSARY;</span><br><span class="line"><span class="number">2771</span>         WARN_ON(!skb_dst(skb));</span><br><span class="line"><span class="number">2772</span>         skb_dst_force(skb);</span><br><span class="line"><span class="number">2773</span>         netif_rx_ni(skb);</span><br><span class="line"><span class="number">2774</span>         <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"><span class="number">2775</span> &#125;</span><br></pre></td></tr></table></figure>
+<h5 id="netif-rx-ni-1"><a href="#netif-rx-ni-1" class="headerlink" title="netif_rx_ni"></a><code>netif_rx_ni</code></h5><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">3267</span> <span class="type">int</span> <span class="title function_">netif_rx_ni</span><span class="params">(<span class="keyword">struct</span> sk_buff *skb)</span></span><br><span class="line">3268 &#123;</span><br><span class="line"><span class="number">3269</span>         <span class="type">int</span> err;</span><br><span class="line"><span class="number">3270</span>         </span><br><span class="line"><span class="number">3271</span>         preempt_disable();</span><br><span class="line"><span class="number">3272</span>         err = netif_rx(skb);</span><br><span class="line"><span class="number">3273</span>         <span class="keyword">if</span> (local_softirq_pending())</span><br><span class="line"><span class="number">3274</span>                 do_softirq();</span><br><span class="line"><span class="number">3275</span>         preempt_enable();</span><br><span class="line"><span class="number">3276</span>         </span><br><span class="line"><span class="number">3277</span>         <span class="keyword">return</span> err;</span><br><span class="line"><span class="number">3278</span> &#125;</span><br><span class="line"><span class="number">3279</span> EXPORT_SYMBOL(netif_rx_ni);</span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2013/09/23/2013-09-23-where-softirq-is-invoked/" data-id="cuidrEHZQDvEPNTFrOmpZGuZP" data-title="where softirq is invoked" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/irq/" rel="tag">irq</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2013/09/27/2013-09-27-ipv4-route-fib-tree-rebalance/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          IPv4 route fib tree rebalance
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2013/09/12/2013-09-12-ipv4-route-fib-insert-node/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">IPv4 route fib insert node</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/06/">June 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/">tcp三次握手 --- 逐渐消失的tcp半链接队列</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/05/tcp-req-queue-length-check/">创建req scoket时的三个长度检查</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

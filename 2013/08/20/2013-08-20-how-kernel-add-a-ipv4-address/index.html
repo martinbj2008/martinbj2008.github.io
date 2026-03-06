@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>how kernel add a IPv4 address | Kernel Study Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="SUMMARYThere is a struct in_device __rcu  *ip_ptr under every net_device.which stores all the IPv4 related information for this device. Each IPv4 address is stored a struct in_ifaddr,all the IPv4 addr">
+<meta property="og:type" content="article">
+<meta property="og:title" content="how kernel add a IPv4 address">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/08/20/2013-08-20-how-kernel-add-a-ipv4-address/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="SUMMARYThere is a struct in_device __rcu  *ip_ptr under every net_device.which stores all the IPv4 related information for this device. Each IPv4 address is stored a struct in_ifaddr,all the IPv4 addr">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ifa.png">
+<meta property="article:published_time" content="2013-08-20T08:31:00.000Z">
+<meta property="article:modified_time" content="2026-03-06T23:09:06.613Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IPv4">
+<meta property="article:tag" content="address">
+<meta property="article:tag" content="route">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/ifa.png">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.1"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel Study Notes</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-2013-08-20-how-kernel-add-a-ipv4-address" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2013/08/20/2013-08-20-how-kernel-add-a-ipv4-address/" class="article-date">
+  <time class="dt-published" datetime="2013-08-20T08:31:00.000Z" itemprop="datePublished">2013-08-20</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/route/">route</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      how kernel add a IPv4 address
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="SUMMARY"><a href="#SUMMARY" class="headerlink" title="SUMMARY"></a>SUMMARY</h2><p>There is a <code>struct in_device __rcu  *ip_ptr</code> under every <code>net_device</code>.<br>which stores all the IPv4 related information for this device.</p>
+<p>Each IPv4 address is stored a <code>struct in_ifaddr</code>,<br>all the IPv4 address of a net device are stored into a list(netdev-&gt;ip_ptr-&gt;ifa_list). </p>
+<p><img src="/images/ifa.png" alt="内核如何管理ifa"></p>
+<span id="more"></span>
+
+
+<h3 id="相关结构体"><a href="#相关结构体" class="headerlink" title="相关结构体"></a>相关结构体</h3><h4 id="net-device-和in-device"><a href="#net-device-和in-device" class="headerlink" title="net_device 和in_device"></a><code>net_device</code> 和<code>in_device</code></h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">1075 struct net_device &#123;</span><br><span class="line">...</span><br><span class="line">1208         struct in_device __rcu  *ip_ptr;        /* IPv4 specific data   */</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">55 struct in_device &#123;</span><br><span class="line">56         struct net_device       *dev;</span><br><span class="line">57         atomic_t                refcnt;</span><br><span class="line">58         int                     dead;</span><br><span class="line">59         struct in_ifaddr        *ifa_list;      /* IP ifaddr chain              */</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<h4 id="ifa结构体struct-in-ifaddr"><a href="#ifa结构体struct-in-ifaddr" class="headerlink" title="ifa结构体struct in_ifaddr"></a>ifa结构体<code>struct in_ifaddr</code></h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">161 struct in_ifaddr &#123;</span><br><span class="line">162         struct hlist_node       hash;</span><br><span class="line">163         struct in_ifaddr        *ifa_next;</span><br><span class="line">164         struct in_device        *ifa_dev;</span><br><span class="line">165         struct rcu_head         rcu_head;</span><br><span class="line">166         __be32                  ifa_local;</span><br><span class="line">167         __be32                  ifa_address;</span><br><span class="line">168         __be32                  ifa_mask;</span><br><span class="line">169         __be32                  ifa_broadcast;</span><br><span class="line">170         unsigned char           ifa_scope;</span><br><span class="line">171         unsigned char           ifa_flags;</span><br><span class="line">172         unsigned char           ifa_prefixlen;</span><br><span class="line">173         char                    ifa_label[IFNAMSIZ];</span><br><span class="line">174 </span><br><span class="line">175         /* In seconds, relative to tstamp. Expiry is at tstamp + HZ * lft. */</span><br><span class="line">176         __u32                   ifa_valid_lft;</span><br><span class="line">177         __u32                   ifa_preferred_lft;</span><br><span class="line">178         unsigned long           ifa_cstamp; /* created timestamp */</span><br><span class="line">179         unsigned long           ifa_tstamp; /* updated timestamp */</span><br><span class="line">180 &#125;;</span><br></pre></td></tr></table></figure>
+
+
+<h4 id="注册处理增删IP地址命令的入口函数"><a href="#注册处理增删IP地址命令的入口函数" class="headerlink" title="注册处理增删IP地址命令的入口函数"></a>注册处理<code>增删IP地址</code>命令的入口函数</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">2284 void __init devinet_init(void)</span><br><span class="line">2285 &#123; </span><br><span class="line">...</span><br><span class="line">2300         rtnl_register(PF_INET, RTM_NEWADDR, inet_rtm_newaddr, NULL, NULL);</span><br><span class="line">2301         rtnl_register(PF_INET, RTM_DELADDR, inet_rtm_deladdr, NULL, NULL);</span><br></pre></td></tr></table></figure>
+
+<h2 id="内核如何处理增加ip地址"><a href="#内核如何处理增加ip地址" class="headerlink" title="内核如何处理增加ip地址"></a>内核如何处理<code>增加ip地址</code></h2><h3 id="calltrace"><a href="#calltrace" class="headerlink" title="calltrace"></a>calltrace</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">&gt; inet_rtm_newaddr</span><br><span class="line">&gt; &gt; rtm_to_ifaddr</span><br><span class="line">&gt; &gt; find_matching_ifa</span><br><span class="line">&gt; &gt; __inet_insert_ifa</span><br><span class="line">&gt; &gt; &gt; insert ifa to ifa_list with right postion.</span><br><span class="line">&gt; &gt; &gt; inet_hash_insert(dev_net(in_dev-&gt;dev), ifa);</span><br><span class="line">&gt; &gt; &gt; rtmsg_ifa(RTM_NEWADDR, ifa, nlh, portid);</span><br><span class="line">&gt; &gt; &gt; blocking_notifier_call_chain(&amp;inetaddr_chain, NETDEV_UP, ifa);</span><br></pre></td></tr></table></figure>
+
+<h4 id="NOTE"><a href="#NOTE" class="headerlink" title="NOTE:"></a>NOTE:</h4><p><code>inetaddr_chain</code> will be shown in next blog.</p>
+<h3 id="处理增加IP地址命令的入口函数"><a href="#处理增加IP地址命令的入口函数" class="headerlink" title="处理增加IP地址命令的入口函数"></a>处理<code>增加IP地址</code>命令的入口函数</h3><h4 id="inet-rtm-newaddr"><a href="#inet-rtm-newaddr" class="headerlink" title="inet_rtm_newaddr"></a><code>inet_rtm_newaddr</code></h4><ul>
+<li>创建：函数<code>rtm_to_ifaddr</code>根据netlink 消息，生成一个 ifa实例</li>
+<li>查找：使用函数<code>find_matching_ifa</code>查找是否有相同的ifa</li>
+<li>插入：如果没有找到， 则通过&#96;&#96;__inet_insert_ifa&#96;添加ifa到内核里。</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><span class="line">807 static int inet_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh)</span><br><span class="line">808 &#123;</span><br><span class="line">809         struct net *net = sock_net(skb-&gt;sk);</span><br><span class="line">810         struct in_ifaddr *ifa;</span><br><span class="line">811         struct in_ifaddr *ifa_existing;</span><br><span class="line">812         __u32 valid_lft = INFINITY_LIFE_TIME;</span><br><span class="line">813         __u32 prefered_lft = INFINITY_LIFE_TIME;</span><br><span class="line">814 </span><br><span class="line">815         ASSERT_RTNL();</span><br><span class="line">816 </span><br><span class="line">817         ifa = rtm_to_ifaddr(net, nlh, &amp;valid_lft, &amp;prefered_lft);</span><br><span class="line">818         if (IS_ERR(ifa))</span><br><span class="line">819                 return PTR_ERR(ifa);</span><br><span class="line">820 </span><br><span class="line">821         ifa_existing = find_matching_ifa(ifa);</span><br><span class="line">822         if (!ifa_existing) &#123;</span><br><span class="line">823                 /* It would be best to check for !NLM_F_CREATE here but</span><br><span class="line">824                  * userspace alreay relies on not having to provide this.</span><br><span class="line">825                  */</span><br><span class="line">826                 set_ifa_lifetime(ifa, valid_lft, prefered_lft);</span><br><span class="line">827                 return __inet_insert_ifa(ifa, nlh, NETLINK_CB(skb).portid);</span><br><span class="line">828         &#125; else &#123;</span><br><span class="line">829                 inet_free_ifa(ifa);</span><br><span class="line">830 </span><br><span class="line">831                 if (nlh-&gt;nlmsg_flags &amp; NLM_F_EXCL ||</span><br><span class="line">832                     !(nlh-&gt;nlmsg_flags &amp; NLM_F_REPLACE))</span><br><span class="line">833                         return -EEXIST;</span><br><span class="line">834                 ifa = ifa_existing;</span><br><span class="line">835                 set_ifa_lifetime(ifa, valid_lft, prefered_lft);</span><br><span class="line">836                 cancel_delayed_work(&amp;check_lifetime_work);</span><br><span class="line">837                 schedule_delayed_work(&amp;check_lifetime_work, 0);</span><br><span class="line">838                 rtmsg_ifa(RTM_NEWADDR, ifa, nlh, NETLINK_CB(skb).portid);</span><br><span class="line">839                 blocking_notifier_call_chain(&amp;inetaddr_chain, NETDEV_UP, ifa);</span><br><span class="line">840         &#125;</span><br><span class="line">841         return 0;</span><br><span class="line">842 &#125;</span><br></pre></td></tr></table></figure>
+<h5 id="rtm-to-ifaddr"><a href="#rtm-to-ifaddr" class="headerlink" title="rtm_to_ifaddr"></a><code>rtm_to_ifaddr</code></h5><p>根据netlink消息生成 ifa</p>
+<ul>
+<li>查找并确认netdev 网口名字: 查找 <em><strong>ip命令指定的网口</strong></em>下，是否有这个IP地址，而不是在<em><strong>整个ns下查</strong></em></li>
+<li>分配一个ifa实例</li>
+<li>根据 netlink 消息内容初始化 ifa</li>
+</ul>
+<p>Q: 同一个IP地址(掩码也相同)可以配置的多个网口上吗？或者说多个网口可以配置相同的ip地址（ip 和掩码都相同）?<br>A: <em><strong>可以</strong></em></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br></pre></td><td class="code"><pre><span class="line">708 static struct in_ifaddr *rtm_to_ifaddr(struct net *net, struct nlmsghdr *nlh,</span><br><span class="line">709                                        __u32 *pvalid_lft, __u32 *pprefered_lft)</span><br><span class="line">710 &#123;</span><br><span class="line">711         struct nlattr *tb[IFA_MAX+1];</span><br><span class="line">712         struct in_ifaddr *ifa;</span><br><span class="line">713         struct ifaddrmsg *ifm;</span><br><span class="line">714         struct net_device *dev;</span><br><span class="line">715         struct in_device *in_dev;</span><br><span class="line">716         int err;</span><br><span class="line">717 </span><br><span class="line">718         err = nlmsg_parse(nlh, sizeof(*ifm), tb, IFA_MAX, ifa_ipv4_policy);</span><br><span class="line">719         if (err &lt; 0)</span><br><span class="line">720                 goto errout;</span><br><span class="line">721 </span><br><span class="line">722         ifm = nlmsg_data(nlh);</span><br><span class="line">723         err = -EINVAL;</span><br><span class="line">724         if (ifm-&gt;ifa_prefixlen &gt; 32 || tb[IFA_LOCAL] == NULL)</span><br><span class="line">725                 goto errout;</span><br><span class="line">726 </span><br><span class="line">727         dev = __dev_get_by_index(net, ifm-&gt;ifa_index);</span><br><span class="line">728         err = -ENODEV;</span><br><span class="line">729         if (dev == NULL)</span><br><span class="line">730                 goto errout;</span><br><span class="line">731 </span><br><span class="line">732         in_dev = __in_dev_get_rtnl(dev);</span><br><span class="line">733         err = -ENOBUFS;</span><br><span class="line">734         if (in_dev == NULL)</span><br><span class="line">735                 goto errout;</span><br><span class="line">736 </span><br><span class="line">737         ifa = inet_alloc_ifa();</span><br><span class="line">738         if (ifa == NULL)</span><br><span class="line">739                 /*</span><br><span class="line">740                  * A potential indev allocation can be left alive, it stays</span><br><span class="line">741                  * assigned to its device and is destroy with it.</span><br><span class="line">742                  */</span><br><span class="line">743                 goto errout;</span><br><span class="line">744 </span><br><span class="line">745         ipv4_devconf_setall(in_dev);</span><br><span class="line">746         in_dev_hold(in_dev);</span><br><span class="line">747 </span><br><span class="line">748         if (tb[IFA_ADDRESS] == NULL)</span><br><span class="line">749                 tb[IFA_ADDRESS] = tb[IFA_LOCAL];</span><br><span class="line">750 </span><br><span class="line">751         INIT_HLIST_NODE(&amp;ifa-&gt;hash);</span><br><span class="line">752         ifa-&gt;ifa_prefixlen = ifm-&gt;ifa_prefixlen;</span><br><span class="line">753         ifa-&gt;ifa_mask = inet_make_mask(ifm-&gt;ifa_prefixlen);</span><br><span class="line">754         ifa-&gt;ifa_flags = ifm-&gt;ifa_flags;</span><br><span class="line">755         ifa-&gt;ifa_scope = ifm-&gt;ifa_scope;</span><br><span class="line">756         ifa-&gt;ifa_dev = in_dev;</span><br><span class="line">757 </span><br><span class="line">758         ifa-&gt;ifa_local = nla_get_be32(tb[IFA_LOCAL]);</span><br><span class="line">759         ifa-&gt;ifa_address = nla_get_be32(tb[IFA_ADDRESS]);</span><br><span class="line">760 </span><br><span class="line">761         if (tb[IFA_BROADCAST])</span><br><span class="line">762                 ifa-&gt;ifa_broadcast = nla_get_be32(tb[IFA_BROADCAST]);</span><br><span class="line">763 </span><br><span class="line">764         if (tb[IFA_LABEL])</span><br><span class="line">765                 nla_strlcpy(ifa-&gt;ifa_label, tb[IFA_LABEL], IFNAMSIZ);</span><br><span class="line">766         else</span><br><span class="line">767                 memcpy(ifa-&gt;ifa_label, dev-&gt;name, IFNAMSIZ);</span><br><span class="line">768 </span><br><span class="line">769         if (tb[IFA_CACHEINFO]) &#123;</span><br><span class="line">770                 struct ifa_cacheinfo *ci;</span><br><span class="line">771 </span><br><span class="line">772                 ci = nla_data(tb[IFA_CACHEINFO]);</span><br><span class="line">773                 if (!ci-&gt;ifa_valid || ci-&gt;ifa_prefered &gt; ci-&gt;ifa_valid) &#123;</span><br><span class="line">774                         err = -EINVAL;</span><br><span class="line">775                         goto errout_free;</span><br><span class="line">776                 &#125;</span><br><span class="line">777                 *pvalid_lft = ci-&gt;ifa_valid;</span><br><span class="line">778                 *pprefered_lft = ci-&gt;ifa_prefered;</span><br><span class="line">779         &#125;</span><br><span class="line">780 </span><br><span class="line">781         return ifa;</span><br><span class="line">782 </span><br><span class="line">783 errout_free:</span><br><span class="line">784         inet_free_ifa(ifa);</span><br><span class="line">785 errout:</span><br><span class="line">786         return ERR_PTR(err);</span><br><span class="line">787 &#125;</span><br></pre></td></tr></table></figure>
+
+<h4 id="把-ifa-插入到对应的两个链表里。"><a href="#把-ifa-插入到对应的两个链表里。" class="headerlink" title="把 ifa 插入到对应的两个链表里。"></a>把 ifa 插入到对应的两个链表里。</h4><ul>
+<li>插入到网口下的 ip 地址列表</li>
+<li>插入同 ns 下的 hash 链表</li>
+<li>发送 netlink 更新消息</li>
+<li>发送<code>blocking_notifier_call_chain</code> :待学习</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br></pre></td><td class="code"><pre><span class="line">426 static int __inet_insert_ifa(struct in_ifaddr *ifa, struct nlmsghdr *nlh,</span><br><span class="line">427                              u32 portid)</span><br><span class="line">428 &#123;</span><br><span class="line">429         struct in_device *in_dev = ifa-&gt;ifa_dev;</span><br><span class="line">430         struct in_ifaddr *ifa1, **ifap, **last_primary;</span><br><span class="line">431 </span><br><span class="line">432         ASSERT_RTNL();</span><br><span class="line">433 </span><br><span class="line">434         if (!ifa-&gt;ifa_local) &#123;</span><br><span class="line">435                 inet_free_ifa(ifa);</span><br><span class="line">436                 return 0;</span><br><span class="line">437         &#125;</span><br><span class="line">438 </span><br><span class="line">439         ifa-&gt;ifa_flags &amp;= ~IFA_F_SECONDARY;</span><br><span class="line">440         last_primary = &amp;in_dev-&gt;ifa_list;</span><br><span class="line">441 </span><br><span class="line">442         for (ifap = &amp;in_dev-&gt;ifa_list; (ifa1 = *ifap) != NULL;</span><br><span class="line">443              ifap = &amp;ifa1-&gt;ifa_next) &#123;</span><br><span class="line">444                 if (!(ifa1-&gt;ifa_flags &amp; IFA_F_SECONDARY) &amp;&amp;</span><br><span class="line">445                     ifa-&gt;ifa_scope &lt;= ifa1-&gt;ifa_scope)</span><br><span class="line">446                         last_primary = &amp;ifa1-&gt;ifa_next;</span><br><span class="line">447                 if (ifa1-&gt;ifa_mask == ifa-&gt;ifa_mask &amp;&amp;</span><br><span class="line">448                     inet_ifa_match(ifa1-&gt;ifa_address, ifa)) &#123;</span><br><span class="line">449                         if (ifa1-&gt;ifa_local == ifa-&gt;ifa_local) &#123;</span><br><span class="line">450                                 inet_free_ifa(ifa);</span><br><span class="line">451                                 return -EEXIST;</span><br><span class="line">452                         &#125;</span><br><span class="line">453                         if (ifa1-&gt;ifa_scope != ifa-&gt;ifa_scope) &#123;</span><br><span class="line">454                                 inet_free_ifa(ifa);</span><br><span class="line">455                                 return -EINVAL;</span><br><span class="line">456                         &#125;</span><br><span class="line">457                         ifa-&gt;ifa_flags |= IFA_F_SECONDARY;</span><br><span class="line">458                 &#125;</span><br><span class="line">459         &#125;</span><br><span class="line">460 </span><br><span class="line">461         if (!(ifa-&gt;ifa_flags &amp; IFA_F_SECONDARY)) &#123;</span><br><span class="line">462                 net_srandom(ifa-&gt;ifa_local);</span><br><span class="line">463                 ifap = last_primary;</span><br><span class="line">464         &#125;</span><br><span class="line">465 </span><br><span class="line">466         ifa-&gt;ifa_next = *ifap;</span><br><span class="line">467         *ifap = ifa;</span><br><span class="line">468 </span><br><span class="line">469         inet_hash_insert(dev_net(in_dev-&gt;dev), ifa);</span><br><span class="line">470 </span><br><span class="line">471         cancel_delayed_work(&amp;check_lifetime_work);</span><br><span class="line">472         schedule_delayed_work(&amp;check_lifetime_work, 0);</span><br><span class="line">473 </span><br><span class="line">474         /* Send message first, then call notifier.</span><br><span class="line">475            Notifier will trigger FIB update, so that</span><br><span class="line">476            listeners of netlink will know about new ifaddr */</span><br><span class="line">477         rtmsg_ifa(RTM_NEWADDR, ifa, nlh, portid);</span><br><span class="line">478         blocking_notifier_call_chain(&amp;inetaddr_chain, NETDEV_UP, ifa);</span><br><span class="line">479 </span><br><span class="line">480         return 0;</span><br><span class="line">481 &#125;</span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2013/08/20/2013-08-20-how-kernel-add-a-ipv4-address/" data-id="cuidOWCC6vxE0Bvtkl0ZOlgzU" data-title="how kernel add a IPv4 address" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/route/" rel="tag">route</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2013/08/20/2013-08-20-callback-notify-when-add-a-ipv4-add/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          callback notify when add a IPv4 add
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2013/08/02/2013-08-02-unregister-a-new-device/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">unregister a net device</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/06/">June 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/">tcp三次握手 --- 逐渐消失的tcp半链接队列</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/05/tcp-req-queue-length-check/">创建req scoket时的三个长度检查</a>
+          </li>
+        
+          <li>
+            <a href="/2025/05/03/netdev-state-flags-part2/">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
