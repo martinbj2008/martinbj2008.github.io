@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文 | Kernel Study Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="问题背景Q1：ping 本机eth1口的ip地址时，对应的ICMP报文会被发送到eth1口上吗？ 实验： ping本机网口地址 通过tcpdump抓包命令，我们发现报文被发送到lo上，而不是对应的物理口 eth1。虽然ip 地址被配在本机的物理口上，但是报文并没有被发送到物理口。为了理解这个问题，我们需要先看下下面这个问题。 Q2： 当一个IP地址被添加到一个网口后，会引起哪些路由变化呢？为一个网">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文">
+<meta property="og:url" content="https://martinbj2008.github.io/2025/07/03/fib-ip-address-and-route/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="问题背景Q1：ping 本机eth1口的ip地址时，对应的ICMP报文会被发送到eth1口上吗？ 实验： ping本机网口地址 通过tcpdump抓包命令，我们发现报文被发送到lo上，而不是对应的物理口 eth1。虽然ip 地址被配在本机的物理口上，但是报文并没有被发送到物理口。为了理解这个问题，我们需要先看下下面这个问题。 Q2： 当一个IP地址被添加到一个网口后，会引起哪些路由变化呢？为一个网">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/fib_ip_route/ping_local_lo.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/fib_ip_route/route_table_diff.png">
+<meta property="article:published_time" content="2025-07-03T09:23:04.000Z">
+<meta property="article:modified_time" content="2026-03-07T01:11:54.346Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="fib">
+<meta property="article:tag" content="kernel">
+<meta property="article:tag" content="route">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/fib_ip_route/ping_local_lo.png">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.1"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel Study Notes</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-fib-ip-address-and-route" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/07/03/fib-ip-address-and-route/" class="article-date">
+  <time class="dt-published" datetime="2025-07-03T09:23:04.000Z" itemprop="datePublished">2025-07-03</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/route/">route</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="问题背景"><a href="#问题背景" class="headerlink" title="问题背景"></a>问题背景</h3><p>Q1：ping 本机eth1口的ip地址时，对应的ICMP报文会被发送到eth1口上吗？</p>
+<h4 id="实验：-ping本机网口地址"><a href="#实验：-ping本机网口地址" class="headerlink" title="实验： ping本机网口地址"></a>实验： ping本机网口地址</h4><p><img src="/images/fib_ip_route/ping_local_lo.png" alt="ping本机网口地址实验"></p>
+<p>通过tcpdump抓包命令，我们发现报文被发送到lo上，而不是对应的物理口 eth1。<br>虽然ip 地址被配在本机的物理口上，但是报文并没有被发送到物理口。为了理解这个问题，我们需要先看下下面这个问题。</p>
+<p>Q2： 当一个IP地址被添加到一个网口后，会引起哪些路由变化呢？<br>为一个网口增加一个 IP 地址是个很常见的网络操作。<br>具体添加方式有多种，包括命令行手动添加、通过配置文件在系统启动时候添加，还是通过dhcp自动获取并添加等。<br>无论哪种场景，添加完IP地址后，系统路由有什么变化。<br>场景：在本机物理口 eth1上配置192.168.8.8&#x2F;24，网口状态正常(UP).</p>
+<span id="more"></span>
+
+<h4 id="增加一个IP地址，内核增加3条路由"><a href="#增加一个IP地址，内核增加3条路由" class="headerlink" title="增加一个IP地址，内核增加3条路由"></a>增加一个IP地址，内核增加3条路由</h4><p>下面是路由表在增加 IP 地址前后的对比：<br><img src="/images/fib_ip_route/route_table_diff.png" alt="路由表变化对比"></p>
+<p>通过对比系统路由表的变化，发现路由表里增加了三条路由。</p>
+<h5 id="网段路由："><a href="#网段路由：" class="headerlink" title="网段路由："></a>网段路由：</h5><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">192.168.8.0/24 dev eth1 proto kernel scope link src 192.168.8.8</span><br></pre></td></tr></table></figure>
+
+<p>在<code>main</code>表里增加一条到本网段前缀的网段路由，<br>这个路由对应的路由网段，</p>
+<ul>
+<li>网段入口：IP地址和掩码产生的网络前缀。</li>
+<li>路由出口：配置 IP 的网口</li>
+<li>推荐源 IP：被配置的IP地址</li>
+</ul>
+<p>这条路由是如何被使用的？<br>比如 <code>ping 192.168.8.1</code>时，</p>
+<ul>
+<li>内核会通过查找路由表 main，查找到这条匹配的路由，</li>
+<li>之后把源 IP 当做 eth&#x2F;ipv4&#x2F;icmp 报文里的ipv&#x2F;src_addr,</li>
+<li>最后通过网口 eth1 发送出去（eth头里src&#x2F;mac是对应网口的mac 地址）。<br>总结：&#96;IP地址和掩码产生的网段路由， 出口对应网口，推荐IP是报文的源IP。<br>这条路由是增加到路由表 main 里。</li>
+</ul>
+<h5 id="主机路由："><a href="#主机路由：" class="headerlink" title="主机路由："></a>主机路由：</h5><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">local 192.168.8.8 dev eth1 table local proto kernel scope host src 192.168.8.8</span><br></pre></td></tr></table></figure>
+
+<p>在<code>local</code>表里增加一条到本机的<code>32</code> 位主机路由，</p>
+<ul>
+<li>网段入口：IP地址&#x2F;32。</li>
+<li>路由出口：loopback口<br>比如 <code>ping 192.168.8.8</code>时，</li>
+<li>内核会通过查找路由表 main，查找到这条匹配的路由，</li>
+<li>之后把源 IP 当做 eth&#x2F;ipv4&#x2F;icmp 报文里的ipv&#x2F;src_addr,</li>
+<li>最后把报文发送给lo口，并重新进入协议栈。<br>在 lo 口上tcpdump抓包验证，可以看到报文的mac地址是0.</li>
+</ul>
+<h5 id="广播路由："><a href="#广播路由：" class="headerlink" title="广播路由："></a>广播路由：</h5><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">broadcast 192.168.8.255 dev eth1 table local proto kernel scope link src 192.168.8.8</span><br></pre></td></tr></table></figure>
+
+<p>TODO：这部分没有深入分析。</p>
+<h5 id="路由表：local-vs-main-的对比"><a href="#路由表：local-vs-main-的对比" class="headerlink" title="路由表：local vs main 的对比"></a>路由表：local vs main 的对比</h5><ol>
+<li>local路由的目的地是本地，因此一定会往发往本地，并且使用的网口一定是lo口。<br>不论报文的目的IP是谁，<br>不管这个 IP 是被配置到什么类型网口上。</li>
+<li>main路由表的目的地是网关或者同网段的其他设备。出口是路由条目里指定的网口。</li>
+</ol>
+<h4 id="内核：策略路由与多路由表"><a href="#内核：策略路由与多路由表" class="headerlink" title="内核：策略路由与多路由表"></a>内核：策略路由与多路由表</h4><p>我们注意到前面的三条路由并不在一个路由表里，而是分散在 local&#x2F;main两个单独的路由表里。为什么放到多个路由表里，而不放到一张表里？<br>单独从路由查找来看，因为路由入口并不冲突，完全可以放到一张路由表里。其实内核也可以支持放到一张路由表。<br>但为了支持策略路由，内核里需要多路由表(<code>IP_MULTIPLE_TABLES</code>)这个特性。<br>其中有三个默认存在的路由表， 分别叫做<code>local</code>,<code>main</code>,<code>default</code>。<br>我们经常用到的是前两个表，如他们名字一样， 分别用于存放 local 和网段路由类型的路由。</p>
+<h5 id="策略路由"><a href="#策略路由" class="headerlink" title="策略路由"></a>策略路由</h5><p>策略路由是一个按优先级排列的规则链表。路由查找时，按优先级顺序遍历链表。<br>每个链表节点是一个规则。每个节点（规则）其实是个 match+action 的工作模式。</p>
+<ul>
+<li>match：可以支持多种匹配条件及组合，如原 IP、IPv6、源端口、目的端口等。 如果满足规则匹配条件就执行规则指定的动作。</li>
+<li>action：action 也有多种， 后续文章给你展开讨论。我们这里只讨论”查找指定 table”这一种action。就是在指定的路由表(ID 或者名字)里，查找路由。<br>策略路由这里不展开介绍， 后续文章在详细说明功能和对应的场景。<br><a href="/2018/10/09/fib-how-ipv4-lookup-route-with-rule-route/">linux内核多路由表与策略路由的实现</a></li>
+</ul>
+<h5 id="内核自动添加的三条策略路由"><a href="#内核自动添加的三条策略路由" class="headerlink" title="内核自动添加的三条策略路由"></a>内核自动添加的三条策略路由</h5><p>系统初始化时候，会自动创建三条策略路由。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">root@VM-3-3-ubuntu:/home/ubuntu# ip rule show</span><br><span class="line">0:      from all lookup local</span><br><span class="line">32766:  from all lookup main</span><br><span class="line">32767:  from all lookup default</span><br><span class="line">root@VM-3-3-ubuntu:/home/ubuntu#</span><br></pre></td></tr></table></figure>
+
+<p>默认三条策略路由规则，是任意匹配条件。 规则的动作也是查找指定的路由表。<br>即：遍历策略路由链表，依次在 local&#x2F;main&#x2F;default三张路由表里查询路由。</p>
+<ol>
+<li>如果有匹配路由，路由查找成功，停止遍历策略路由链表，并返回对应路由。</li>
+<li>没有找到路由，下一张表（即下一个路由策略里指定的表）。</li>
+<li>如果最终没有找到（没有缺省路由），返回路由查找失败。</li>
+</ol>
+<h4 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h4><p>在 eth1 口添加一个IP地址192.168.8.8&#x2F;24后，内核默认生成三条路由：</p>
+<ul>
+<li>主机路由：192.168.8.8&#x2F;32.<ul>
+<li>本机产生的目的地192.168.8.8的报文， 查路由，走lo口， 经过 lo口重新发回本机协议栈。</li>
+<li>物理口接收到，目的地是192.168.8.8的报文，差路由，经ip_local_deliver，给本机协议栈上层（ICMP&#x2F;tcp&#x2F;udp）处理。</li>
+</ul>
+</li>
+<li>网段路由： 192.168.8.0&#x2F;24. 放往这网段的报文，会通过 eth1 口发给网关处理。<ul>
+<li>因为 local路由表先于 maiin 路由表查找，所以发往 192.168.8.8会被路由到本机，同网段下的其他 IP 被路由到 eth1口。</li>
+<li>本机产生的或者本机其他网口收到的，目的地是192.168.8.0&#x2F;24网段的报文，查路由被转发到 eth1 口。</li>
+</ul>
+</li>
+<li>组播路由：TODO。</li>
+</ul>
+<h3 id="内核代码的实现"><a href="#内核代码的实现" class="headerlink" title="内核代码的实现"></a>内核代码的实现</h3><h4 id="ip地址与路由回调"><a href="#ip地址与路由回调" class="headerlink" title="ip地址与路由回调"></a>ip地址与路由回调</h4><p>内核的路由模块通过一个回调函数，感知IP地址变化，并更新对应的路由表项。<br>ip 地址管理模块会提供一个回调注册函数。<br>给需要感知 ip 地址变化的模块。如 fib 路由模块，会调用这个函数注册自己的处理函数。当 ip 地址有变化时候，ip 地址模块就会调用这些被注册的回调函数，通知对应模块，及具体的ip 地址变化信息。</p>
+<h4 id="注册路由回调函数-：register-inetaddr-notifier"><a href="#注册路由回调函数-：register-inetaddr-notifier" class="headerlink" title="注册路由回调函数 ：register_inetaddr_notifier"></a>注册路由回调函数 ：<code>register_inetaddr_notifier</code></h4><p>fib模块在初始化时，调用<code>register_inetaddr_notifier</code>注册一个 callback 函数<code>fib_inetaddr_event</code>，用来处理ip地址变化的消息。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1702</span> <span class="type">void</span> __init <span class="title function_">ip_fib_init</span><span class="params">(<span class="type">void</span>)</span></span><br><span class="line">1703 &#123;</span><br><span class="line">...</span><br><span class="line"><span class="number">1709</span>         register_inetaddr_notifier(&amp;fib_inetaddr_notifier);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1551</span> <span class="type">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">notifier_block</span> <span class="title">fib_inetaddr_notifier</span> =</span> &#123;</span><br><span class="line"><span class="number">1552</span>         .notifier_call = fib_inetaddr_event,</span><br><span class="line"><span class="number">1553</span> &#125;;</span><br></pre></td></tr></table></figure>
+
+<h4 id="消息触发：-IP地址更新"><a href="#消息触发：-IP地址更新" class="headerlink" title="消息触发： IP地址更新"></a>消息触发： IP地址更新</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">blocking_notifier_call_chain(&amp;inetaddr_chain, NETDEV_UP, ifa);</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">blocking_notifier_call_chain(&amp;inetaddr_chain, NETDEV_DOWN, ifa1);</span><br></pre></td></tr></table></figure>
+
+<h4 id="fib模块回调函数：fib-inetaddr-event"><a href="#fib模块回调函数：fib-inetaddr-event" class="headerlink" title="fib模块回调函数：fib_inetaddr_event"></a>fib模块回调函数：fib_inetaddr_event</h4><p>回调函数fib_inetaddr_event处理地址变化消息，根据事件类型</p>
+<ul>
+<li>NETDEV_UP: 对应增加 IP 地址场景。调用fib_add_ifaddr</li>
+<li>NETDEV_DOWN: 对应删除 IP 地址场景。调用fib_del_ifaddr</li>
+</ul>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">==&gt; fib_inetaddr_event</span><br><span class="line">==&gt; ==&gt; case NETDEV_UP</span><br><span class="line">==&gt; ==&gt; ==&gt; fib_add_ifaddr(ifa);</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; fib_magic(RTM_NEWROUTE, RTN_LOCAL, addr, 32, prim, 0);</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; fib_magic(RTM_NEWROUTE, dev-&gt;flags &amp; IFF_LOOPBACK ? RTN_LOCAL : RTN_UNICAST,</span><br><span class="line">                           prefix, ifa-&gt;ifa_prefixlen, prim, ifa-&gt;ifa_rt_priority);</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; fib_magic(RTM_NEWROUTE, RTN_BROADCAST, ifa-&gt;ifa_broadcast, 32, prim, 0);</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; ==&gt; fib_table_insert(RTM_NEWROUTE, ....)</span><br><span class="line">==&gt; ==&gt; ==&gt; fib_del_ifaddr</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; fib_magic(RTM_DELROUTE, dev-&gt;flags &amp; IFF_LOOPBACK ? RTN_LOCAL : RTN_UNICAST, ...)</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; ==&gt; fib_table_insert(RTM_DELROUTE, ....)</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1461</span> <span class="type">static</span> <span class="type">int</span> <span class="title function_">fib_inetaddr_event</span><span class="params">(<span class="keyword">struct</span> notifier_block *this, <span class="type">unsigned</span> <span class="type">long</span> event, <span class="type">void</span> *ptr)</span></span><br><span class="line">1462 &#123;</span><br><span class="line"><span class="number">1463</span>         <span class="class"><span class="keyword">struct</span> <span class="title">in_ifaddr</span> *<span class="title">ifa</span> =</span> ptr;</span><br><span class="line"><span class="number">1464</span>         <span class="class"><span class="keyword">struct</span> <span class="title">net_device</span> *<span class="title">dev</span> =</span> ifa-&gt;ifa_dev-&gt;dev;</span><br><span class="line"><span class="number">1465</span>         <span class="class"><span class="keyword">struct</span> <span class="title">net</span> *<span class="title">net</span> =</span> dev_net(dev);</span><br><span class="line"><span class="number">1466</span></span><br><span class="line"><span class="number">1467</span>         <span class="keyword">switch</span> (event) &#123;</span><br><span class="line"><span class="number">1468</span>         <span class="keyword">case</span> NETDEV_UP:</span><br><span class="line"><span class="number">1469</span>                 fib_add_ifaddr(ifa);</span><br><span class="line"><span class="number">1470</span> <span class="meta">#<span class="keyword">ifdef</span> CONFIG_IP_ROUTE_MULTIPATH</span></span><br><span class="line"><span class="number">1471</span>                 fib_sync_up(dev, RTNH_F_DEAD);</span><br><span class="line"><span class="number">1472</span> <span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line"><span class="number">1473</span>                 <span class="type">atomic_inc</span>(&amp;net-&gt;ipv4.dev_addr_genid);</span><br><span class="line"><span class="number">1474</span>                 rt_cache_flush(net);</span><br><span class="line"><span class="number">1475</span>                 <span class="keyword">break</span>;</span><br><span class="line"><span class="number">1476</span>         <span class="keyword">case</span> NETDEV_DOWN:</span><br><span class="line"><span class="number">1477</span>                 fib_del_ifaddr(ifa, <span class="literal">NULL</span>);</span><br><span class="line"><span class="number">1478</span>                 <span class="type">atomic_inc</span>(&amp;net-&gt;ipv4.dev_addr_genid);</span><br><span class="line"><span class="number">1479</span>                 <span class="keyword">if</span> (!ifa-&gt;ifa_dev-&gt;ifa_list) &#123;</span><br><span class="line"><span class="number">1480</span>                         <span class="comment">/* Last address was deleted from this interface.</span></span><br><span class="line"><span class="comment">1481                          * Disable IP.</span></span><br><span class="line"><span class="comment">1482                          */</span></span><br><span class="line"><span class="number">1483</span>                         fib_disable_ip(dev, event, <span class="literal">true</span>);</span><br><span class="line"><span class="number">1484</span>                 &#125; <span class="keyword">else</span> &#123;</span><br><span class="line"><span class="number">1485</span>                         rt_cache_flush(net);</span><br><span class="line"><span class="number">1486</span>                 &#125;</span><br><span class="line"><span class="number">1487</span>                 <span class="keyword">break</span>;</span><br><span class="line"><span class="number">1488</span>         &#125;</span><br><span class="line"><span class="number">1489</span>         <span class="keyword">return</span> NOTIFY_DONE;</span><br><span class="line"><span class="number">1490</span> &#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1138</span> <span class="type">void</span> <span class="title function_">fib_add_ifaddr</span><span class="params">(<span class="keyword">struct</span> in_ifaddr *ifa)</span></span><br><span class="line">1139 &#123;</span><br><span class="line"><span class="number">1140</span>         <span class="class"><span class="keyword">struct</span> <span class="title">in_device</span> *<span class="title">in_dev</span> =</span> ifa-&gt;ifa_dev;</span><br><span class="line"><span class="number">1141</span>         <span class="class"><span class="keyword">struct</span> <span class="title">net_device</span> *<span class="title">dev</span> =</span> in_dev-&gt;dev;</span><br><span class="line"><span class="number">1142</span>         <span class="class"><span class="keyword">struct</span> <span class="title">in_ifaddr</span> *<span class="title">prim</span> =</span> ifa;</span><br><span class="line"><span class="number">1143</span>         __be32 mask = ifa-&gt;ifa_mask;</span><br><span class="line"><span class="number">1144</span>         __be32 addr = ifa-&gt;ifa_local;</span><br><span class="line"><span class="number">1145</span>         __be32 prefix = ifa-&gt;ifa_address &amp; mask;</span><br><span class="line"><span class="number">1146</span></span><br><span class="line"><span class="number">1147</span>         <span class="keyword">if</span> (ifa-&gt;ifa_flags &amp; IFA_F_SECONDARY) &#123;</span><br><span class="line"><span class="number">1148</span>                 prim = inet_ifa_byprefix(in_dev, prefix, mask);</span><br><span class="line"><span class="number">1149</span>                 <span class="keyword">if</span> (!prim) &#123;</span><br><span class="line"><span class="number">1150</span>                         pr_warn(<span class="string">&quot;%s: bug: prim == NULL\n&quot;</span>, __func__);</span><br><span class="line"><span class="number">1151</span>                         <span class="keyword">return</span>;</span><br><span class="line"><span class="number">1152</span>                 &#125;</span><br><span class="line"><span class="number">1153</span>         &#125;</span><br><span class="line"><span class="number">1154</span></span><br><span class="line"><span class="number">1155</span>         fib_magic(RTM_NEWROUTE, RTN_LOCAL, addr, <span class="number">32</span>, prim, <span class="number">0</span>);</span><br><span class="line"><span class="number">1156</span></span><br><span class="line"><span class="number">1157</span>         <span class="keyword">if</span> (!(dev-&gt;flags &amp; IFF_UP))</span><br><span class="line"><span class="number">1158</span>                 <span class="keyword">return</span>;</span><br><span class="line"><span class="number">1159</span></span><br><span class="line"><span class="number">1160</span>         <span class="comment">/* Add broadcast address, if it is explicitly assigned. */</span></span><br><span class="line"><span class="number">1161</span>         <span class="keyword">if</span> (ifa-&gt;ifa_broadcast &amp;&amp; ifa-&gt;ifa_broadcast != htonl(<span class="number">0xFFFFFFFF</span>)) &#123;</span><br><span class="line"><span class="number">1162</span>                 fib_magic(RTM_NEWROUTE, RTN_BROADCAST, ifa-&gt;ifa_broadcast, <span class="number">32</span>,</span><br><span class="line"><span class="number">1163</span>                           prim, <span class="number">0</span>);</span><br><span class="line"><span class="number">1164</span>                 arp_invalidate(dev, ifa-&gt;ifa_broadcast, <span class="literal">false</span>);</span><br><span class="line"><span class="number">1165</span>         &#125;</span><br><span class="line"><span class="number">1166</span></span><br><span class="line"><span class="number">1167</span>         <span class="keyword">if</span> (!ipv4_is_zeronet(prefix) &amp;&amp; !(ifa-&gt;ifa_flags &amp; IFA_F_SECONDARY) &amp;&amp;</span><br><span class="line"><span class="number">1168</span>             (prefix != addr || ifa-&gt;ifa_prefixlen &lt; <span class="number">32</span>)) &#123;</span><br><span class="line"><span class="number">1169</span>                 <span class="keyword">if</span> (!(ifa-&gt;ifa_flags &amp; IFA_F_NOPREFIXROUTE))</span><br><span class="line"><span class="number">1170</span>                         fib_magic(RTM_NEWROUTE,</span><br><span class="line"><span class="number">1171</span>                                   dev-&gt;flags &amp; IFF_LOOPBACK ? RTN_LOCAL : RTN_UNICAST,</span><br><span class="line"><span class="number">1172</span>                                   prefix, ifa-&gt;ifa_prefixlen, prim,</span><br><span class="line"><span class="number">1173</span>                                   ifa-&gt;ifa_rt_priority);</span><br><span class="line"><span class="number">1174</span></span><br><span class="line"><span class="number">1175</span>                 <span class="comment">/* Add the network broadcast address, when it makes sense */</span></span><br><span class="line"><span class="number">1176</span>                 <span class="keyword">if</span> (ifa-&gt;ifa_prefixlen &lt; <span class="number">31</span>) &#123;</span><br><span class="line"><span class="number">1177</span>                         fib_magic(RTM_NEWROUTE, RTN_BROADCAST, prefix | ~mask,</span><br><span class="line"><span class="number">1178</span>                                   <span class="number">32</span>, prim, <span class="number">0</span>);</span><br><span class="line"><span class="number">1179</span>                         arp_invalidate(dev, prefix | ~mask, <span class="literal">false</span>);</span><br><span class="line"><span class="number">1180</span>                 &#125;</span><br><span class="line"><span class="number">1181</span>         &#125;</span><br><span class="line"><span class="number">1182</span> &#125;</span><br></pre></td></tr></table></figure>
+
+<h4 id="路由增加-删除"><a href="#路由增加-删除" class="headerlink" title="路由增加&#x2F;删除"></a>路由增加&#x2F;删除</h4><p>路由增删有两类入口：</p>
+<ol>
+<li>通过 netlink 配置的路由：如 iproute 命令。<ul>
+<li>根据 netlink 消息里指定的 table ID，找到对应的 fib table</li>
+<li>根据 netlink消息里的<code>msgtype</code>命令类型，对 fib table 执行路由增删。<br>增加路由：<code>inet_rtm_newroute</code>&#x2F;<code>fib_table_insert</code>。<br>删除路由：<code>inet_rtm_delroute</code>&#x2F;<code>fib_table_delete</code>。<br>这部分单独解释，不展开讨论。</li>
+</ul>
+</li>
+<li>内核自动生成的：如网口上的增加&#x2F;删除一个 IP 地址。<br>入口函数<code>fib_magic</code>, 根据命令分别执行<code>fib_table_insert</code>和<code>fib_table_delete</code>，</li>
+</ol>
+<h4 id="特殊的-lo口"><a href="#特殊的-lo口" class="headerlink" title="特殊的 lo口"></a>特殊的 lo口</h4><p>loopback口是个特殊场景，详见 <a href="/2025/07/06/fib-lo-and-local-route-table/">lo口与local路由表</a>。</p>
+<h4 id="路由查找"><a href="#路由查找" class="headerlink" title="路由查找"></a>路由查找</h4><p>路由查找入口函数<code>fib_lookup</code>, 启用CONFIG_IP_MULTIPLE_TABLES，<br>会先检查用户自定义的策略路由，这部分放到策略路由里单独解释。<br>如果没有用户自定义的策略路由，</p>
+<ul>
+<li>先查找 main 表，</li>
+<li>再查找 defualt 表。</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">374</span> <span class="type">static</span> <span class="keyword">inline</span> <span class="type">int</span> <span class="title function_">fib_lookup</span><span class="params">(<span class="keyword">struct</span> net *net, <span class="keyword">struct</span> flowi4 *flp,</span></span><br><span class="line"><span class="params"><span class="number">375</span>                              <span class="keyword">struct</span> fib_result *res, <span class="type">unsigned</span> <span class="type">int</span> flags)</span></span><br><span class="line">376 &#123;</span><br><span class="line">...</span><br><span class="line"><span class="number">381</span>         <span class="keyword">if</span> (net-&gt;ipv4.fib_has_custom_rules)</span><br><span class="line"><span class="number">382</span>                 <span class="keyword">return</span> __fib_lookup(net, flp, res, flags);</span><br><span class="line">...</span><br><span class="line"><span class="number">388</span>         tb = rcu_dereference_rtnl(net-&gt;ipv4.fib_main);</span><br><span class="line"><span class="number">389</span>         <span class="keyword">if</span> (tb)</span><br><span class="line"><span class="number">390</span>                 err = fib_table_lookup(tb, flp, res, flags);</span><br><span class="line">...</span><br><span class="line"><span class="number">395</span>         tb = rcu_dereference_rtnl(net-&gt;ipv4.fib_default);</span><br><span class="line"><span class="number">396</span>         <span class="keyword">if</span> (tb)</span><br><span class="line"><span class="number">397</span>                 err = fib_table_lookup(tb, flp, res, flags);</span><br></pre></td></tr></table></figure>
+
+<p>注意：</p>
+<ul>
+<li><p><code>fib_lookup</code>没有查找 local 表：<br>fib路由模块默认创建了三个 table 表，local&#x2F;main&#x2F;default，但是在<code>fib_lookup</code>函数中，我们看到代码里只查找了后面两个表，为啥没有查找 local表。在初始化创建 local表时，设置local表的别名为main，因此 local 路由都被加入到 main 表里了。当用户添加自定义策略路由规则后，<code>fib_unmerge</code> 会把 local 路由从 main 表里切割出来，详见 <a href="/2025/07/08/fib-unmerge-local-from-main/">fib_unmerge：把local路由从main表里切割出来</a>。</p>
+</li>
+<li><p>ip route show: 为什么 show 命令默认只 show main， 单纯指定 table ID不会有效果，过滤路由类型了？<br>ip route命令默认指定的tb id 是 main 表，见代码</p>
+</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">filter.tb = RT_TABLE_MAIN;</span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2025/07/03/fib-ip-address-and-route/" data-id="cuid1-JVZCyt8pHX0RB7cXnj6" data-title="ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/route/" rel="tag">route</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2025/07/06/fib-lo-and-local-route-table/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          lo口与local路由表
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">tcpdump命令与网口`PROMISC`状态标志位</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/network/" rel="tag">network</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.77px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 13.85px;">address</a> <a href="/tags/bh/" style="font-size: 13.85px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.15px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.77px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.54px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/fib/" style="font-size: 13.08px;">fib</a> <a href="/tags/gcc/" style="font-size: 13.85px;">gcc</a> <a href="/tags/git/" style="font-size: 12.31px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.77px;">ipv6</a> <a href="/tags/irq/" style="font-size: 16.92px;">irq</a> <a href="/tags/kernel/" style="font-size: 13.85px;">kernel</a> <a href="/tags/memory/" style="font-size: 13.08px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 17.69px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.08px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/others/" style="font-size: 10.77px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.46px;">route</a> <a href="/tags/sched/" style="font-size: 13.85px;">sched</a> <a href="/tags/socket/" style="font-size: 19.23px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 14.62px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.38px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.54px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.77px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 14.62px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">March 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/07/">July 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/06/">June 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/03/06/fib-node-animation/">FIB Trie 路由动画演示</a>
+          </li>
+        
+          <li>
+            <a href="/2025/07/08/fib-unmerge-local-from-main/">fib_unmerge：把local路由从main表里切割出来</a>
+          </li>
+        
+          <li>
+            <a href="/2025/07/06/fib-lo-and-local-route-table/">lo口与local路由表</a>
+          </li>
+        
+          <li>
+            <a href="/2025/07/03/fib-ip-address-and-route/">ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</a>
+          </li>
+        
+          <li>
+            <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

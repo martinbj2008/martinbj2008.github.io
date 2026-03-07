@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>lo口与local路由表 | Kernel Study Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="小实验接上篇文章 ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文，我们知道在网口eth1上增加一个IP地址192.168.8.8&#x2F;24后，内核会生成3条路由：  local表：增加192.168.8.8&#x2F;32的主机路由（RTN_LOCAL） main表：增加192.168.8.8&#x2F;24的网段路由（RTN_UNICAST） local表：增加广播路由">
+<meta property="og:type" content="article">
+<meta property="og:title" content="lo口与local路由表">
+<meta property="og:url" content="https://martinbj2008.github.io/2025/07/06/fib-lo-and-local-route-table/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="小实验接上篇文章 ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文，我们知道在网口eth1上增加一个IP地址192.168.8.8&#x2F;24后，内核会生成3条路由：  local表：增加192.168.8.8&#x2F;32的主机路由（RTN_LOCAL） main表：增加192.168.8.8&#x2F;24的网段路由（RTN_UNICAST） local表：增加广播路由">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/lo_local_route/ping_loopback_ip.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/lo_local_route/ping_subnet_ip.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/lo_local_route/lo_addr_all_ok.png">
+<meta property="article:published_time" content="2025-07-06T02:30:00.000Z">
+<meta property="article:modified_time" content="2026-03-07T01:01:26.601Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="fib">
+<meta property="article:tag" content="kernel">
+<meta property="article:tag" content="route">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/lo_local_route/ping_loopback_ip.png">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.1"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel Study Notes</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-fib-lo-and-local-route-table" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/07/06/fib-lo-and-local-route-table/" class="article-date">
+  <time class="dt-published" datetime="2025-07-06T02:30:00.000Z" itemprop="datePublished">2025-07-06</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/route/">route</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      lo口与local路由表
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="小实验"><a href="#小实验" class="headerlink" title="小实验"></a>小实验</h3><p>接上篇文章 <a href="/2025/07/03/fib-ip-address-and-route/">ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</a>，我们知道在网口eth1上增加一个IP地址192.168.8.8&#x2F;24后，内核会生成3条路由：</p>
+<ul>
+<li>local表：增加192.168.8.8&#x2F;32的主机路由（<code>RTN_LOCAL</code>）</li>
+<li>main表：增加192.168.8.8&#x2F;24的网段路由（<code>RTN_UNICAST</code>）</li>
+<li>local表：增加广播路由</li>
+</ul>
+<p>其中主机路由类型是<code>RTN_LOCAL</code>，网段路由类型是<code>RTN_UNICAST</code>。<br>那如果把IP地址配到lo口上，会有什么不同呢？</p>
+<h4 id="实验题目"><a href="#实验题目" class="headerlink" title="实验题目"></a>实验题目</h4><ol>
+<li>ping 本机 lo 口的IP地址 127.0.0.1 能ping通吗？</li>
+<li>ping 127.0.0.0&#x2F;8 网段下的其他地址能ping通吗？</li>
+<li>把一个任意IP地址配置到 lo 口上，又会有什么实验结果呢？</li>
+</ol>
+<span id="more"></span>
+
+<h4 id="实验结果"><a href="#实验结果" class="headerlink" title="实验结果"></a>实验结果</h4><h5 id="case1：ping-127-0-0-1-OK"><a href="#case1：ping-127-0-0-1-OK" class="headerlink" title="case1：ping 127.0.0.1 OK"></a>case1：ping 127.0.0.1 OK</h5><p>这个很自然，lo口默认有127.0.0.1地址，ping自己当然能通。</p>
+<p><img src="/images/lo_local_route/ping_loopback_ip.png" alt="ping lo口IP地址"></p>
+<h5 id="case2-ping-127-x-x-x-网段其他地址-OK"><a href="#case2-ping-127-x-x-x-网段其他地址-OK" class="headerlink" title="case2: ping 127.x.x.x 网段其他地址 OK"></a>case2: ping 127.x.x.x 网段其他地址 OK</h5><p>这个就有趣了。127.0.0.2、127.1.2.3 等 127.0.0.0&#x2F;8 网段下的任意地址都能 ping 通！</p>
+<p><img src="/images/lo_local_route/ping_subnet_ip.png" alt="ping 127网段其他地址"></p>
+<h5 id="case3-lo-口上配置任意IP地址"><a href="#case3-lo-口上配置任意IP地址" class="headerlink" title="case3: lo 口上配置任意IP地址"></a>case3: lo 口上配置任意IP地址</h5><p>在lo口上配一个新的IP地址（比如192.168.8.0&#x2F;24网段），结果发现不仅这个IP本身能ping通，<strong>整个网段的所有地址都能ping通</strong>！</p>
+<p><img src="/images/lo_local_route/lo_addr_all_ok.png" alt="lo口配置IP后整个网段都通"></p>
+<h4 id="实验结论：-lo口点石成金"><a href="#实验结论：-lo口点石成金" class="headerlink" title="实验结论： lo口点石成金"></a>实验结论： lo口<code>点石成金</code></h4><p>通过上面的实验，我们发现只要是一个 IP 地址被配置到 lo 口上，<br>不仅原来的 ip 地址本身能 ping 通，这个IP地址<strong>整个网段都是可以ping通的</strong>。<br>原因在哪里？</p>
+<h3 id="原理分析"><a href="#原理分析" class="headerlink" title="原理分析"></a>原理分析</h3><p>回顾上篇文章中 <code>fib_add_ifaddr</code> 函数里添加网段路由的代码：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">1167</span>         <span class="keyword">if</span> (!ipv4_is_zeronet(prefix) &amp;&amp; !(ifa-&gt;ifa_flags &amp; IFA_F_SECONDARY) &amp;&amp;</span><br><span class="line"><span class="number">1168</span>             (prefix != addr || ifa-&gt;ifa_prefixlen &lt; <span class="number">32</span>)) &#123;</span><br><span class="line"><span class="number">1169</span>                 <span class="keyword">if</span> (!(ifa-&gt;ifa_flags &amp; IFA_F_NOPREFIXROUTE))</span><br><span class="line"><span class="number">1170</span>                         fib_magic(RTM_NEWROUTE,</span><br><span class="line"><span class="number">1171</span>                                   dev-&gt;flags &amp; IFF_LOOPBACK ? RTN_LOCAL : RTN_UNICAST,</span><br><span class="line"><span class="number">1172</span>                                   prefix, ifa-&gt;ifa_prefixlen, prim,</span><br><span class="line"><span class="number">1173</span>                                   ifa-&gt;ifa_rt_priority);</span><br></pre></td></tr></table></figure>
+
+<p>关键就在第 1171 行：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">dev-&gt;flags &amp; IFF_LOOPBACK ? RTN_LOCAL : RTN_UNICAST</span><br></pre></td></tr></table></figure>
+
+<p><strong>对于普通网口（如eth1）</strong>，网段路由的类型是 <code>RTN_UNICAST</code>，被添加到 <strong>main</strong> 路由表里。<br>查找到这类路由时，报文会从对应物理口发出去。</p>
+<p><strong>对于lo口</strong>，网段路由的类型变成了 <code>RTN_LOCAL</code>，被添加到 <strong>local</strong> 路由表里。<br>查找到这类路由时，报文走lo口重新回到本机协议栈。</p>
+<p>这就是lo口”点石成金”的秘密：</p>
+<table>
+<thead>
+<tr>
+<th>网口</th>
+<th>主机路由(&#x2F;32)</th>
+<th>网段路由(&#x2F;prefix)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>eth1</td>
+<td><code>RTN_LOCAL</code> → local表</td>
+<td><code>RTN_UNICAST</code> → main表</td>
+</tr>
+<tr>
+<td>lo</td>
+<td><code>RTN_LOCAL</code> → local表</td>
+<td><code>RTN_LOCAL</code> → local表</td>
+</tr>
+</tbody></table>
+<p>由于 local 路由表的查找优先级高于 main 表，所以配在 lo 口上的IP地址，其<strong>整个网段的流量都会被路由到本机</strong>，而不是发往网络。</p>
+<h3 id="典型应用场景"><a href="#典型应用场景" class="headerlink" title="典型应用场景"></a>典型应用场景</h3><p>理解了lo口的这个特性，就能理解它在实际中的几个典型应用：</p>
+<ol>
+<li><p><strong>VIP（虚拟IP）地址</strong>：LVS&#x2F;keepalived等负载均衡场景中，Real Server把VIP配置在lo口上，就是利用了lo口会把VIP的网段路由设为<code>RTN_LOCAL</code>，使得目的地为VIP的报文能被本机协议栈接收处理。</p>
+</li>
+<li><p><strong>容器网络</strong>：在某些容器网络方案中，把Service IP或Cluster IP配在lo口上，使得Pod能够直接处理目标为这些IP的流量。</p>
+</li>
+<li><p><strong>路由黑洞&#x2F;汇总</strong>：把一个大网段配在lo口上，可以实现类似路由黑洞的效果，阻止该网段的流量发往外部网络。</p>
+</li>
+</ol>
+<h3 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h3><p>lo口的”点石成金”能力，本质上是内核在 <code>fib_add_ifaddr</code> 函数中对 loopback 设备做了特殊处理：</p>
+<ul>
+<li>普通网口的网段路由类型为 <code>RTN_UNICAST</code>，存放在 main 表</li>
+<li>lo 口的网段路由类型为 <code>RTN_LOCAL</code>，存放在 local 表</li>
+<li>local 表优先级高于 main 表，因此整个网段的流量都被路由到本机</li>
+</ul>
+<p>一行代码之差 <code>dev-&gt;flags &amp; IFF_LOOPBACK ? RTN_LOCAL : RTN_UNICAST</code>，造就了lo口独特的网络行为。</p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2025/07/06/fib-lo-and-local-route-table/" data-id="cuid1eQz9f1a8bquDx3NY2uHr" data-title="lo口与local路由表" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/route/" rel="tag">route</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2025/07/08/fib-unmerge-local-from-main/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          fib_unmerge：把local路由从main表里切割出来
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2025/07/03/fib-ip-address-and-route/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/network/" rel="tag">network</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.77px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 13.85px;">address</a> <a href="/tags/bh/" style="font-size: 13.85px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.15px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.77px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.54px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/fib/" style="font-size: 13.08px;">fib</a> <a href="/tags/gcc/" style="font-size: 13.85px;">gcc</a> <a href="/tags/git/" style="font-size: 12.31px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.77px;">ipv6</a> <a href="/tags/irq/" style="font-size: 16.92px;">irq</a> <a href="/tags/kernel/" style="font-size: 13.85px;">kernel</a> <a href="/tags/memory/" style="font-size: 13.08px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 17.69px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.08px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/others/" style="font-size: 10.77px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.46px;">route</a> <a href="/tags/sched/" style="font-size: 13.85px;">sched</a> <a href="/tags/socket/" style="font-size: 19.23px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 14.62px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.38px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.54px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.77px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 14.62px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">March 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/07/">July 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/06/">June 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/03/06/fib-node-animation/">FIB Trie 路由动画演示</a>
+          </li>
+        
+          <li>
+            <a href="/2025/07/08/fib-unmerge-local-from-main/">fib_unmerge：把local路由从main表里切割出来</a>
+          </li>
+        
+          <li>
+            <a href="/2025/07/06/fib-lo-and-local-route-table/">lo口与local路由表</a>
+          </li>
+        
+          <li>
+            <a href="/2025/07/03/fib-ip-address-and-route/">ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</a>
+          </li>
+        
+          <li>
+            <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

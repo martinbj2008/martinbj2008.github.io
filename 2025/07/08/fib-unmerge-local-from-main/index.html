@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>fib_unmerge：把local路由从main表里切割出来 | Kernel Study Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="背景前面文章提到，local 路由默认情况下是插入到 main 表里的。 在 ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文 中我们分析了 fib_lookup 函数： 1234567891011121314374 static inline int fib_lookup(struct net *net, struct flowi4 *flp,375">
+<meta property="og:type" content="article">
+<meta property="og:title" content="fib_unmerge：把local路由从main表里切割出来">
+<meta property="og:url" content="https://martinbj2008.github.io/2025/07/08/fib-unmerge-local-from-main/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="背景前面文章提到，local 路由默认情况下是插入到 main 表里的。 在 ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文 中我们分析了 fib_lookup 函数： 1234567891011121314374 static inline int fib_lookup(struct net *net, struct flowi4 *flp,375">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2025-07-08T02:00:00.000Z">
+<meta property="article:modified_time" content="2026-03-07T01:11:36.051Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="fib">
+<meta property="article:tag" content="kernel">
+<meta property="article:tag" content="route">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.1"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel Study Notes</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-fib-unmerge-local-from-main" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2025/07/08/fib-unmerge-local-from-main/" class="article-date">
+  <time class="dt-published" datetime="2025-07-08T02:00:00.000Z" itemprop="datePublished">2025-07-08</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/route/">route</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      fib_unmerge：把local路由从main表里切割出来
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h3><p>前面文章提到，local 路由默认情况下是插入到 main 表里的。</p>
+<p>在 <a href="/2025/07/03/fib-ip-address-and-route/">ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</a> 中我们分析了 <code>fib_lookup</code> 函数：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">374</span> <span class="type">static</span> <span class="keyword">inline</span> <span class="type">int</span> <span class="title function_">fib_lookup</span><span class="params">(<span class="keyword">struct</span> net *net, <span class="keyword">struct</span> flowi4 *flp,</span></span><br><span class="line"><span class="params"><span class="number">375</span>                              <span class="keyword">struct</span> fib_result *res, <span class="type">unsigned</span> <span class="type">int</span> flags)</span></span><br><span class="line">376 &#123;</span><br><span class="line">...</span><br><span class="line"><span class="number">381</span>         <span class="keyword">if</span> (net-&gt;ipv4.fib_has_custom_rules)</span><br><span class="line"><span class="number">382</span>                 <span class="keyword">return</span> __fib_lookup(net, flp, res, flags);</span><br><span class="line">...</span><br><span class="line"><span class="number">388</span>         tb = rcu_dereference_rtnl(net-&gt;ipv4.fib_main);</span><br><span class="line"><span class="number">389</span>         <span class="keyword">if</span> (tb)</span><br><span class="line"><span class="number">390</span>                 err = fib_table_lookup(tb, flp, res, flags);</span><br><span class="line">...</span><br><span class="line"><span class="number">395</span>         tb = rcu_dereference_rtnl(net-&gt;ipv4.fib_default);</span><br><span class="line"><span class="number">396</span>         <span class="keyword">if</span> (tb)</span><br><span class="line"><span class="number">397</span>                 err = fib_table_lookup(tb, flp, res, flags);</span><br></pre></td></tr></table></figure>
+
+<p>没有自定义策略路由规则时（<code>fib_has_custom_rules</code> 为 false），<code>fib_lookup</code> 只查找 main 和 default 两张表，并没有查找 local 表。</p>
+<p>这是因为在初始化时，local 表被创建为 main 表的别名：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">local_table = fib_trie_table(RT_TABLE_LOCAL, main_table);</span><br></pre></td></tr></table></figure>
+
+<p>所有 local 路由实际上都被插入到了 main 表里。这样做的好处是减少一次路由表查找，提升性能。</p>
+<p>那问题来了：当用户添加了自定义的策略路由规则后，路由查找走的是 <code>__fib_lookup</code> → <code>fib_rules_lookup</code>，会按策略路由顺序依次查找 local&#x2F;main&#x2F;default 三张表。如果 local 路由还在 main 表里，那 local 表就是空的，查找 local 表就没有意义了。</p>
+<p>所以，<strong>只有在用户添加了自定义策略路由规则后，local 路由才需要从 main 表里分离出来，放到独立的 local 表里</strong>。</p>
+<p>函数 <code>fib_unmerge</code> 就是做这个事情的。</p>
+<span id="more"></span>
+
+<h3 id="调用点"><a href="#调用点" class="headerlink" title="调用点"></a>调用点</h3><p><code>fib_unmerge</code> 的调用点有两个：</p>
+<ul>
+<li><code>fib4_rule_configure</code>：添加策略路由</li>
+<li><code>fib4_rule_delete</code>：删除策略路由</li>
+</ul>
+<p>这两个函数是 IPv4 策略路由模版 <code>fib4_rules_ops_template</code> 里的 <code>configure</code> 和 <code>delete</code> 函数定义。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">470</span> <span class="type">static</span> <span class="type">const</span> <span class="class"><span class="keyword">struct</span> <span class="title">fib_rules_ops</span> __<span class="title">net_initconst</span> <span class="title">fib4_rules_ops_template</span> =</span> &#123;</span><br><span class="line"><span class="number">471</span>         .family         = AF_INET,</span><br><span class="line"><span class="number">472</span>         .rule_size      = <span class="keyword">sizeof</span>(<span class="keyword">struct</span> fib4_rule),</span><br><span class="line">...</span><br><span class="line"><span class="number">476</span>         .match          = fib4_rule_match,</span><br><span class="line"><span class="number">477</span>         .configure      = fib4_rule_configure,</span><br><span class="line"><span class="number">478</span>         .delete         = fib4_rule_delete,</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p>以函数 <code>fib4_rule_configure</code> 为例：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">269</span> <span class="type">static</span> <span class="type">int</span> <span class="title function_">fib4_rule_configure</span><span class="params">(<span class="keyword">struct</span> fib_rule *rule, <span class="keyword">struct</span> sk_buff *skb,</span></span><br><span class="line"><span class="params"><span class="number">270</span>                                <span class="keyword">struct</span> fib_rule_hdr *frh,</span></span><br><span class="line"><span class="params"><span class="number">271</span>                                <span class="keyword">struct</span> nlattr **tb,</span></span><br><span class="line"><span class="params"><span class="number">272</span>                                <span class="keyword">struct</span> netlink_ext_ack *extack)</span></span><br><span class="line">273 &#123;</span><br><span class="line"><span class="number">274</span>         <span class="class"><span class="keyword">struct</span> <span class="title">net</span> *<span class="title">net</span> =</span> sock_net(skb-&gt;sk);</span><br><span class="line"><span class="number">275</span>         <span class="type">int</span> err = -EINVAL;</span><br><span class="line"><span class="number">276</span>         <span class="class"><span class="keyword">struct</span> <span class="title">fib4_rule</span> *<span class="title">rule4</span> =</span> (<span class="keyword">struct</span> fib4_rule *) rule;</span><br><span class="line"><span class="number">277</span></span><br><span class="line"><span class="number">278</span>         <span class="keyword">if</span> (frh-&gt;tos &amp; ~IPTOS_TOS_MASK) &#123;</span><br><span class="line"><span class="number">279</span>                 NL_SET_ERR_MSG(extack, <span class="string">&quot;Invalid tos&quot;</span>);</span><br><span class="line"><span class="number">280</span>                 <span class="keyword">goto</span> errout;</span><br><span class="line"><span class="number">281</span>         &#125;</span><br><span class="line"><span class="number">282</span></span><br><span class="line">...</span><br><span class="line"><span class="number">288</span>         <span class="keyword">if</span> (rule-&gt;table == RT_TABLE_UNSPEC &amp;&amp; rule-&gt;action == FR_ACT_TO_TBL) &#123;</span><br><span class="line"><span class="number">289</span>                 <span class="class"><span class="keyword">struct</span> <span class="title">fib_table</span> *<span class="title">table</span>;</span></span><br><span class="line"><span class="number">290</span></span><br><span class="line"><span class="number">291</span>                 table = fib_empty_table(net);</span><br><span class="line"><span class="number">292</span>                 <span class="keyword">if</span> (!table) &#123;</span><br><span class="line"><span class="number">293</span>                         err = -ENOBUFS;</span><br><span class="line"><span class="number">294</span>                         <span class="keyword">goto</span> errout;</span><br><span class="line"><span class="number">295</span>                 &#125;</span><br><span class="line"><span class="number">296</span></span><br><span class="line"><span class="number">297</span>                 rule-&gt;table = table-&gt;tb_id;</span><br><span class="line"><span class="number">298</span>         &#125;</span><br><span class="line"><span class="number">299</span></span><br><span class="line"><span class="number">300</span>         <span class="comment">/* split local/main if they are not already split */</span></span><br><span class="line"><span class="number">301</span>         err = fib_unmerge(net);</span><br><span class="line"><span class="number">302</span>         <span class="keyword">if</span> (err)</span><br><span class="line"><span class="number">303</span>                 <span class="keyword">goto</span> errout;</span><br><span class="line"><span class="number">304</span></span><br><span class="line"><span class="number">305</span>         rule4-&gt;src_len = frh-&gt;src_len;</span><br><span class="line"><span class="number">306</span>         rule4-&gt;srcmask = inet_make_mask(rule4-&gt;src_len);</span><br><span class="line"><span class="number">307</span>         rule4-&gt;dst_len = frh-&gt;dst_len;</span><br><span class="line"><span class="number">308</span>         rule4-&gt;dstmask = inet_make_mask(rule4-&gt;dst_len);</span><br><span class="line">...</span><br></pre></td></tr></table></figure>
+
+<p>关键在第 300-303 行：<code>fib_unmerge(net)</code> —— 在配置新的策略路由规则时，先把 local 和 main 表分离开。</p>
+<h3 id="fib-unmerge-实现"><a href="#fib-unmerge-实现" class="headerlink" title="fib_unmerge 实现"></a>fib_unmerge 实现</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">int</span> <span class="title function_">fib_unmerge</span><span class="params">(<span class="keyword">struct</span> net *net)</span></span><br><span class="line">&#123;</span><br><span class="line">        <span class="class"><span class="keyword">struct</span> <span class="title">fib_table</span> *<span class="title">old</span>, *<span class="title">new</span>, *<span class="title">main_table</span>;</span></span><br><span class="line"></span><br><span class="line">        <span class="comment">/* attempt to fetch the local table */</span></span><br><span class="line">        old = fib_get_table(net, RT_TABLE_LOCAL);</span><br><span class="line">        <span class="keyword">if</span> (!old)</span><br><span class="line">                <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">        <span class="comment">/* create new local table with routes from old */</span></span><br><span class="line">        new = fib_trie_unmerge(old);</span><br><span class="line">        <span class="keyword">if</span> (!new)</span><br><span class="line">                <span class="keyword">return</span> -ENOMEM;</span><br><span class="line"></span><br><span class="line">        <span class="comment">/* if they are the same, no unmerging needed */</span></span><br><span class="line">        <span class="keyword">if</span> (new == old)</span><br><span class="line">                <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">        <span class="comment">/* replace old local table with new one */</span></span><br><span class="line">        fib_replace_table(net, old, new);</span><br><span class="line">        fib_free_table(old);</span><br><span class="line"></span><br><span class="line">        <span class="comment">/* flush local entries that were merged into main */</span></span><br><span class="line">        main_table = fib_get_table(net, RT_TABLE_MAIN);</span><br><span class="line">        <span class="keyword">if</span> (main_table)</span><br><span class="line">                fib_table_flush_external(main_table);</span><br><span class="line"></span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p><code>fib_unmerge</code> 的逻辑可以分为四步：</p>
+<h4 id="第一步：获取旧的-local-表"><a href="#第一步：获取旧的-local-表" class="headerlink" title="第一步：获取旧的 local 表"></a>第一步：获取旧的 local 表</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">old = fib_get_table(net, RT_TABLE_LOCAL);</span><br></pre></td></tr></table></figure>
+
+<p>获取当前的 local 路由表。如果不存在，说明不需要分离，直接返回。</p>
+<h4 id="第二步：创建新的-local-表"><a href="#第二步：创建新的-local-表" class="headerlink" title="第二步：创建新的 local 表"></a>第二步：创建新的 local 表</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">new = fib_trie_unmerge(old);</span><br></pre></td></tr></table></figure>
+
+<p><code>fib_trie_unmerge</code> 从旧的（合并在 main 表里的）local 表中，把 local 路由复制到一张新的独立 local 表里。</p>
+<p>如果返回的 new 和 old 相同，说明已经分离过了（不是第一次添加策略路由），直接返回。</p>
+<h4 id="第三步：替换旧表"><a href="#第三步：替换旧表" class="headerlink" title="第三步：替换旧表"></a>第三步：替换旧表</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">fib_replace_table(net, old, new);</span><br><span class="line">fib_free_table(old);</span><br></pre></td></tr></table></figure>
+
+<p>用新创建的 local 表替换掉旧的（别名到 main 的）local 表，并释放旧表。</p>
+<h4 id="第四步：清理-main-表"><a href="#第四步：清理-main-表" class="headerlink" title="第四步：清理 main 表"></a>第四步：清理 main 表</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">main_table = fib_get_table(net, RT_TABLE_MAIN);</span><br><span class="line"><span class="keyword">if</span> (main_table)</span><br><span class="line">        fib_table_flush_external(main_table);</span><br></pre></td></tr></table></figure>
+
+<p>由于之前 local 路由都在 main 表里，现在已经复制到了独立的 local 表，需要把 main 表里残留的 local 路由条目清理掉。<code>fib_table_flush_external</code> 负责刷新 main 表中的外部引用。</p>
+<h3 id="流程总结"><a href="#流程总结" class="headerlink" title="流程总结"></a>流程总结</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><span class="line">初始状态：</span><br><span class="line">  local表 ──别名──&gt; main表（local路由都在main表里）</span><br><span class="line"></span><br><span class="line">用户执行 ip rule add ... 添加策略路由：</span><br><span class="line">  fib_newrule</span><br><span class="line">    └── ops-&gt;configure  即 fib4_rule_configure</span><br><span class="line">         └── fib_unmerge(net)</span><br><span class="line">              ├── 1. old = fib_get_table(LOCAL)</span><br><span class="line">              ├── 2. new = fib_trie_unmerge(old)  // 复制local路由到新表</span><br><span class="line">              ├── 3. fib_replace_table(old, new)  // 替换local表</span><br><span class="line">              ├──    fib_free_table(old)           // 释放旧表</span><br><span class="line">              └── 4. fib_table_flush_external(main) // 清理main表中残留</span><br><span class="line"></span><br><span class="line">分离后状态：</span><br><span class="line">  local表（独立，包含所有local路由）</span><br><span class="line">  main表（仅包含unicast路由）</span><br></pre></td></tr></table></figure>
+
+<h3 id="与-fib-has-custom-rules-的关系"><a href="#与-fib-has-custom-rules-的关系" class="headerlink" title="与 fib_has_custom_rules 的关系"></a>与 fib_has_custom_rules 的关系</h3><p>回顾 <code>fib_lookup</code> 的入口：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (net-&gt;ipv4.fib_has_custom_rules)</span><br><span class="line">        <span class="keyword">return</span> __fib_lookup(net, flp, res, flags);</span><br></pre></td></tr></table></figure>
+
+<p>当 <code>fib_has_custom_rules</code> 为 true 时，走 <code>__fib_lookup</code> 路径，会遍历策略路由链表，依次查找 local&#x2F;main&#x2F;default 三张表。此时 local 表已经通过 <code>fib_unmerge</code> 分离出来，包含了独立的 local 路由。</p>
+<p>当 <code>fib_has_custom_rules</code> 为 false 时，直接查找 main 表（其中包含了 local 路由）和 default 表。此时不需要分离。</p>
+<p>这两条路径保持了一致的路由查找语义，同时在没有自定义规则时通过合并表来优化性能。</p>
+<h3 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h3><p><code>fib_unmerge</code> 是内核路由子系统中一个精巧的优化设计：</p>
+<ul>
+<li><strong>默认状态</strong>：local 表是 main 表的别名，所有路由都在一张表里，<code>fib_lookup</code> 只需查一次表</li>
+<li><strong>添加策略路由时</strong>：<code>fib_unmerge</code> 把 local 路由从 main 表里切割出来，放到独立的 local 表</li>
+<li><strong>切割过程</strong>：创建新 local 表 → 复制 local 路由 → 替换旧表 → 清理 main 表</li>
+<li><strong>只执行一次</strong>：后续再添加策略路由时，<code>fib_trie_unmerge</code> 会检测到已经分离，直接返回</li>
+</ul>
+<p>这个设计体现了内核”按需分离”的思想——在不需要策略路由时保持简单高效，在需要时才承担额外的开销。</p>
+<p>相关文章：</p>
+<ul>
+<li><a href="/2025/07/03/fib-ip-address-and-route/">ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</a></li>
+<li><a href="/2018/10/09/fib-how-ipv4-lookup-route-with-rule-route/">linux内核多路由表与策略路由的实现</a></li>
+<li><a href="/2025/07/06/fib-lo-and-local-route-table/">lo口与local路由表</a></li>
+</ul>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2025/07/08/fib-unmerge-local-from-main/" data-id="cuidqtT4Zs8QFoKjqB92fA8Jx" data-title="fib_unmerge：把local路由从main表里切割出来" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/route/" rel="tag">route</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/03/06/fib-node-animation/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          FIB Trie 路由动画演示
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2025/07/06/fib-lo-and-local-route-table/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">lo口与local路由表</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/network/" rel="tag">network</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tag Cloud</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.77px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 13.85px;">address</a> <a href="/tags/bh/" style="font-size: 13.85px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.15px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.77px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.54px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/fib/" style="font-size: 13.08px;">fib</a> <a href="/tags/gcc/" style="font-size: 13.85px;">gcc</a> <a href="/tags/git/" style="font-size: 12.31px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.77px;">ipv6</a> <a href="/tags/irq/" style="font-size: 16.92px;">irq</a> <a href="/tags/kernel/" style="font-size: 13.85px;">kernel</a> <a href="/tags/memory/" style="font-size: 13.08px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 17.69px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.08px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/others/" style="font-size: 10.77px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.46px;">route</a> <a href="/tags/sched/" style="font-size: 13.85px;">sched</a> <a href="/tags/socket/" style="font-size: 19.23px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 14.62px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.38px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.54px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.77px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 14.62px;">xfrm</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Archives</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">March 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/07/">July 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/06/">June 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/03/06/fib-node-animation/">FIB Trie 路由动画演示</a>
+          </li>
+        
+          <li>
+            <a href="/2025/07/08/fib-unmerge-local-from-main/">fib_unmerge：把local路由从main表里切割出来</a>
+          </li>
+        
+          <li>
+            <a href="/2025/07/06/fib-lo-and-local-route-table/">lo口与local路由表</a>
+          </li>
+        
+          <li>
+            <a href="/2025/07/03/fib-ip-address-and-route/">ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</a>
+          </li>
+        
+          <li>
+            <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

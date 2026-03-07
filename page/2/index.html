@@ -75,6 +75,202 @@
       <div class="outer">
         <section id="main">
   
+    <article id="post-epoll-frame-summary" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2024/10/03/epoll-frame-summary/" class="article-date">
+  <time class="dt-published" datetime="2024-10-03T13:09:19.000Z" itemprop="datePublished">2024-10-03</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/sched/">sched</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2024/10/03/epoll-frame-summary/">epoll-frame-summary</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="epoll学习笔记"><a href="#epoll学习笔记" class="headerlink" title="epoll学习笔记"></a>epoll学习笔记</h3><ul>
+<li>epoll 相关结构体</li>
+<li>epoll 各个系统调用及内核实现</li>
+</ul>
+<p><img src="/images/epoll/epoll.2.png" alt="epoll相关结构体"><br><img src="/images/epoll/epoll.1.png" alt="epoll调用关联图"><br><img src="/images/epoll/epoll.3.png" alt="epoll调用关联图"><br><img src="/images/epoll/epoll.4.png" alt="epoll调用关联图"></p>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2024/10/03/epoll-frame-summary/" data-id="cuid_d5HkbcNfXAg1aqjGsaZO" data-title="epoll-frame-summary" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/sched/" rel="tag">sched</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-struct-group" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2024/09/21/struct-group/" class="article-date">
+  <time class="dt-published" datetime="2024-09-20T16:18:38.000Z" itemprop="datePublished">2024-09-21</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/others/">others</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2024/09/21/struct-group/">struct-group</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="struct-group"><a href="#struct-group" class="headerlink" title="__struct_group"></a><code>__struct_group</code></h2><p>浏览IPv6代码时候，看到这样一个新玩法，<br><code>__struct_group</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">118 struct ipv6hdr &#123;</span><br><span class="line">...</span><br><span class="line">132         __u8                    hop_limit;</span><br><span class="line">133</span><br><span class="line">134         __struct_group(/* no tag */, addrs, /* no attrs */,</span><br><span class="line">135                 struct  in6_addr        saddr;</span><br><span class="line">136                 struct  in6_addr        daddr;</span><br><span class="line">137         );</span><br><span class="line">138 &#125;;</span><br></pre></td></tr></table></figure>
+<p>###用法<br>再看一下用法：</p>
+<pre><code> 922 /* copy IPv6 saddr &amp; daddr to flow_keys, possibly using 64bit load/store
+ 923  * Equivalent to :      flow-&gt;v6addrs.src = iph-&gt;saddr;
+ 924  *                      flow-&gt;v6addrs.dst = iph-&gt;daddr;
+ 925  */
+ 926 static inline void iph_to_flow_copy_v6addrs(struct flow_keys *flow,
+ 927                                             const struct ipv6hdr *iph)
+ 928 {
+ ...
+ 932         memcpy(&amp;flow-&gt;addrs.v6addrs, &amp;iph-&gt;addrs, sizeof(flow-&gt;addrs.v6addrs));
+ ...
+ <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line"></span><br><span class="line">###</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+ 11 /**
+ 12  * __struct_group() - Create a mirrored named and anonyomous struct
+ 13  *
+ 14  * @TAG: The tag name for the named sub-struct (usually empty)
+ 15  * @NAME: The identifier name of the mirrored sub-struct
+ 16  * @ATTRS: Any struct attributes (usually empty)
+ 17  * @MEMBERS: The member declarations for the mirrored structs
+ 18  *
+ 19  * Used to create an anonymous union of two structs with identical layout
+ 20  * and size: one anonymous and one named. The former&#39;s members can be used
+ 21  * normally without sub-struct naming, and the latter can be used to
+ 22  * reason about the start, end, and size of the group of struct members.
+ 23  * The named struct can also be explicitly tagged for layer reuse, as well
+ 24  * as both having struct attributes appended.
+ 25  */
+ 26 #define __struct_group(TAG, NAME, ATTRS, MEMBERS...) \
+ 27         union { \
+ 28                 struct { MEMBERS } ATTRS; \
+ 29                 struct TAG { MEMBERS } ATTRS NAME; \
+ 30         } ATTRS
+```
+</code></pre>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2024/09/21/struct-group/" data-id="cuidM8G3sPxsi3hjMLVaZvMQM" data-title="struct-group" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/others/" rel="tag">others</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-ifconfig-alias-nic" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2024/05/03/ifconfig-alias-nic/" class="article-date">
+  <time class="dt-published" datetime="2024-05-03T14:08:32.000Z" itemprop="datePublished">2024-05-03</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/netdev/">netdev</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2024/05/03/ifconfig-alias-nic/">内核如何管理同网口下多个ip地址(网口别名）</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h3><p>内核如何管理 网口上的IPv4 地址：</p>
+<ul>
+<li>每个网口下面有多个IPv4地址，每个IP地址存放到一个<code>struct in_ifaddr</code>的结构体里。这个结构体里存放别名、ip地址和掩码信息。</li>
+<li>每个网口下面有一个单链表，每个ifa 节点通过<code>ifa_next</code>指向下一个 ifa 节点。通过这个链表把多个 ifa 地址链接在一起。</li>
+<li>每个 net_namespace下有多个网口，通过一个 hash 数据链表(<code>net-&gt;ipv4.inet_addr_lst</code>)，把各个网口下的全部ifa节点，放到这个hash链里面。hash值相同的 ifa 节点，通过<code>addr_list</code> 挂在到一个hash 桶下。</li>
+<li>别名并不会创建一个独立的网口，只是在同一个网口下增加一个对应的 ifa结构体并挂载到上面的两个链表中。跟通过ip link 命令给一个网口增加一个地址相同，唯一不同在于这个地址起了一个别名或者叫label。</li>
+</ul>
+<p><img src="/images/ifa.png" alt="内核如何管理多网口多 IP 地址"></p>
+<h3 id="命令行操作"><a href="#命令行操作" class="headerlink" title="命令行操作"></a>命令行操作</h3><p>有时候我们需要给一个网口配置的多个 IP 地址，这时候我们有两种配置方法：</p>
+<ul>
+<li>使用 ifconfig 配置到网口别名上。</li>
+<li>使用 ip addr 命令直接配置到网口上。</li>
+</ul>
+<p>两种方法最终在内核实现是一样的，存储位置也一样，并且可以相互读写配置结果。</p>
+<p>比如将<code>9.9.9.199/24</code>配置到 lo 口上，并起个别名<code>lo:9</code></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">[root@VM-0-12-centos ~]# ifconfig  lo:9 9.9.9.199/24</span><br><span class="line">[root@VM-0-12-centos ~]# ifconfig  lo:9</span><br><span class="line">lo:9: flags=73&lt;UP,LOOPBACK,RUNNING&gt;  mtu 65536</span><br><span class="line">        inet 9.9.9.199  netmask 255.255.255.0</span><br><span class="line">        loop  txqueuelen 1000  (Local Loopback)</span><br><span class="line">[root@VM-0-12-centos ~]#</span><br></pre></td></tr></table></figure>
+<p>ifconfig命令的配置结果，也可以通用<code>ip link</code>命令来查看</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">[root@VM-0-12-centos ~]# ip a show dev lo</span><br><span class="line">1: lo: &lt;LOOPBACK,UP,LOWER_UP&gt; mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000</span><br><span class="line">    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00</span><br><span class="line">    inet 127.0.0.1/8 scope host lo</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line">    inet 9.9.9.199/24 scope global lo:9</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br><span class="line">    inet6 ::1/128 scope host</span><br><span class="line">       valid_lft forever preferred_lft forever</span><br></pre></td></tr></table></figure>
+<p>网口的别名在ip命令里被当做<code>label</code>输出,放在scope字段后面</p>
+        
+          <p class="article-more-link">
+            <a href="/2024/05/03/ifconfig-alias-nic/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2024/05/03/ifconfig-alias-nic/" data-id="cuidissSOWVp8EtapuDj77Ped" data-title="内核如何管理同网口下多个ip地址(网口别名）" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
     <article id="post-core-entry-function-of-bpf-run" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
     <a href="/2022/08/27/core-entry-function-of-bpf-run/" class="article-date">
@@ -110,7 +306,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2022/08/27/core-entry-function-of-bpf-run/" data-id="cuidbnhqLuGA5JXxRkOXEo8Wx" data-title="bfp 在内核运行的核心入口函数及其变形" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2022/08/27/core-entry-function-of-bpf-run/" data-id="cuidCVPkwfY8iXZEXQb9h2qJm" data-title="bfp 在内核运行的核心入口函数及其变形" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -159,7 +355,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2021/10/24/how-to-run-hexo-with-docker-image/" data-id="cuid9FpdWw_4GztzTB3lNgh_7" data-title="aws上部署hexo步骤记录" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2021/10/24/how-to-run-hexo-with-docker-image/" data-id="cuidk5J_UyHEVGmLzWl9aynba" data-title="aws上部署hexo步骤记录" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -241,7 +437,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2020/10/03/IPv6-how-to-support-IPv6-ext-header/" data-id="cuidaa523RpEVyh04N90lYZkG" data-title="IPv6: how to support IPv6 ext header" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2020/10/03/IPv6-how-to-support-IPv6-ext-header/" data-id="cuidZ-cuSdonlBz8NRqEfiIcb" data-title="IPv6: how to support IPv6 ext header" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -293,7 +489,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2020/03/25/2020-03-25-kern-ovs-data-struct/" data-id="cuidMxTIG7Yx_6N_bhN8UAGcb" data-title="内核OVS的学习总结" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2020/03/25/2020-03-25-kern-ovs-data-struct/" data-id="cuidgqKLDeRjo-ssZEaXoSnBt" data-title="内核OVS的学习总结" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -348,7 +544,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2020/03/15/2020-03-15-net-rx-drop-1/" data-id="cuid4kNO3UbhIG9E3Rq14HdB0" data-title="net rx drop(续)" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2020/03/15/2020-03-15-net-rx-drop-1/" data-id="cuid8lwp5L-lXPWxuUDM-f5Mn" data-title="net rx drop(续)" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -403,7 +599,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2020/03/15/2020-03-15-net-rx-drop/" data-id="cuidvSYfh4E-REHYJCRxZlFZh" data-title="net rx drop" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2020/03/15/2020-03-15-net-rx-drop/" data-id="cuidlsIo_aermH_17qnrGpuL1" data-title="net rx drop" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -453,187 +649,11 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2019/11/11/flush-all-IPv6-address-when-interface-down/" data-id="cuidVqrXQjTZmKDWyy60g-y2O" data-title="How IPv6 addresses are flushed on link down" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2019/11/11/flush-all-IPv6-address-when-interface-down/" data-id="cuidIVRawGY0VvXwSHlmO-_0I" data-title="How IPv6 addresses are flushed on link down" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
   <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/route/" rel="tag">route</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-how-xdp-pass-skb-as-ctx-to-bpf-prog" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2019/10/27/how-xdp-pass-skb-as-ctx-to-bpf-prog/" class="article-date">
-  <time class="dt-published" datetime="2019-10-26T19:49:07.000Z" itemprop="datePublished">2019-10-27</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/bpf/">bpf</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2019/10/27/how-xdp-pass-skb-as-ctx-to-bpf-prog/">ebpf如何访问skb 的fileds</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="ebpf如何访问skb-的fileds"><a href="#ebpf如何访问skb-的fileds" class="headerlink" title="ebpf如何访问skb 的fileds"></a>ebpf如何访问skb 的fileds</h2><ul>
-<li>加载:</li>
-</ul>
-<ol>
-<li>转换： 所有skb的fields都转换成相对skb结构体头部的偏移量</li>
-<li>根据偏移量重新校验 bpf指令</li>
-</ol>
-<ul>
-<li>报文运行：</li>
-</ul>
-<ol start="2">
-<li>Skb的地址在skb是作为ctx寄存器传递给bfp run函数的。</li>
-</ol>
-<h2 id="BPF-CTX与SKB"><a href="#BPF-CTX与SKB" class="headerlink" title="BPF CTX与SKB"></a>BPF CTX与SKB</h2><p>这里以tcpdump(PF_PACKET)为例，结合函数调用关系说明，<br>skb是如何被当做ctx参数传递给bpf程序的</p>
-<p>注： 内核版本v6.6</p>
-<h3 id="函数调用关系"><a href="#函数调用关系" class="headerlink" title="函数调用关系"></a>函数调用关系</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">--&gt; packet_rcv</span><br><span class="line">--&gt; --&gt; run_filter(skb, sk, snaplen) </span><br><span class="line">--&gt; --&gt; --&gt; bpf_prog_run_clear_cb</span><br><span class="line">--&gt; --&gt; --&gt; --&gt; bpf_prog_run_pin_on_cpu(prog, skb); &lt;== !!! skb作为第二个参数ctx传递</span><br><span class="line">--&gt; --&gt; --&gt; --&gt; --&gt; bpf_prog_run(prog, ctx);</span><br><span class="line">--&gt; --&gt; --&gt; --&gt; --&gt; --&gt; __bpf_prog_run(prog, ctx, bpf_dispatcher_nop_func);</span><br><span class="line">--&gt; --&gt; --&gt; --&gt; --&gt; --&gt; --&gt; dfunc(ctx, prog-&gt;insnsi, prog-&gt;bpf_func);</span><br><span class="line">		dfun是__bpf_prog_run被调用时候的参数，相当于</span><br><span class="line">		bpf_dispatcher_nop_func(ctx, prog-&gt;insnsi, prog-&gt;bpf_func);</span><br><span class="line">--&gt; --&gt; --&gt; --&gt; --&gt; --&gt; --&gt; --&gt; bpf_func(ctx, insnsi);</span><br><span class="line">		bpf_func是bpf_dispatcher_nop_func被调用时候最后一个参数，相当于</span><br><span class="line">		prog-&gt;bpf_func(ctx, prog-&gt;insnsi) </span><br></pre></td></tr></table></figure>
-        
-          <p class="article-more-link">
-            <a href="/2019/10/27/how-xdp-pass-skb-as-ctx-to-bpf-prog/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2019/10/27/how-xdp-pass-skb-as-ctx-to-bpf-prog/" data-id="cuidytqajXAyeYucscpoDF0jR" data-title="ebpf如何访问skb 的fileds" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-how-netstack-call-xdp-prog" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2019/10/27/how-netstack-call-xdp-prog/" class="article-date">
-  <time class="dt-published" datetime="2019-10-26T19:00:50.000Z" itemprop="datePublished">2019-10-27</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/bpf/">bpf</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2019/10/27/how-netstack-call-xdp-prog/">协议栈是如何调用xdp程序处理报文的</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="函数调用栈"><a href="#函数调用栈" class="headerlink" title="函数调用栈"></a>函数调用栈</h2><p>以xdp SKB模式为例，</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">--&gt; bpf_prog_run_generic_xdp</span><br><span class="line">--&gt; --&gt; bpf_prog_run_xdp</span><br><span class="line">--&gt; --&gt; --&gt; u32 act = __bpf_prog_run(prog, xdp, BPF_DISPATCHER_FUNC(xdp)); </span><br><span class="line">	展开BPF_DISPATCHER_FUNC(xdp)， 相当于</span><br><span class="line">            u32 act = __bpf_prog_run(prog, xdp, bpf_dispatcher_xdp_func));</span><br><span class="line">--&gt; --&gt; --&gt; --&gt; ret = dfunc(ctx, prog-&gt;insnsi, prog-&gt;bpf_func);</span><br><span class="line">	这里的dfun是`__bpf_prog_run`的第三个参数，因此相当于</span><br><span class="line">                ret = bpf_dispatcher_xdp_func(ctx, prog-&gt;insnsi, prog-&gt;bpf_func);  &lt;== 这里的第三个函数就是我们之前提到的，当bpf程序被加载时候，在bpf_prog结构体保存的bpf_func。</span><br><span class="line">--&gt; --&gt; --&gt; --&gt; --&gt; return __BPF_DISPATCHER_CALL(name);   &lt;== 根据bpf_dispatcher_xdp_func的定义</span><br><span class="line">                展开__BPF_DISPATCHER_CALL，相当于</span><br><span class="line">		bpf_func(ctx, insnsi)  &lt;=== **这里很有意思**，bpf_fun, ctx, insnsi分别代表bpf_dispatcher_xdp_func的三个函数入口参数，</span><br><span class="line">			根据顺序依次为 第三个，第一个，第二个，按照这个顺序展开</span><br><span class="line">                prog-&gt;bpf_func(ctx, prog-&gt;insnsi); &lt;== 至此，就把我们上面一节里总结的`prog-&gt;bpf_func`这个函数指针用上了。</span><br><span class="line">			最终这个函数根据不同stacksize入口函数的包装，调用到</span><br><span class="line">--&gt; --&gt; --&gt; --&gt; --&gt; --&gt; ___bpf_prog_run(ctx, prog-&gt;insnsi)</span><br></pre></td></tr></table></figure>
-        
-          <p class="article-more-link">
-            <a href="/2019/10/27/how-netstack-call-xdp-prog/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2019/10/27/how-netstack-call-xdp-prog/" data-id="cuid5Izfd8VnP24idZS4KKm2o" data-title="协议栈是如何调用xdp程序处理报文的" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-how-load-xdp-into-kernel" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2019/10/26/how-load-xdp-into-kernel/" class="article-date">
-  <time class="dt-published" datetime="2019-10-26T03:28:51.000Z" itemprop="datePublished">2019-10-26</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/socket/">socket</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2019/10/26/how-load-xdp-into-kernel/">xdp 是如何加载到内核并运行的</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h2 id="XDP-framework"><a href="#XDP-framework" class="headerlink" title="XDP framework"></a>XDP framework</h2><p>xdp在内核里的有三个关键步骤:</p>
-<ul>
-<li><code>load</code>: 加载到内核</li>
-<li><code>attach</code>: 绑定到一个网口</li>
-<li><code>run</code>：网口收包时候，调用并执行bpf prog</li>
-</ul>
-<h3 id="load加载-通过ebpf系统调用，-把prog加载到内核"><a href="#load加载-通过ebpf系统调用，-把prog加载到内核" class="headerlink" title="load加载: 通过ebpf系统调用， 把prog加载到内核"></a><code>load</code>加载: 通过ebpf系统调用， 把prog加载到内核</h3><p><code>fd = sys_bpf(BPF_PROG_LOAD, attr, size);</code></p>
-<ul>
-<li>在内核里创建一个<code>bfp_prog</code>结构体用以存储bpf prog。</li>
-<li>通过<code>bpf_check</code>检查prog程序的安全性和合法性。</li>
-<li>通过<code>bpf_prog_select_runtime</code>指定bpf prog对应的执行函数</li>
-<li>这个函数指针保存在<code>bpf_func</code>这个字段里。这里的function最终指向通用的bfp run函数<code>___bpf_prog_run</code>。<br> 关于<code>___bpf_prog_run</code>这个具体封装和实现见另外一篇文章。</li>
-</ul>
-<h3 id="attach绑定-将prog程序绑定到一个特定的网口的struct-net-device上"><a href="#attach绑定-将prog程序绑定到一个特定的网口的struct-net-device上" class="headerlink" title="attach绑定: 将prog程序绑定到一个特定的网口的struct net_device上"></a><code>attach</code>绑定: 将prog程序绑定到一个特定的网口的<code>struct net_device</code>上</h3><p>libpf函数<code>do_attach</code>将上一步加载在内核里的prog跟一个网口绑定， 具体实现是通过下发netlink命令。<br>这是个generic类型的netlink命令，最终通过<code>dev_change_xdp_fd</code>将prog挂载到对应netdev下面。</p>
-        
-          <p class="article-more-link">
-            <a href="/2019/10/26/how-load-xdp-into-kernel/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2019/10/26/how-load-xdp-into-kernel/" data-id="cuidBpBb6aM8IOgSsszisT2H8" data-title="xdp 是如何加载到内核并运行的" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li></ul>
 
     </footer>
   </div>
@@ -678,7 +698,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Tag Cloud</h3>
     <div class="widget tagcloud">
-      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/fib/" style="font-size: 10px;">fib</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/kernel/" style="font-size: 10.83px;">kernel</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.77px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 13.85px;">address</a> <a href="/tags/bh/" style="font-size: 13.85px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.15px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.77px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.54px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/fib/" style="font-size: 13.08px;">fib</a> <a href="/tags/gcc/" style="font-size: 13.85px;">gcc</a> <a href="/tags/git/" style="font-size: 12.31px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.77px;">ipv6</a> <a href="/tags/irq/" style="font-size: 16.92px;">irq</a> <a href="/tags/kernel/" style="font-size: 13.85px;">kernel</a> <a href="/tags/memory/" style="font-size: 13.08px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 17.69px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.08px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/others/" style="font-size: 10.77px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.46px;">route</a> <a href="/tags/sched/" style="font-size: 13.85px;">sched</a> <a href="/tags/socket/" style="font-size: 19.23px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 14.62px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.38px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.54px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.77px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 14.62px;">xfrm</a>
     </div>
   </div>
 
@@ -687,7 +707,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Archives</h3>
     <div class="widget">
-      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">March 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/06/">June 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/03/">March 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/07/">July 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/06/">June 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2025/05/">May 2025</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/10/">October 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/09/">September 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2024/05/">May 2024</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2022/08/">August 2022</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2021/10/">October 2021</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/10/">October 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2020/03/">March 2020</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/11/">November 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/10/">October 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/09/">September 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2019/07/">July 2019</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2018/10/">October 2018</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2017/05/">May 2017</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/11/">November 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/10/">October 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/02/">February 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2016/01/">January 2016</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/09/">September 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/06/">June 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2015/05/">May 2015</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/10/">October 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/09/">September 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/07/">July 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/02/">February 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2014/01/">January 2014</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/11/">November 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/10/">October 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/09/">September 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/08/">August 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/07/">July 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/06/">June 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/03/">March 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/02/">February 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2013/01/">January 2013</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/11/">November 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/08/">August 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/07/">July 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/06/">June 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/05/">May 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2012/02/">February 2012</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/10/">October 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/09/">September 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/04/">April 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2011/01/">January 2011</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2010/06/">June 2010</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2009/05/">May 2009</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/12/">December 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/11/">November 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/10/">October 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/09/">September 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/08/">August 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/07/">July 2007</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2007/06/">June 2007</a></li></ul>
     </div>
   </div>
 
@@ -704,19 +724,19 @@
           </li>
         
           <li>
+            <a href="/2025/07/08/fib-unmerge-local-from-main/">fib_unmerge：把local路由从main表里切割出来</a>
+          </li>
+        
+          <li>
+            <a href="/2025/07/06/fib-lo-and-local-route-table/">lo口与local路由表</a>
+          </li>
+        
+          <li>
+            <a href="/2025/07/03/fib-ip-address-and-route/">ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</a>
+          </li>
+        
+          <li>
             <a href="/2025/06/23/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
-          </li>
-        
-          <li>
-            <a href="/2025/05/07/tcp-paws-check/">PAWS 在tcp协议栈中的实现</a>
-          </li>
-        
-          <li>
-            <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/">tcp三次握手 --- 逐渐消失的tcp半链接队列</a>
-          </li>
-        
-          <li>
-            <a href="/2025/05/05/tcp-req-queue-length-check/">创建req scoket时的三个长度检查</a>
           </li>
         
       </ul>
