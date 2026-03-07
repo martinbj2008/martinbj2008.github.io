@@ -6,15 +6,15 @@
   
   <title>fib_unmerge：把local路由从main表里切割出来 | Kernel Study Notes</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="背景前面文章提到，local 路由默认情况下是插入到 main 表里的。 在 ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文 中我们分析了 fib_lookup 函数： 1234567891011121314374 static inline int fib_lookup(struct net *net, struct flowi4 *flp,375">
+  <meta name="description" content="fib_unmerge 是内核路由子系统中一个精巧的按需优化设计：  默认状态下，local 表只是 main 表的别名，所有路由合并在一张表里，fib_lookup 只需查一次表，性能最优 添加策略路由时，fib_unmerge 将 local 路由从 main 表中切割出来，放入独立的 local 表，确保策略路由能正确匹配 切割四步走：创建新 local 表 → 复制 local 路由 →">
 <meta property="og:type" content="article">
 <meta property="og:title" content="fib_unmerge：把local路由从main表里切割出来">
 <meta property="og:url" content="https://martinbj2008.github.io/2025/07/08/fib-unmerge-local-from-main/index.html">
 <meta property="og:site_name" content="Kernel Study Notes">
-<meta property="og:description" content="背景前面文章提到，local 路由默认情况下是插入到 main 表里的。 在 ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文 中我们分析了 fib_lookup 函数： 1234567891011121314374 static inline int fib_lookup(struct net *net, struct flowi4 *flp,375">
+<meta property="og:description" content="fib_unmerge 是内核路由子系统中一个精巧的按需优化设计：  默认状态下，local 表只是 main 表的别名，所有路由合并在一张表里，fib_lookup 只需查一次表，性能最优 添加策略路由时，fib_unmerge 将 local 路由从 main 表中切割出来，放入独立的 local 表，确保策略路由能正确匹配 切割四步走：创建新 local 表 → 复制 local 路由 →">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2025-07-08T02:00:00.000Z">
-<meta property="article:modified_time" content="2026-03-07T01:11:36.051Z">
+<meta property="article:modified_time" content="2026-03-07T08:49:38.602Z">
 <meta property="article:author" content="Martinbj2008">
 <meta property="article:tag" content="fib">
 <meta property="article:tag" content="kernel">
@@ -106,7 +106,17 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <h3 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h3><p>前面文章提到，local 路由默认情况下是插入到 main 表里的。</p>
+        <p><code>fib_unmerge</code> 是内核路由子系统中一个精巧的按需优化设计：</p>
+<ul>
+<li><strong>默认状态下</strong>，local 表只是 main 表的别名，所有路由合并在一张表里，<code>fib_lookup</code> 只需查一次表，性能最优</li>
+<li><strong>添加策略路由时</strong>，<code>fib_unmerge</code> 将 local 路由从 main 表中切割出来，放入独立的 local 表，确保策略路由能正确匹配</li>
+<li><strong>切割四步走</strong>：创建新 local 表 → 复制 local 路由 → 替换旧表 → 清理 main 表中的残留条目</li>
+<li><strong>幂等设计</strong>：只在首次添加策略路由时执行分离，后续再添加时 <code>fib_trie_unmerge</code> 检测到已分离，直接返回</li>
+</ul>
+<p>本文将从调用点入手，逐步分析 <code>fib_unmerge</code> 的实现细节。</p>
+<span id="more"></span>
+
+<h3 id="背景"><a href="#背景" class="headerlink" title="背景"></a>背景</h3><p>前面文章提到，local 路由默认情况下是插入到 main 表里的。</p>
 <p>在 <a href="/2025/07/03/fib-ip-address-and-route/">ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</a> 中我们分析了 <code>fib_lookup</code> 函数：</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">374</span> <span class="type">static</span> <span class="keyword">inline</span> <span class="type">int</span> <span class="title function_">fib_lookup</span><span class="params">(<span class="keyword">struct</span> net *net, <span class="keyword">struct</span> flowi4 *flp,</span></span><br><span class="line"><span class="params"><span class="number">375</span>                              <span class="keyword">struct</span> fib_result *res, <span class="type">unsigned</span> <span class="type">int</span> flags)</span></span><br><span class="line">376 &#123;</span><br><span class="line">...</span><br><span class="line"><span class="number">381</span>         <span class="keyword">if</span> (net-&gt;ipv4.fib_has_custom_rules)</span><br><span class="line"><span class="number">382</span>                 <span class="keyword">return</span> __fib_lookup(net, flp, res, flags);</span><br><span class="line">...</span><br><span class="line"><span class="number">388</span>         tb = rcu_dereference_rtnl(net-&gt;ipv4.fib_main);</span><br><span class="line"><span class="number">389</span>         <span class="keyword">if</span> (tb)</span><br><span class="line"><span class="number">390</span>                 err = fib_table_lookup(tb, flp, res, flags);</span><br><span class="line">...</span><br><span class="line"><span class="number">395</span>         tb = rcu_dereference_rtnl(net-&gt;ipv4.fib_default);</span><br><span class="line"><span class="number">396</span>         <span class="keyword">if</span> (tb)</span><br><span class="line"><span class="number">397</span>                 err = fib_table_lookup(tb, flp, res, flags);</span><br></pre></td></tr></table></figure>
 
@@ -118,8 +128,6 @@
 <p>那问题来了：当用户添加了自定义的策略路由规则后，路由查找走的是 <code>__fib_lookup</code> → <code>fib_rules_lookup</code>，会按策略路由顺序依次查找 local&#x2F;main&#x2F;default 三张表。如果 local 路由还在 main 表里，那 local 表就是空的，查找 local 表就没有意义了。</p>
 <p>所以，<strong>只有在用户添加了自定义策略路由规则后，local 路由才需要从 main 表里分离出来，放到独立的 local 表里</strong>。</p>
 <p>函数 <code>fib_unmerge</code> 就是做这个事情的。</p>
-<span id="more"></span>
-
 <h3 id="调用点"><a href="#调用点" class="headerlink" title="调用点"></a>调用点</h3><p><code>fib_unmerge</code> 的调用点有两个：</p>
 <ul>
 <li><code>fib4_rule_configure</code>：添加策略路由</li>
@@ -156,14 +164,7 @@
 <p>当 <code>fib_has_custom_rules</code> 为 true 时，走 <code>__fib_lookup</code> 路径，会遍历策略路由链表，依次查找 local&#x2F;main&#x2F;default 三张表。此时 local 表已经通过 <code>fib_unmerge</code> 分离出来，包含了独立的 local 路由。</p>
 <p>当 <code>fib_has_custom_rules</code> 为 false 时，直接查找 main 表（其中包含了 local 路由）和 default 表。此时不需要分离。</p>
 <p>这两条路径保持了一致的路由查找语义，同时在没有自定义规则时通过合并表来优化性能。</p>
-<h3 id="小结"><a href="#小结" class="headerlink" title="小结"></a>小结</h3><p><code>fib_unmerge</code> 是内核路由子系统中一个精巧的优化设计：</p>
-<ul>
-<li><strong>默认状态</strong>：local 表是 main 表的别名，所有路由都在一张表里，<code>fib_lookup</code> 只需查一次表</li>
-<li><strong>添加策略路由时</strong>：<code>fib_unmerge</code> 把 local 路由从 main 表里切割出来，放到独立的 local 表</li>
-<li><strong>切割过程</strong>：创建新 local 表 → 复制 local 路由 → 替换旧表 → 清理 main 表</li>
-<li><strong>只执行一次</strong>：后续再添加策略路由时，<code>fib_trie_unmerge</code> 会检测到已经分离，直接返回</li>
-</ul>
-<p>这个设计体现了内核”按需分离”的思想——在不需要策略路由时保持简单高效，在需要时才承担额外的开销。</p>
+<p>相关文章：<br>这个设计体现了内核”按需分离”的思想——在不需要策略路由时保持简单高效，在需要时才承担额外的开销。</p>
 <p>相关文章：</p>
 <ul>
 <li><a href="/2025/07/03/fib-ip-address-and-route/">ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</a></li>
@@ -174,7 +175,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2025/07/08/fib-unmerge-local-from-main/" data-id="cuidqtT4Zs8QFoKjqB92fA8Jx" data-title="fib_unmerge：把local路由从main表里切割出来" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2025/07/08/fib-unmerge-local-from-main/" data-id="cuidDd-Q-AXFRYUFreKjU_DLq" data-title="fib_unmerge：把local路由从main表里切割出来" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
