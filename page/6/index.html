@@ -75,9 +75,9 @@
       <div class="outer">
         <section id="main">
   
-    <article id="post-2014-07-17-irq-study" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+    <article id="post-2014-07-17-irq-framework" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
   <div class="article-meta">
-    <a href="/2014/07/17/2014-07-17-irq-study/" class="article-date">
+    <a href="/2014/07/17/2014-07-17-irq-framework/" class="article-date">
   <time class="dt-published" datetime="2014-07-17T02:35:00.000Z" itemprop="datePublished">2014-07-17</time>
 </a>
     
@@ -93,7 +93,7 @@
         
   
     <h1 itemprop="name">
-      <a class="p-name article-title" href="/2014/07/17/2014-07-17-irq-study/">irq vector</a>
+      <a class="p-name article-title" href="/2014/07/17/2014-07-17-irq-framework/">irq framework</a>
     </h1>
   
 
@@ -101,24 +101,20 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <h3 id="中断处理过程："><a href="#中断处理过程：" class="headerlink" title="中断处理过程："></a>中断处理过程：</h3><p>reg value–&gt;irq(int) —&gt; struct irq_desc</p>
+        <h3 id="中断处理过程："><a href="#中断处理过程：" class="headerlink" title="中断处理过程："></a>中断处理过程：</h3><h4 id="硬件中断到中断控制器"><a href="#硬件中断到中断控制器" class="headerlink" title="硬件中断到中断控制器"></a>硬件中断到中断控制器</h4><p>reg value–&gt;irq(int) —&gt; struct irq_desc</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">==&gt; 中断时的有一个寄存器会保存中断源的vector值.</span><br><span class="line">==&gt; ==&gt; `arch/x86/kernel/entry_64.S`调用函数`do_IRQ`.</span><br><span class="line">==&gt; ==&gt; ==&gt; `do_IRQ`依据`vector_irq`和vector值, 找到对应的中断号,并调用`handle_irq`.</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; `handle_irq`通过函数irq_to_descdesc,可将中断号转化为`struct irq_desc`.</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; generic_handle_irq_desc(irq, desc);</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; ==&gt; `generic_handle_irq_desc`调用 desc-&gt;handle_irq(irq, desc);</span><br></pre></td></tr></table></figure>
-<p>注:这里的handle_irq不是真正的中断处理函数,而是几大类中断控制器处理函数.<br>如82599, msi等.</p>
-<h4 id="do-IRQ-struct-pt-regs-regs"><a href="#do-IRQ-struct-pt-regs-regs" class="headerlink" title="&#96;do_IRQ(struct pt_regs *regs)"></a>&#96;do_IRQ(struct pt_regs *regs)</h4><p>File: arch&#x2F;x86&#x2F;kernel&#x2F;irq.c</p>
-<p>arch&#x2F;x86&#x2F;kernel&#x2F;entry_64.S<br>will call do_IRQ</p>
-        
-          <p class="article-more-link">
-            <a href="/2014/07/17/2014-07-17-irq-study/#more">Read More</a>
-          </p>
-        
+<p>注:这里的handle_irq不是真正的中断处理函数,而是几大类中断控制器处理函数.<br>如82599, msi等.<br>具体分析见:<a href="http://martinbj2008.github.io/blog/2014/07/17/irq-study">irq study1</a></p>
+<h4 id="中断控制器到具体的中断处理函数"><a href="#中断控制器到具体的中断处理函数" class="headerlink" title="中断控制器到具体的中断处理函数"></a>中断控制器到具体的中断处理函数</h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">==&gt; handle_level_irq</span><br><span class="line">==&gt; ==&gt; irqreturn_t handle_irq_event(struct irq_desc *desc)</span><br><span class="line">==&gt; ==&gt; ==&gt; struct irqaction *action = desc-&gt;action</span><br><span class="line">==&gt; ==&gt; ==&gt; ret = handle_irq_event_percpu(desc, action);</span><br><span class="line">==&gt; ==&gt; ==&gt; ==&gt; action-&gt;handler(irq, action-&gt;dev_id);</span><br></pre></td></tr></table></figure>
+<p>这里的<code>action-&gt;handler</code>才是我们使用<code>request_irq</code>注册的中断处理函数.<br>具体分析见:<br>具体分析见:<a href="http://martinbj2008.github.io/blog/2014/07/17/register-irq-handler">irq study2</a></p>
+
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2014/07/17/2014-07-17-irq-study/" data-id="cuid92oK-pX9LQCiCKnD6-5yP" data-title="irq vector" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2014/07/17/2014-07-17-irq-framework/" data-id="cuid-AqlZKArntuiMtVwbmqcd" data-title="irq framework" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/irq/" rel="tag">irq</a></li></ul>
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/irq/" rel="tag">irq</a></li></ul>
 
     </footer>
   </div>
@@ -164,7 +160,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2014/02/18/2014-02-18-dst-gc-work/" data-id="cuidQVDdeEQIoRLyoXaAm9tgo" data-title="Delayed work: dst_gc_work" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2014/02/18/2014-02-18-dst-gc-work/" data-id="cuid61gRCsTv7TU_T9ZQmILpS" data-title="Delayed work: dst_gc_work" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -222,7 +218,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2014/02/18/2014-02-18-worker-and-worker-thread/" data-id="cuid-EWZ9q8_BAtTRDliEmtY3" data-title="worker and worker_thread" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2014/02/18/2014-02-18-worker-and-worker-thread/" data-id="cuidkFOwJHeLyS_uCZTm_bpVx" data-title="worker and worker_thread" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -271,7 +267,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2014/02/12/2014-02-12-workqueue-basic-structure/" data-id="cuidotWXxMq3UOrrWMCskfynY" data-title="workqueue basic structure" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2014/02/12/2014-02-12-workqueue-basic-structure/" data-id="cuidZNSh-Kr0Nbq4gdaOxu4Kc" data-title="workqueue basic structure" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -324,7 +320,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2014/02/11/2014-02-11-dst-garbage/" data-id="cuid2ZdLAN3g-lkS9hU98pKny" data-title="dst garbage" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2014/02/11/2014-02-11-dst-garbage/" data-id="cuidFZuZv16U0R9HkbvK1j1zv" data-title="dst garbage" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -376,61 +372,11 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2014/02/10/2014-02-10-dst-ops/" data-id="cuidX9mQtzxjjn9JqrXih1mWa" data-title="dst ops" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2014/02/10/2014-02-10-dst-ops/" data-id="cuidPC2s-etCPB4ytqWVCLzHs" data-title="dst ops" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
   <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/route/" rel="tag">route</a></li></ul>
-
-    </footer>
-  </div>
-  
-</article>
-
-
-
-  
-    <article id="post-2014-02-08-how-to-xmit-a-packet-with-qdisc" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
-  <div class="article-meta">
-    <a href="/2014/02/08/2014-02-08-how-to-xmit-a-packet-with-qdisc/" class="article-date">
-  <time class="dt-published" datetime="2014-02-08T03:26:00.000Z" itemprop="datePublished">2014-02-08</time>
-</a>
-    
-  <div class="article-category">
-    <a class="article-category-link" href="/categories/netdev/">netdev</a>
-  </div>
-
-  </div>
-  <div class="article-inner">
-    
-    
-      <header class="article-header">
-        
-  
-    <h1 itemprop="name">
-      <a class="p-name article-title" href="/2014/02/08/2014-02-08-how-to-xmit-a-packet-with-qdisc/">how to xmit a packet with Qdisc</a>
-    </h1>
-  
-
-      </header>
-    
-    <div class="e-content article-entry" itemprop="articleBody">
-      
-        <h3 id="summary"><a href="#summary" class="headerlink" title="summary"></a>summary</h3><p>We think it as a ideal and simple case:</p>
-<h3 id="Call-Trace"><a href="#Call-Trace" class="headerlink" title="Call Trace:"></a>Call Trace:</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">&gt; dev_queue_xmit</span><br><span class="line">&gt; &gt;  __dev_queue_xmit(skb, <span class="literal">NULL</span>);</span><br><span class="line">&gt; &gt; &gt; rcu_read_lock_bh();</span><br><span class="line">&gt; &gt; &gt; txq = netdev_pick_tx(dev, skb, accel_priv);</span><br><span class="line">&gt; &gt; &gt; q = rcu_dereference_bh(txq-&gt;qdisc);</span><br><span class="line">&gt; &gt; &gt; rc = __dev_xmit_skb(skb, q, dev, txq);</span><br><span class="line">&gt; &gt; &gt; &gt; skb_dst_force(skb);</span><br><span class="line">&gt; &gt; &gt; &gt; q-&gt;enqueue(skb, q);</span><br><span class="line">&gt; &gt; &gt; &gt; qdisc_run_begin(q)</span><br><span class="line">&gt; &gt; &gt; &gt;  __qdisc_run(q);</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; <span class="keyword">while</span> (qdisc_restart(q))</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; __netif_schedule</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; qdisc_run_end(q)</span><br><span class="line">&gt; &gt; &gt; rcu_read_unlock_bh();</span><br><span class="line">&gt; &gt; &gt; <span class="keyword">return</span> rc;</span><br></pre></td></tr></table></figure>
-        
-          <p class="article-more-link">
-            <a href="/2014/02/08/2014-02-08-how-to-xmit-a-packet-with-qdisc/#more">Read More</a>
-          </p>
-        
-      
-    </div>
-    <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2014/02/08/2014-02-08-how-to-xmit-a-packet-with-qdisc/" data-id="cuid7qBv2h26cxhknG1U2utO8" data-title="how to xmit a packet with Qdisc" class="article-share-link"><span class="fa fa-share">Share</span></a>
-      
-      
-      
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li></ul>
 
     </footer>
   </div>
@@ -477,7 +423,57 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2014/02/08/2014-02-08-qdisc-running-flag/" data-id="cuidWTUICCAnztivn_Yi_t6LE" data-title="Qdisc running flag" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2014/02/08/2014-02-08-qdisc-running-flag/" data-id="cuidRCnAK_GvQziOoHkWMStez" data-title="Qdisc running flag" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-2014-02-08-how-to-xmit-a-packet-with-qdisc" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2014/02/08/2014-02-08-how-to-xmit-a-packet-with-qdisc/" class="article-date">
+  <time class="dt-published" datetime="2014-02-08T03:26:00.000Z" itemprop="datePublished">2014-02-08</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/netdev/">netdev</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2014/02/08/2014-02-08-how-to-xmit-a-packet-with-qdisc/">how to xmit a packet with Qdisc</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="summary"><a href="#summary" class="headerlink" title="summary"></a>summary</h3><p>We think it as a ideal and simple case:</p>
+<h3 id="Call-Trace"><a href="#Call-Trace" class="headerlink" title="Call Trace:"></a>Call Trace:</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">&gt; dev_queue_xmit</span><br><span class="line">&gt; &gt;  __dev_queue_xmit(skb, <span class="literal">NULL</span>);</span><br><span class="line">&gt; &gt; &gt; rcu_read_lock_bh();</span><br><span class="line">&gt; &gt; &gt; txq = netdev_pick_tx(dev, skb, accel_priv);</span><br><span class="line">&gt; &gt; &gt; q = rcu_dereference_bh(txq-&gt;qdisc);</span><br><span class="line">&gt; &gt; &gt; rc = __dev_xmit_skb(skb, q, dev, txq);</span><br><span class="line">&gt; &gt; &gt; &gt; skb_dst_force(skb);</span><br><span class="line">&gt; &gt; &gt; &gt; q-&gt;enqueue(skb, q);</span><br><span class="line">&gt; &gt; &gt; &gt; qdisc_run_begin(q)</span><br><span class="line">&gt; &gt; &gt; &gt;  __qdisc_run(q);</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; <span class="keyword">while</span> (qdisc_restart(q))</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; &gt; __netif_schedule</span><br><span class="line">&gt; &gt; &gt; &gt; &gt; qdisc_run_end(q)</span><br><span class="line">&gt; &gt; &gt; rcu_read_unlock_bh();</span><br><span class="line">&gt; &gt; &gt; <span class="keyword">return</span> rc;</span><br></pre></td></tr></table></figure>
+        
+          <p class="article-more-link">
+            <a href="/2014/02/08/2014-02-08-how-to-xmit-a-packet-with-qdisc/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2014/02/08/2014-02-08-how-to-xmit-a-packet-with-qdisc/" data-id="cuid7EiGswTCWaEpwBGVLTfI9" data-title="how to xmit a packet with Qdisc" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -530,7 +526,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2014/01/28/2014-01-28-how-to-create-dev-qdisc/" data-id="cuidc1gRb_8c027-auNrIOdNK" data-title="how to create dev qdisc" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2014/01/28/2014-01-28-how-to-create-dev-qdisc/" data-id="cuidS-9l8AZstAX6159Vo2V0_" data-title="how to create dev qdisc" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -583,7 +579,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2014/01/28/2014-01-28-qdisc-study-part1-qdisc-base/" data-id="cuids6pAWwZqYKUqR0T1xbpVK" data-title="qdisc study part1: qdisc_base" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2014/01/28/2014-01-28-qdisc-study-part1-qdisc-base/" data-id="cuidJDCzq1BRGPcjLewNu6St3" data-title="qdisc study part1: qdisc_base" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
