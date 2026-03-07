@@ -6,17 +6,18 @@
   
   <title>how tcpdump work with vlan filter | Kernel Study Notes</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="问题描述：  tcpdump在网口抓包和读取pcap文件，相同的filter表达式”icmp“，对vlan报文有不同的处理结果。在网口上抓包可以看到vlan和非vlan两种流量， 而读取pcap只能看到非vlan流量一种流量。  原因：  kernel里在tcpdump抓包之前会把报文的vlan提前解析掉，并把vlan信息放到skb的metadata里了。所以tcpdump（内核的af_pack">
+  <meta name="description" content="问题场景tcpdump在网口直接抓包和读取pcap文件两种场景下，同一个filter表达式icmp，对vlan报文有不同的处理结果。  在网口上抓包可以看到vlan和非vlan两种流量 读取pcap只能看到非vlan流量一种流量  【Q1】：在读取pcap文件时候，为什么不能读取到vlan报文呢？ 分析结论内核协议栈：  过滤条件 icmp：tcpdump 解析出来的 ebpf 指令，是要求报文是">
 <meta property="og:type" content="article">
 <meta property="og:title" content="how tcpdump work with vlan filter">
 <meta property="og:url" content="https://martinbj2008.github.io/2019/10/09/how-tcpdump-work-with-vlan-filter/index.html">
 <meta property="og:site_name" content="Kernel Study Notes">
-<meta property="og:description" content="问题描述：  tcpdump在网口抓包和读取pcap文件，相同的filter表达式”icmp“，对vlan报文有不同的处理结果。在网口上抓包可以看到vlan和非vlan两种流量， 而读取pcap只能看到非vlan流量一种流量。  原因：  kernel里在tcpdump抓包之前会把报文的vlan提前解析掉，并把vlan信息放到skb的metadata里了。所以tcpdump（内核的af_pack">
+<meta property="og:description" content="问题场景tcpdump在网口直接抓包和读取pcap文件两种场景下，同一个filter表达式icmp，对vlan报文有不同的处理结果。  在网口上抓包可以看到vlan和非vlan两种流量 读取pcap只能看到非vlan流量一种流量  【Q1】：在读取pcap文件时候，为什么不能读取到vlan报文呢？ 分析结论内核协议栈：  过滤条件 icmp：tcpdump 解析出来的 ebpf 指令，是要求报文是">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2019-10-09T03:42:57.000Z">
-<meta property="article:modified_time" content="2026-03-06T23:09:06.620Z">
+<meta property="article:modified_time" content="2026-03-07T00:29:44.504Z">
 <meta property="article:author" content="Martinbj2008">
 <meta property="article:tag" content="bpf">
+<meta property="article:tag" content="kernel">
 <meta property="article:tag" content="tcpdump">
 <meta name="twitter:card" content="summary">
   
@@ -105,67 +106,101 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <ul>
-<li><p>问题描述：<br>  tcpdump在网口抓包和读取pcap文件，相同的filter表达式”icmp“，对vlan报文有不同的处理结果。<br>在网口上抓包可以看到vlan和非vlan两种流量， 而读取pcap只能看到非vlan流量一种流量。</p>
-</li>
-<li><p>原因：<br>  kernel里在tcpdump抓包之前会把报文的vlan提前解析掉，并把vlan信息放到skb的metadata里了。<br>所以tcpdump（内核的af_packet对应的ptype_all)处理的报文都是不带vlan的，因此这两类报文都会被过滤出来。<br>而读取pcap时候，因为vlan报文并没有被剥离掉，所以vlan报文不满足过滤条件，被丢弃了。</p>
-</li>
+        <h2 id="问题场景"><a href="#问题场景" class="headerlink" title="问题场景"></a>问题场景</h2><p>tcpdump在网口直接抓包和读取pcap文件两种场景下，同一个filter表达式<code>icmp</code>，对vlan报文有不同的处理结果。</p>
+<ul>
+<li>在网口上抓包可以看到vlan和非vlan两种流量</li>
+<li>读取pcap只能看到非vlan流量一种流量</li>
 </ul>
-<p>国外已经有人发现并分析过这个问题<br><code>https://andreaskaris.github.io/blog/networking/bpf-and-tcpdump/</code></p>
+<p><strong>【Q1】</strong>：在读取pcap文件时候，为什么不能读取到vlan报文呢？</p>
+<h2 id="分析结论"><a href="#分析结论" class="headerlink" title="分析结论"></a>分析结论</h2><p><strong>内核协议栈：</strong></p>
+<ol>
+<li><p><strong>过滤条件 <code>icmp</code></strong>：tcpdump 解析出来的 ebpf 指令，是要求报文是<code>eth+IP+ICMP</code>格式。通过ETH&#x2F;IP 头里的协议类型分别做了限制: IPv4(0x0800)+ICMP(1)。</p>
+</li>
+<li><p><strong>在网口上抓包</strong>：内核代码里，在tcpdump抓包过滤的钩子函数之前，会把报文的vlan解析并剔除掉。被剥离的vlan头信息，被保存到skb的metadata里了。所以 tcpdump(af_packet)在内核里，通过钩子函数运行过滤条件的 ebpf 指令时，被处理的报文已经不带vlan头了。因此只要满足icmp 头，带和不带 vlan头的报文都会被抓取到。</p>
+</li>
+<li><p><strong>读取pcap文件</strong>：tcpdump 直接读取文件内容，vlan头并没有被剥离掉，所以vlan报文不满足过滤条件(<code>eth+IP+ICMP</code>)，被丢弃了。</p>
+</li>
+</ol>
+<blockquote>
+<p>国外已经有人发现并分析过这个问题：<a target="_blank" rel="noopener" href="https://andreaskaris.github.io/blog/networking/bpf-and-tcpdump/">BPF and tcpdump</a></p>
+</blockquote>
 <span id="more"></span>
 
-<ul>
-<li><p>复现方法：</p>
-</li>
-<li><p>网络拓扑<br>      Vlan3— veth3 —  veth2 — vlan2<br>  创建一个新的netns， ns2<br>  创建veth对， veth2-veth3，其中veth2被放置到ns2里。<br>  分别在veth2和veth3口上建立vlan口，vlan ID333<br>  依次为四个网口配置IP地址 3.3.3.3&#x2F;24 —— 1.1.1.3&#x2F;24 —1.1.1.2&#x2F;24 —— 3.3.3.2&#x2F;24<br>  在vlan2上ping vlan3， 在veth2上ping veth3</p>
-<p>  网口veth3上抓包，显示有vlan和非vlan两种流量。</p>
-</li>
+<h2 id="复现问题"><a href="#复现问题" class="headerlink" title="复现问题"></a>复现问题</h2><h3 id="网络拓扑"><a href="#网络拓扑" class="headerlink" title="网络拓扑"></a>网络拓扑</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">3.3.3.3/24                 3.3.3.2/24</span><br><span class="line">     vlan3                     vlan2 (ns2)</span><br><span class="line">       |  vlanid 333             |</span><br><span class="line">       |                         |</span><br><span class="line">     veth3 --------------------veth2</span><br><span class="line">   1.1.1.3/24                1.1.1.2/24</span><br></pre></td></tr></table></figure>
+
+<h3 id="复现步骤"><a href="#复现步骤" class="headerlink" title="复现步骤"></a>复现步骤</h3><ol>
+<li>创建一个新的netns， ns2</li>
+<li>创建veth对， veth2-veth3，其中veth2被放置到ns2里</li>
+<li>分别在veth2和veth3口上建立vlan口，vlan ID 333</li>
+<li>依次为四个网口配置IP地址<ul>
+<li>3.3.3.3&#x2F;24</li>
+<li>1.1.1.3&#x2F;24</li>
+<li>1.1.1.2&#x2F;24</li>
+<li>3.3.3.2&#x2F;24</li>
 </ul>
+</li>
+<li>在vlan2上ping vlan3， 在veth2上ping veth3</li>
+</ol>
+<p>网口veth3上抓包，显示有vlan和非vlan两种流量：</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">root@martin-HOST:/home/martin# tcpdump  -n -i veth3 icmp -ne -c 4</span><br><span class="line">tcpdump: verbose output suppressed, use -v[v]... for full protocol decode</span><br><span class="line">listening on veth3, link-type EN10MB (Ethernet), snapshot length 262144 bytes</span><br><span class="line">18:27:50.825272 82:40:26:88:ee:93 &gt; f6:f4:f8:0c:17:ea, ethertype 802.1Q (0x8100), length 102: vlan 333, p 0, ethertype IPv4 (0x0800), 3.3.3.2 &gt; 3.3.3.3: ICMP echo request, id 56302, seq 33168, length 64</span><br><span class="line">18:27:50.825332 f6:f4:f8:0c:17:ea &gt; 82:40:26:88:ee:93, ethertype 802.1Q (0x8100), length 102: vlan 333, p 0, ethertype IPv4 (0x0800), 3.3.3.3 &gt; 3.3.3.2: ICMP echo reply, id 56302, seq 33168, length 64</span><br><span class="line">18:27:50.856960 82:40:26:88:ee:93 &gt; f6:f4:f8:0c:17:ea, ethertype IPv4 (0x0800), length 98: 1.1.1.2 &gt; 1.1.1.3: ICMP echo request, id 15134, seq 33158, length 64</span><br><span class="line">18:27:50.857020 f6:f4:f8:0c:17:ea &gt; 82:40:26:88:ee:93, ethertype IPv4 (0x0800), length 98: 1.1.1.3 &gt; 1.1.1.2: ICMP echo reply, id 15134, seq 33158, length 64</span><br><span class="line">4 packets captured</span><br><span class="line">4 packets received by filter</span><br><span class="line">0 packets dropped by kernel</span><br><span class="line">root@martin-HOST:/home/martin#</span><br></pre></td></tr></table></figure>
 
-<p>其中vlan流量是， vlan ID 是333， 3.3.3.2 到 3.3.3.3的ping流量<br>非vlan流量是1.1.1.2 &gt; 1.1.1.3的ping流量</p>
-<p>使用tcpdump命令将报文保存到pcap文件</p>
+<p>其中：</p>
+<ul>
+<li><strong>【VLAN报文】</strong> vlan ID 是333。IP 地址：3.3.3.2 到 3.3.3.3 的 ping(ICMP)流量</li>
+<li><strong>【非VLAN报文】</strong> IP 地址：1.1.1.2 &gt; 1.1.1.3 的 ping 流量</li>
+</ul>
+<p>使用tcpdump命令将报文保存到pcap文件：</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">root@martin-HOST:/home/martin# tcpdump  -n -i veth3 icmp -ne -c 4 -w veth3.pcap</span><br><span class="line">tcpdump: listening on veth3, link-type EN10MB (Ethernet), snapshot length 262144 bytes</span><br><span class="line">4 packets captured</span><br><span class="line">8 packets received by filter</span><br><span class="line">0 packets dropped by kernel</span><br></pre></td></tr></table></figure>
 
+<p>重新读取pcap文件中的报文。vlan 和非 vlan 报文各两个，都是 icmp 报文：</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">root@martin-HOST:/home/martin# tcpdump  -n -r veth3.pcap -e</span><br><span class="line">reading from file veth3.pcap, link-type EN10MB (Ethernet), snapshot length 262144</span><br><span class="line">18:31:01.801424 82:40:26:88:ee:93 &gt; f6:f4:f8:0c:17:ea, ethertype IPv4 (0x0800), length 98: 1.1.1.2 &gt; 1.1.1.3: ICMP echo request, id 1341, seq 43049, length 64</span><br><span class="line">18:31:01.801482 f6:f4:f8:0c:17:ea &gt; 82:40:26:88:ee:93, ethertype IPv4 (0x0800), length 98: 1.1.1.3 &gt; 1.1.1.2: ICMP echo reply, id 1341, seq 43049, length 64</span><br><span class="line">18:31:01.865407 82:40:26:88:ee:93 &gt; f6:f4:f8:0c:17:ea, ethertype 802.1Q (0x8100), length 102: vlan 333, p 0, ethertype IPv4 (0x0800), 3.3.3.2 &gt; 3.3.3.3: ICMP echo request, id 43947, seq 43034, length 64</span><br><span class="line">18:31:01.865468 f6:f4:f8:0c:17:ea &gt; 82:40:26:88:ee:93, ethertype 802.1Q (0x8100), length 102: vlan 333, p 0, ethertype IPv4 (0x0800), 3.3.3.3 &gt; 3.3.3.2: ICMP echo reply, id 43947, seq 43034, length 64</span><br><span class="line">root@martin-HOST:/home/martin#</span><br></pre></td></tr></table></figure>
 
-<p>再重新用相同的tcpdump过滤条件”icmp“读取pcap报文，发现只能读取非vlan的报文。</p>
+<p>再次读取 pcap 文件，并增加过滤条件<code>icmp</code>，结果里只有非vlan的报文，vlan 报文被过滤掉了：</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">root@martin-HOST:/home/martin# tcpdump  -n -r veth3.pcap -e icmp</span><br><span class="line">reading from file veth3.pcap, link-type EN10MB (Ethernet), snapshot length 262144</span><br><span class="line">18:31:01.801424 82:40:26:88:ee:93 &gt; f6:f4:f8:0c:17:ea, ethertype IPv4 (0x0800), length 98: 1.1.1.2 &gt; 1.1.1.3: ICMP echo request, id 1341, seq 43049, length 64</span><br><span class="line">18:31:01.801482 f6:f4:f8:0c:17:ea &gt; 82:40:26:88:ee:93, ethertype IPv4 (0x0800), length 98: 1.1.1.3 &gt; 1.1.1.2: ICMP echo reply, id 1341, seq 43049, length 64</span><br><span class="line">root@martin-HOST:/home/martin#</span><br></pre></td></tr></table></figure>
 
-<p>vlan报文只能通过”vlan and icmp“这个过滤条件才能读取出来。 </p>
+<p>vlan 封装的icmp报文只能通过<code>vlan and icmp</code>这个过滤条件才能读取出来：</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">root@martin-HOST:/home/martin# tcpdump  -n -r veth3.pcap -e vlan and icmp</span><br><span class="line">reading from file veth3.pcap, link-type EN10MB (Ethernet), snapshot length 262144</span><br><span class="line">18:31:01.865407 82:40:26:88:ee:93 &gt; f6:f4:f8:0c:17:ea, ethertype 802.1Q (0x8100), length 102: vlan 333, p 0, ethertype IPv4 (0x0800), 3.3.3.2 &gt; 3.3.3.3: ICMP echo request, id 43947, seq 43034, length 64</span><br><span class="line">18:31:01.865468 f6:f4:f8:0c:17:ea &gt; 82:40:26:88:ee:93, ethertype 802.1Q (0x8100), length 102: vlan 333, p 0, ethertype IPv4 (0x0800), 3.3.3.3 &gt; 3.3.3.2: ICMP echo reply, id 43947, seq 43034, length 64</span><br><span class="line">root@martin-HOST:/home/martin#</span><br></pre></td></tr></table></figure>
 
+<h2 id="详细分析"><a href="#详细分析" class="headerlink" title="详细分析"></a>详细分析</h2><h3 id="ebpf指令-filter-icmp"><a href="#ebpf指令-filter-icmp" class="headerlink" title="ebpf指令: filter icmp"></a>ebpf指令: filter <code>icmp</code></h3><p>通过dump bpf指令，我们可以看到严格按照ETH+IP+ICMP的格式过滤的。因此读取 pcap 文件时候，没有 vlan 报文，这也是符合ebpf 指令的预期结果。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">root@martin-HOST:/home/martin# tcpdump  -r veth3.pcap -n -e -d  icmp</span><br><span class="line">reading from file veth3.pcap, link-type EN10MB (Ethernet), snapshot length 262144</span><br><span class="line">(000) ldh      [12]                                          &lt;=== eth头的type类型</span><br><span class="line">(001) jeq      #0x800           jt 2    jf 5                 &lt;=== 如果是IP协议（0x0800）</span><br><span class="line">(002) ldb      [23]                                          &lt;=== 加载IP头里的protocol字段</span><br><span class="line">(003) jeq      #0x1             jt 4    jf 5                 &lt;=== 如果是ICMP协议（0x01）, 返回true（004）</span><br><span class="line">(004) ret      #262144                                       &lt;=== True</span><br><span class="line">(005) ret      #0</span><br></pre></td></tr></table></figure>
 
-<p>在读取pcap文件时候，为什么只能读取到非vlan报文呢？<br>通过dump bpf指令，我们可以看到严格按照ETH+IP+ICMP得格式过滤的。<br>这跟我们预期也是符合的</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">root@martin-HOST:/home/martin# tcpdump  -r veth3.pcap -n -e -d  icmp</span><br><span class="line">reading from file veth3.pcap, link-type EN10MB (Ethernet), snapshot length 262144</span><br><span class="line">(000) ldh      [12]                                          &lt;=== eth头的type类型</span><br><span class="line">(001) jeq      #0x800           jt 2    jf 5                 &lt;=== 如果是IP协议（0x8000）</span><br><span class="line">(002) ldb      [23]                                          &lt;=== 加载IP头里的protocol字段</span><br><span class="line">(003) jeq      #0x1             jt 4    jf 5                 &lt;=== 如果是IP协议（0x8000）, 返回true（004）</span><br><span class="line">(004) ret      #262144                                       &lt;=== True </span><br><span class="line">(005) ret      #0</span><br></pre></td></tr></table></figure>
-
-<p>而在网口上抓包时候，传递给内核的bpf指令也是严格按照ETH+IP+ICMP过滤的。<br>所以两者的bpf指令是完全相同的。</p>
+<p>而在网口上抓包时候，传递给内核的bpf指令也是严格按照ETH+IP+ICMP过滤的。所以两者的bpf指令是完全相同的。</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">root@martin-HOST:/home/martin# tcpdump  -i veth3 -n -e -d  icmp</span><br><span class="line">(000) ldh      [12]</span><br><span class="line">(001) jeq      #0x800           jt 2    jf 5</span><br><span class="line">(002) ldb      [23]</span><br><span class="line">(003) jeq      #0x1             jt 4    jf 5</span><br><span class="line">(004) ret      #262144</span><br><span class="line">(005) ret      #0</span><br><span class="line">root@martin-HOST:/home/martin#</span><br></pre></td></tr></table></figure>
 
-<p>为什么相同的指令在内核和libpcap读取文件时候执行，产生了不同的效果呢。<br>这里有两个原因：</p>
+<p>相同的 ebpf 指令，为什么内核处理报文时候，就能够把 vlan 报文也匹配进来呢？下面我们通过内核协议栈的源码分析下原因。</p>
+<h3 id="内核协议栈：vlan报文头"><a href="#内核协议栈：vlan报文头" class="headerlink" title="内核协议栈：vlan报文头"></a>内核协议栈：vlan报文头</h3><p>为什么相同的指令在内核和libpcap读取文件时候执行，产生了不同的效果呢。这里有两个原因：</p>
 <ol>
-<li>部分网卡可以直接在硬件层面就卸载vlan报文头， 这样协议栈收到的报文就没有vlan了，而vlan信息是通过驱动读取到后，转化为skb的meta信息传递给协议栈的。</li>
-<li>协议栈入口时候，会主动解析并剥离vlan头，等运行到ptype_all并进行af packet抓包时候， 报文已经没有vlan头了。<br>这两种情况，虽然处理位置不一样，但是效果不一样，都会导致内核运行ebpf指令时候，<br>看到的是一个eth+ip+icmp报文。报文真正的vlan头已经转化为skb的metadata信息了。</li>
+<li>部分网卡可以直接在硬件层面就卸载vlan报文头，这样协议栈收到的报文就没有vlan了，而vlan信息是通过驱动读取到后，转化为skb的meta信息传递给协议栈的。</li>
+<li>协议栈入口时候，会主动解析并剥离vlan头，等运行到ptype_all并进行af_packet抓包时候，报文已经没有vlan头了。</li>
 </ol>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><span class="line"> 5282         if (eth_type_vlan(skb-&gt;protocol)) &#123;</span><br><span class="line"> 5283                 skb = skb_vlan_untag(skb);</span><br><span class="line"> 5284                 if (unlikely(!skb))</span><br><span class="line"> 5285                         goto out;</span><br><span class="line"> 5286         &#125;</span><br><span class="line">...</span><br><span class="line"> 5294         list_for_each_entry_rcu(ptype, &amp;ptype_all, list) &#123;</span><br><span class="line"> 5295                 if (pt_prev)</span><br><span class="line"> 5296                         ret = deliver_skb(skb, pt_prev, orig_dev);</span><br><span class="line"> 5297                 pt_prev = ptype;</span><br><span class="line"> 5298         &#125;</span><br><span class="line"> 5299</span><br><span class="line"> 5300         list_for_each_entry_rcu(ptype, &amp;skb-&gt;dev-&gt;ptype_all, list) &#123;</span><br><span class="line"> 5301                 if (pt_prev)</span><br><span class="line"> 5302                         ret = deliver_skb(skb, pt_prev, orig_dev);</span><br><span class="line"> 5303                 pt_prev = ptype;</span><br><span class="line"> 5304         &#125;</span><br></pre></td></tr></table></figure>
+<p>这两种情况，虽然处理位置不一样，但是效果是一样的，都会导致内核运行ebpf指令时候，看到的是一个eth+ip+icmp报文。报文真正的vlan头已经转化为skb的metadata信息了。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">5749</span> <span class="type">static</span> <span class="type">int</span> __netif_receive_skb_core(<span class="keyword">struct</span> sk_buff **pskb, <span class="type">bool</span> pfmemalloc,</span><br><span class="line"><span class="number">5750</span>                                     <span class="keyword">struct</span> packet_type **ppt_prev)</span><br><span class="line"><span class="number">5751</span> &#123;</span><br><span class="line">...</span><br><span class="line"><span class="number">5798</span>         <span class="keyword">if</span> (eth_type_vlan(skb-&gt;protocol)) &#123;</span><br><span class="line"><span class="number">5799</span>                 skb = skb_vlan_untag(skb);             <span class="comment">// &lt;=== 此处已经剥离了 vlan tag</span></span><br><span class="line"><span class="number">5800</span>                 <span class="keyword">if</span> (unlikely(!skb))</span><br><span class="line"><span class="number">5801</span>                         <span class="keyword">goto</span> out;</span><br><span class="line"><span class="number">5802</span>         &#125;</span><br><span class="line">...</span><br><span class="line"><span class="number">5810</span>         list_for_each_entry_rcu(ptype, &amp;dev_net_rcu(skb-&gt;dev)-&gt;ptype_all,</span><br><span class="line"><span class="number">5811</span>                                 <span class="built_in">list</span>) &#123;                <span class="comment">// &lt;=== 这里开始tcpdump</span></span><br><span class="line"><span class="number">5812</span>                 <span class="keyword">if</span> (pt_prev)</span><br><span class="line"><span class="number">5813</span>                         ret = deliver_skb(skb, pt_prev, orig_dev);</span><br><span class="line"><span class="number">5814</span>                 pt_prev = ptype;</span><br><span class="line"><span class="number">5815</span>         &#125;</span><br><span class="line"><span class="number">5816</span></span><br><span class="line"><span class="number">5817</span>         list_for_each_entry_rcu(ptype, &amp;skb-&gt;dev-&gt;ptype_all, <span class="built_in">list</span>) &#123;</span><br><span class="line"><span class="number">5818</span>                 <span class="keyword">if</span> (pt_prev)                            <span class="comment">// &lt;=== 这里tcpdump</span></span><br><span class="line"><span class="number">5819</span>                         ret = deliver_skb(skb, pt_prev, orig_dev);</span><br><span class="line"><span class="number">5820</span>                 pt_prev = ptype;</span><br><span class="line"><span class="number">5821</span>         &#125;</span><br></pre></td></tr></table></figure>
 
-<p>那自然就有一个疑问了， 当内核需要vlan这个过滤条件时，bpf指令怎么处理呢？<br>首先我们dump下tcpdump产生的bpf指令。注意dump结果里的<code>（000）ldb      [vlanp]</code>指令</p>
+<h3 id="ebpf指令-filter-vlan"><a href="#ebpf指令-filter-vlan" class="headerlink" title="ebpf指令: filter vlan"></a>ebpf指令: filter <code>vlan</code></h3><p>那自然就有一个疑问了，当内核需要<code>vlan</code>这个过滤条件时，bpf指令怎么处理呢？</p>
+<p>首先我们看下读取 pcap 文件场景下，过滤条件<code>vlan</code>展开的 ebpf 指令：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">root@martin-HOST:/home/martin# tcpdump  -n -r veth3.pcap -e vlan -d</span><br><span class="line">reading from file veth3.pcap, link-type EN10MB (Ethernet), snapshot length 262144</span><br><span class="line">(000) ldh      [12]</span><br><span class="line">(001) jeq      #0x8100          jt 4    jf 2</span><br><span class="line">(002) jeq      #0x88a8          jt 4    jf 3</span><br><span class="line">(003) jeq      #0x9100          jt 4    jf 5</span><br><span class="line">(004) ret      #262144</span><br><span class="line">(005) ret      #0</span><br><span class="line">root@martin-HOST:/home/martin#</span><br></pre></td></tr></table></figure>
+
+<p>在网口直接抓包场景下，过滤条件<code>vlan</code>展开的 ebpf 指令：</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">root@martin-HOST:/home/martin# tcpdump  -n -i veth3 vlan -d</span><br><span class="line">(000) ldb      [vlanp]</span><br><span class="line">(001) jeq      #0x1             jt 6    jf 2</span><br><span class="line">(002) ldh      [12]</span><br><span class="line">(003) jeq      #0x8100          jt 6    jf 4</span><br><span class="line">(004) jeq      #0x88a8          jt 6    jf 5</span><br><span class="line">(005) jeq      #0x9100          jt 6    jf 7</span><br><span class="line">(006) ret      #262144</span><br><span class="line">(007) ret      #0</span><br></pre></td></tr></table></figure>
 
-<p>对比读libpcap的指令， 我们发现不同之处就在于内核独立了一个判断条件。</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">root@martin-HOST:/home/martin# tcpdump  -n -r veth3.pcap -e vlan -d</span><br><span class="line">reading from file veth3.pcap, link-type EN10MB (Ethernet), snapshot length 262144</span><br><span class="line">(000) ldh      [12]</span><br><span class="line">(001) jeq      #0x8100          jt 4    jf 2</span><br><span class="line">(002) jeq      #0x88a8          jt 4    jf 3</span><br><span class="line">(003) jeq      #0x9100          jt 4    jf 5</span><br><span class="line">(004) ret      #262144</span><br><span class="line">(005) ret      #0</span><br><span class="line">root@martin-HOST:/home/martin#</span><br></pre></td></tr></table></figure>
-<p>接下来我们看下这个条件对应的内核代码.</p>
-<p>这里的演进历史比较长， 从最早的bpf到最新的ebpf扩展，<br>我们这里只讲一下最新代码，更老的渊源，看一下</p>
-<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?h=v6.5&amp;id=f3335031b</span><br><span class="line">https://linux.kernel.narkive.com/mfgIPZOV/patch-net-next-1-2-bpf-allow-extended-bpf-programs-access-skb-fields </span><br></pre></td></tr></table></figure>
+<p>对比读libpcap的指令，我们发现不同之处就在于内核独立了一个判断条件：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">(000) ldb      [vlanp]</span><br><span class="line">(001) jeq      #0x1             jt 6    jf 2</span><br></pre></td></tr></table></figure>
+
+<p>dump结果里的<code>(000) ldb [vlanp]</code>指令，接下来我们看下这个条件对应的内核代码。</p>
+<h3 id="内核代码"><a href="#内核代码" class="headerlink" title="内核代码"></a>内核代码</h3><p>这里的演进历史比较长，从最早的bpf到最新的ebpf扩展，这里只讨论一下最新代码，更老的渊源，看一下：</p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?h=v6.5&id=f3335031b">net: filter: add vlan tag access</a></li>
+<li><a target="_blank" rel="noopener" href="https://linux.kernel.narkive.com/mfgIPZOV/patch-net-next-1-2-bpf-allow-extended-bpf-programs-access-skb-fields">bpf: allow extended BPF programs</a></li>
+</ul>
 
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2019/10/09/how-tcpdump-work-with-vlan-filter/" data-id="cuidUD90pN5TIrl6_oiOvF90Z" data-title="how tcpdump work with vlan filter" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2019/10/09/how-tcpdump-work-with-vlan-filter/" data-id="cuidD98Lt3iFvsS2wqlV_A8g8" data-title="how tcpdump work with vlan filter" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li></ul>
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li></ul>
 
     </footer>
   </div>
@@ -222,7 +257,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Tag Cloud</h3>
     <div class="widget tagcloud">
-      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/fib/" style="font-size: 10px;">fib</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/kernel/" style="font-size: 10px;">kernel</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/fib/" style="font-size: 10px;">fib</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/kernel/" style="font-size: 10.83px;">kernel</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
     </div>
   </div>
 

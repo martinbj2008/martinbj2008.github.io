@@ -101,13 +101,24 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <ul>
-<li><p>问题描述：<br>  tcpdump在网口抓包和读取pcap文件，相同的filter表达式”icmp“，对vlan报文有不同的处理结果。<br>在网口上抓包可以看到vlan和非vlan两种流量， 而读取pcap只能看到非vlan流量一种流量。</p>
-</li>
-<li><p>原因：<br>  kernel里在tcpdump抓包之前会把报文的vlan提前解析掉，并把vlan信息放到skb的metadata里了。<br>所以tcpdump（内核的af_packet对应的ptype_all)处理的报文都是不带vlan的，因此这两类报文都会被过滤出来。<br>而读取pcap时候，因为vlan报文并没有被剥离掉，所以vlan报文不满足过滤条件，被丢弃了。</p>
-</li>
+        <h2 id="问题场景"><a href="#问题场景" class="headerlink" title="问题场景"></a>问题场景</h2><p>tcpdump在网口直接抓包和读取pcap文件两种场景下，同一个filter表达式<code>icmp</code>，对vlan报文有不同的处理结果。</p>
+<ul>
+<li>在网口上抓包可以看到vlan和非vlan两种流量</li>
+<li>读取pcap只能看到非vlan流量一种流量</li>
 </ul>
-<p>国外已经有人发现并分析过这个问题<br><code>https://andreaskaris.github.io/blog/networking/bpf-and-tcpdump/</code></p>
+<p><strong>【Q1】</strong>：在读取pcap文件时候，为什么不能读取到vlan报文呢？</p>
+<h2 id="分析结论"><a href="#分析结论" class="headerlink" title="分析结论"></a>分析结论</h2><p><strong>内核协议栈：</strong></p>
+<ol>
+<li><p><strong>过滤条件 <code>icmp</code></strong>：tcpdump 解析出来的 ebpf 指令，是要求报文是<code>eth+IP+ICMP</code>格式。通过ETH&#x2F;IP 头里的协议类型分别做了限制: IPv4(0x0800)+ICMP(1)。</p>
+</li>
+<li><p><strong>在网口上抓包</strong>：内核代码里，在tcpdump抓包过滤的钩子函数之前，会把报文的vlan解析并剔除掉。被剥离的vlan头信息，被保存到skb的metadata里了。所以 tcpdump(af_packet)在内核里，通过钩子函数运行过滤条件的 ebpf 指令时，被处理的报文已经不带vlan头了。因此只要满足icmp 头，带和不带 vlan头的报文都会被抓取到。</p>
+</li>
+<li><p><strong>读取pcap文件</strong>：tcpdump 直接读取文件内容，vlan头并没有被剥离掉，所以vlan报文不满足过滤条件(<code>eth+IP+ICMP</code>)，被丢弃了。</p>
+</li>
+</ol>
+<blockquote>
+<p>国外已经有人发现并分析过这个问题：<a target="_blank" rel="noopener" href="https://andreaskaris.github.io/blog/networking/bpf-and-tcpdump/">BPF and tcpdump</a></p>
+</blockquote>
         
           <p class="article-more-link">
             <a href="/2019/10/09/how-tcpdump-work-with-vlan-filter/#more">Read More</a>
@@ -116,11 +127,11 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2019/10/09/how-tcpdump-work-with-vlan-filter/" data-id="cuidUD90pN5TIrl6_oiOvF90Z" data-title="how tcpdump work with vlan filter" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2019/10/09/how-tcpdump-work-with-vlan-filter/" data-id="cuidD98Lt3iFvsS2wqlV_A8g8" data-title="how tcpdump work with vlan filter" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
-  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li></ul>
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li></ul>
 
     </footer>
   </div>
@@ -167,7 +178,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2019/10/08/tcpdump-and-ebpf/" data-id="cuid3ZmIYMTmDxZ1ttXMaxoVh" data-title="tcpdump and ebpf" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2019/10/08/tcpdump-and-ebpf/" data-id="cuidQ0HspJXWr93D6hy1HuvJA" data-title="tcpdump and ebpf" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -217,7 +228,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2019/09/25/how-tcpdump-work-with-cbpf/" data-id="cuidjH13O_GvSlZ_S_0u2YD8g" data-title="how tcpdump work with cbpf" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2019/09/25/how-tcpdump-work-with-cbpf/" data-id="cuidZ5jlXosRzXsHhnZ4huOzj" data-title="how tcpdump work with cbpf" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -268,7 +279,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2019/07/15/how-tcpdump-run-with-snaplen/" data-id="cuidHYLmyCvItrmYjlON0yzKw" data-title="tcpdump如何实现参数-报文抓取长度" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2019/07/15/how-tcpdump-run-with-snaplen/" data-id="cuidbaCAAYxb6qZecJ98Gw3rq" data-title="tcpdump如何实现参数-报文抓取长度" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -329,7 +340,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2018/10/09/fib-how-ipv4-lookup-route-with-rule-route/" data-id="cuidazrFsnCNxD8WC_6eP80wv" data-title="fib: how ipv4 lookup route with rule route" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2018/10/09/fib-how-ipv4-lookup-route-with-rule-route/" data-id="cuidCyar0dEOkmYYK7CMwxbqa" data-title="fib: how ipv4 lookup route with rule route" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -378,7 +389,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2018/10/03/xfrm-configure-xfrm-state-and-policy-with-iproute2/" data-id="cuidngEHM6oxXngrmjZ9sWX6R" data-title="xfrm: configure xfrm state and policy with iproute2" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2018/10/03/xfrm-configure-xfrm-state-and-policy-with-iproute2/" data-id="cuidvj-YKVLW6Wn5KekVgkq4c" data-title="xfrm: configure xfrm state and policy with iproute2" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -428,7 +439,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2017/05/15/2017-05-15-slabinfo-cause-delay/" data-id="cuidiEA6RHvLh_K63pie6GFv2" data-title="slabinfo 惹的祸" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2017/05/15/2017-05-15-slabinfo-cause-delay/" data-id="cuidrvVcDlUkUEDIDQYGfZXXk" data-title="slabinfo 惹的祸" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -478,7 +489,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2016/11/23/what-is-tfo/" data-id="cuidBdbv3auUx3jAQmc69IS8O" data-title="WHAT is TFO" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2016/11/23/what-is-tfo/" data-id="cuidEZ65nV0Bao3zF4A7k54N5" data-title="WHAT is TFO" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -527,7 +538,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2016/11/23/2016-11-23-configure-rss-for-ixgbe/" data-id="cuidU1EtxMNPOjvt-CKgMKsUf" data-title="configure rss for ixgbe" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2016/11/23/2016-11-23-configure-rss-for-ixgbe/" data-id="cuidBSQOOxFbK6lAHQQCQ23NI" data-title="configure rss for ixgbe" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -578,7 +589,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2016/11/07/2016-11-07-kpatch-introduction/" data-id="cuidjs46DFgehb05p5WqCDlCO" data-title="How to use kpatch" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2016/11/07/2016-11-07-kpatch-introduction/" data-id="cuid_-fZOO82NM9KBU2dAkS1m" data-title="How to use kpatch" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -627,7 +638,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">Tag Cloud</h3>
     <div class="widget tagcloud">
-      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/fib/" style="font-size: 10px;">fib</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/kernel/" style="font-size: 10px;">kernel</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
+      <a href="/tags/IPv4/" style="font-size: 20px;">IPv4</a> <a href="/tags/IPv6/" style="font-size: 10.83px;">IPv6</a> <a href="/tags/TODO/" style="font-size: 10px;">TODO</a> <a href="/tags/address/" style="font-size: 14.17px;">address</a> <a href="/tags/bh/" style="font-size: 14.17px;">bh</a> <a href="/tags/bpf/" style="font-size: 16.67px;">bpf</a> <a href="/tags/checksum/" style="font-size: 10.83px;">checksum</a> <a href="/tags/debug/" style="font-size: 11.67px;">debug</a> <a href="/tags/epoll/" style="font-size: 10px;">epoll</a> <a href="/tags/fib/" style="font-size: 10px;">fib</a> <a href="/tags/gcc/" style="font-size: 14.17px;">gcc</a> <a href="/tags/git/" style="font-size: 12.5px;">git</a> <a href="/tags/ipv6/" style="font-size: 10.83px;">ipv6</a> <a href="/tags/irq/" style="font-size: 17.5px;">irq</a> <a href="/tags/kernel/" style="font-size: 10.83px;">kernel</a> <a href="/tags/memory/" style="font-size: 13.33px;">memory</a> <a href="/tags/namespace/" style="font-size: 10px;">namespace</a> <a href="/tags/neighbour/" style="font-size: 10px;">neighbour</a> <a href="/tags/netdev/" style="font-size: 18.33px;">netdev</a> <a href="/tags/netlink/" style="font-size: 13.33px;">netlink</a> <a href="/tags/network/" style="font-size: 10px;">network</a> <a href="/tags/others/" style="font-size: 10.83px;">others</a> <a href="/tags/ovs/" style="font-size: 10px;">ovs</a> <a href="/tags/route/" style="font-size: 18.33px;">route</a> <a href="/tags/sched/" style="font-size: 14.17px;">sched</a> <a href="/tags/socket/" style="font-size: 19.17px;">socket</a> <a href="/tags/socket-tcp/" style="font-size: 10px;">socket, tcp</a> <a href="/tags/tcp/" style="font-size: 15px;">tcp</a> <a href="/tags/tcpdump/" style="font-size: 15.83px;">tcpdump</a> <a href="/tags/vim/" style="font-size: 11.67px;">vim</a> <a href="/tags/xdp/" style="font-size: 10.83px;">xdp</a> <a href="/tags/xfrm/" style="font-size: 15px;">xfrm</a>
     </div>
   </div>
 
