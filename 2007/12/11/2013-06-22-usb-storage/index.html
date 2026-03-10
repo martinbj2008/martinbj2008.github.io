@@ -6,15 +6,15 @@
   
   <title>嵌入Linux下的usb storage的支持 | Kernel Study Notes</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="目标： 在mipsel架构的嵌入式linux系统上支持USB盘的读写。思路： 使用可加载模块的形式增加 scsimod.ko, sdmod.ko, usbstorage.ko, fat.ko, vfat.ko. ##具体实现：###步骤I 准备必须的驱动（可加载模块）  scsimod.ko         源代码目录下的 driver&#x2F;scsi目录下的文件编译 sdmod.ko,">
+  <meta name="description" content="目标： 在mipsel架构的嵌入式linux系统上支持USB盘的读写。思路： 使用可加载模块的形式增加 scsimod.ko, sdmod.ko, usbstorage.ko, fat.ko, vfat.ko. 具体实现：步骤I 准备必须的驱动（可加载模块） scsimod.ko         源代码目录下的 driver&#x2F;scsi目录下的文件编译 sdmod.ko,">
 <meta property="og:type" content="article">
 <meta property="og:title" content="嵌入Linux下的usb storage的支持">
 <meta property="og:url" content="https://martinbj2008.github.io/2007/12/11/2013-06-22-usb-storage/index.html">
 <meta property="og:site_name" content="Kernel Study Notes">
-<meta property="og:description" content="目标： 在mipsel架构的嵌入式linux系统上支持USB盘的读写。思路： 使用可加载模块的形式增加 scsimod.ko, sdmod.ko, usbstorage.ko, fat.ko, vfat.ko. ##具体实现：###步骤I 准备必须的驱动（可加载模块）  scsimod.ko         源代码目录下的 driver&#x2F;scsi目录下的文件编译 sdmod.ko,">
+<meta property="og:description" content="目标： 在mipsel架构的嵌入式linux系统上支持USB盘的读写。思路： 使用可加载模块的形式增加 scsimod.ko, sdmod.ko, usbstorage.ko, fat.ko, vfat.ko. 具体实现：步骤I 准备必须的驱动（可加载模块） scsimod.ko         源代码目录下的 driver&#x2F;scsi目录下的文件编译 sdmod.ko,">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2007-12-10T16:00:00.000Z">
-<meta property="article:modified_time" content="2026-03-06T23:09:06.612Z">
+<meta property="article:modified_time" content="2026-03-09T07:20:31.139Z">
 <meta property="article:author" content="Martinbj2008">
 <meta name="twitter:card" content="summary">
   
@@ -104,8 +104,7 @@
     <div class="e-content article-entry" itemprop="articleBody">
       
         <p>目标： 在mipsel架构的嵌入式linux系统上支持USB盘的读写。<br>思路： 使用可加载模块的形式增加 scsimod.ko, sdmod.ko, usbstorage.ko, fat.ko, vfat.ko.</p>
-<p>##具体实现：<br>###步骤I 准备必须的驱动（可加载模块）</p>
-<ol>
+<h2 id="具体实现："><a href="#具体实现：" class="headerlink" title="具体实现："></a>具体实现：</h2><h3 id="步骤I-准备必须的驱动（可加载模块）"><a href="#步骤I-准备必须的驱动（可加载模块）" class="headerlink" title="步骤I 准备必须的驱动（可加载模块）"></a>步骤I 准备必须的驱动（可加载模块）</h3><ol>
 <li>scsimod.ko         源代码目录下的 driver&#x2F;scsi目录下的文件编译</li>
 <li>sdmod.ko,          源代码目录下的 driver&#x2F;scsi目录下的文件编译</li>
 <li>usbstorage.ko   源代码目录下的 driver&#x2F;usb&#x2F;storage 目录下的文件编译</li>
@@ -114,20 +113,36 @@
 </ol>
 <span id="more"></span>
 
-<p>####我在编译过程中所犯的错误和经验：<br>    a. 没有真正明白     obj-m :&#x3D;fat.o 和 fat-objs :&#x3D; 的关系， 直接将源文件<code>*.o</code>增加到了obj-m 的后面，造成没有编译成功。<br>    b. 在编译fat.ko的时候，inode。c文件里面的有个变量定义使用的配置文件（config）里面缺省值。<br>            <code>static int fat_default_codepage = CONFIG_FAT_DEFAULT_CODEPAGE;</code><br>        我误以为是页面大小设置为4k， 导致在mount的时候死活mount文件系统失败。<br>        需要正确配置该变量的初始化值。<br>          在编译过内核的源代码的目录下有个隐含文件<code>.config</code>,  该文件里面有宏<code>CONFIG_FAT_DEFAULT_CODEPAGE</code>的定义。<br>	  <code>(CONFIG_FAT_DEFAULT_CODEPAGE=437)</code></p>
-<pre><code>c. 善于使用proc调试信息和dmesg查看最近的错误信息。 几个有帮助的proc文件。
+<h4 id="我在编译过程中所犯的错误和经验："><a href="#我在编译过程中所犯的错误和经验：" class="headerlink" title="我在编译过程中所犯的错误和经验："></a>我在编译过程中所犯的错误和经验：</h4><pre><code>a. 没有真正明白     obj-m :=fat.o 和 fat-objs := 的关系， 直接将源文件`*.o`增加到了obj-m 的后面，造成没有编译成功。
+b. 在编译fat.ko的时候，inode。c文件里面的有个变量定义使用的配置文件（config）里面缺省值。
+        `static int fat_default_codepage = CONFIG_FAT_DEFAULT_CODEPAGE;`
+    我误以为是页面大小设置为4k， 导致在mount的时候死活mount文件系统失败。
+    需要正确配置该变量的初始化值。
+      在编译过内核的源代码的目录下有个隐含文件`.config`,  该文件里面有宏`CONFIG_FAT_DEFAULT_CODEPAGE`的定义。
+  `(CONFIG_FAT_DEFAULT_CODEPAGE=437)`
+
+c. 善于使用proc调试信息和dmesg查看最近的错误信息。 几个有帮助的proc文件。
  cat /proc/bus/usb/devices    所有识别的usb设备信息。如厂商号，设备名称。
                本机设备的分区情况。可以看到U盘的分区。
  dmesg                                  最近的系统提示信息。
  fdisk -l /dev/sda                   显示sda设备的分区情况其分区类型。
 </code></pre>
-<p>###步骤II 加载模块，然后插入设备并手工创建设备节点并mount到特定目录。<br>        a. 依次加载上述5个模块。<br>        b.   插入usb设备<br>        c.    cat &#x2F;proc&#x2F;partitions得到设备的主次设备号。<br>        d.    mknod   &#x2F;dev&#x2F;sda    b major 0<br>              mknod   &#x2F;dev&#x2F;sda1 b major 1<br>             有可能根据具体设备配置情况，sd? 可能为sda ，或sdb 等。如果分区有多个要为每个分区都创建一个设备节点。<br>        e.    手动mount<br>               mount &#x2F;dev&#x2F;sda1 &#x2F;usr&#x2F;local&#x2F;mnt<br>       至此 U盘可以正常读写了。在拔除U盘之前需要 umount &#x2F;dev&#x2F;sda1</p>
-<p>##TODO<br>a. hotplug的支持，实现自动mount、umount及设备节点的管理<br>b. 对NTFS分区的支持<br>c. 图形操作界面及相应应用程序的自动挂载。  </p>
+<h3 id="步骤II-加载模块，然后插入设备并手工创建设备节点并mount到特定目录。"><a href="#步骤II-加载模块，然后插入设备并手工创建设备节点并mount到特定目录。" class="headerlink" title="步骤II 加载模块，然后插入设备并手工创建设备节点并mount到特定目录。"></a>步骤II 加载模块，然后插入设备并手工创建设备节点并mount到特定目录。</h3><pre><code>    a. 依次加载上述5个模块。
+    b.   插入usb设备
+    c.    cat /proc/partitions得到设备的主次设备号。
+    d.    mknod   /dev/sda    b major 0
+          mknod   /dev/sda1 b major 1
+         有可能根据具体设备配置情况，sd? 可能为sda ，或sdb 等。如果分区有多个要为每个分区都创建一个设备节点。
+    e.    手动mount
+           mount /dev/sda1 /usr/local/mnt
+   至此 U盘可以正常读写了。在拔除U盘之前需要 umount /dev/sda1
+</code></pre>
+<h2 id="TODO"><a href="#TODO" class="headerlink" title="TODO"></a>TODO</h2><p>a. hotplug的支持，实现自动mount、umount及设备节点的管理<br>b. 对NTFS分区的支持<br>c. 图形操作界面及相应应用程序的自动挂载。  </p>
 
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2007/12/11/2013-06-22-usb-storage/" data-id="cuidNQ0314p3xBTaxERpW9bbk" data-title="嵌入Linux下的usb storage的支持" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2007/12/11/2013-06-22-usb-storage/" data-id="cuidSGeJdJAzfaWoE8ldAwwZK" data-title="嵌入Linux下的usb storage的支持" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -169,6 +184,10 @@
       <ul>
         
           <li>
+            <a href="/2026/03/08/fib-data-struct/">fib data struct</a>
+          </li>
+        
+          <li>
             <a href="/2026/03/08/fib-node-animation/">FIB Trie 路由动画演示</a>
           </li>
         
@@ -182,10 +201,6 @@
         
           <li>
             <a href="/2025/07/06/fib-lo-and-local-route-table/">lo口与local路由表</a>
-          </li>
-        
-          <li>
-            <a href="/2025/06/22/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
           </li>
         
       </ul>

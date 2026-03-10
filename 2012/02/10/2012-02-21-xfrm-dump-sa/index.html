@@ -6,15 +6,15 @@
   
   <title>xfrm dump sa | Kernel Study Notes</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="##应用层通过pfkey，dump sa的步骤：  创建pfkeyl类型的一个socket，  通过sendmsg发送一个dump sa 的请求  然后通过while循环调用recvmsg">
+  <meta name="description" content="应用层通过pfkey，dump sa的步骤： 创建pfkeyl类型的一个socket，  通过sendmsg发送一个dump sa 的请求  然后通过while循环调用recvmsg">
 <meta property="og:type" content="article">
 <meta property="og:title" content="xfrm dump sa">
 <meta property="og:url" content="https://martinbj2008.github.io/2012/02/10/2012-02-21-xfrm-dump-sa/index.html">
 <meta property="og:site_name" content="Kernel Study Notes">
-<meta property="og:description" content="##应用层通过pfkey，dump sa的步骤：  创建pfkeyl类型的一个socket，  通过sendmsg发送一个dump sa 的请求  然后通过while循环调用recvmsg">
+<meta property="og:description" content="应用层通过pfkey，dump sa的步骤： 创建pfkeyl类型的一个socket，  通过sendmsg发送一个dump sa 的请求  然后通过while循环调用recvmsg">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2012-02-09T16:00:00.000Z">
-<meta property="article:modified_time" content="2026-03-06T23:09:06.609Z">
+<meta property="article:modified_time" content="2026-03-09T07:24:15.665Z">
 <meta property="article:author" content="Martinbj2008">
 <meta property="article:tag" content="xfrm">
 <meta name="twitter:card" content="summary">
@@ -104,15 +104,13 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <p>##应用层通过pfkey，dump sa的步骤：</p>
-<ol>
+        <h2 id="应用层通过pfkey，dump-sa的步骤："><a href="#应用层通过pfkey，dump-sa的步骤：" class="headerlink" title="应用层通过pfkey，dump sa的步骤："></a>应用层通过pfkey，dump sa的步骤：</h2><ol>
 <li>创建pfkeyl类型的一个socket， </li>
 <li>通过sendmsg发送一个dump sa 的请求 </li>
 <li>然后通过while循环调用recvmsg</li>
 </ol>
 <span id="more"></span>
-<p>##kernel里对应的处理：</p>
-<p>内核遍历存放SA的list。将SA的信息转化到一个或多个skb, 将这些skb添加到相应pfkey socket的sk_receive_queue链表里。<br>每次添加Skb时候会检查是否超出socket允许接受的最大receive字节数。<br>如果SA的数量比较多,则无法一次将所有的SA信息转化到skb里。</p>
+<h2 id="kernel里对应的处理："><a href="#kernel里对应的处理：" class="headerlink" title="kernel里对应的处理："></a>kernel里对应的处理：</h2><p>内核遍历存放SA的list。将SA的信息转化到一个或多个skb, 将这些skb添加到相应pfkey socket的sk_receive_queue链表里。<br>每次添加Skb时候会检查是否超出socket允许接受的最大receive字节数。<br>如果SA的数量比较多,则无法一次将所有的SA信息转化到skb里。</p>
 <p>当SA的个数比较少时，一次性输出所有的SA是可以的， 但是当SA的个数非常大时， 一次性输出（遍历） 所有的sa是低效的(消耗大量内存），而且还要受到输出缓冲区buff的限制。</p>
 <p>因此xfrm walk 采用分段遍历的方式，每次只顺着<code>net-&gt;xfrm.state_all</code>链表往后推进一步， 这样一次一步逐渐分批次把真个list的SA全部遍历完毕。 而<code>struct xfrm_state_walk</code>这个结构体就是用来记录当前这次遍历的位置。</p>
 <p>具体实现就是将<code>xfrm_state_walk</code>这个结构体插入到<code>net-&gt;xfrm.state_all</code>这个hlisst上， 并位于最近一次遍历到的SA的后边。</p>
@@ -123,7 +121,7 @@
 <li>在dump的同时监听相应的增删消息。</li>
 <li>判断netlink消息里是否有标志。如果有则重新dump。</li>
 </ol>
-<h3 id="calltrace"><a href="#calltrace" class="headerlink" title="calltrace"></a>calltrace</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">== err = pfkey_process(sk, skb, hdr);</span><br><span class="line">== == err = pfkey_funcs[hdr-&gt;sadb_msg_type](sk, skb, hdr, ext_hdrs);</span><br><span class="line">== == == pfkey_dump</span><br><span class="line">== == == == pfkey_do_dump</span><br><span class="line">== == == == == pfk-&gt;dump.msg_pid = hdr-&gt;sadb_msg_pid;</span><br><span class="line">== == == == == pfk-&gt;dump.dump = pfkey_dump_sa;</span><br><span class="line">== == == == == pfk-&gt;dump.done = pfkey_dump_sa_done;</span><br><span class="line">== == == == == xfrm_state_walk_init(&amp;pfk-&gt;dump.u.state, proto);</span><br><span class="line">== == == <span class="keyword">return</span> pfkey_do_dump(pfk);</span><br><span class="line"></span><br><span class="line">##Data structure</span><br><span class="line"></span><br><span class="line"><span class="number">1.</span> 每个net都有一个netns_xfrm结构体，里面保存了xfrm的信息。</span><br><span class="line"></span><br><span class="line">```c</span><br><span class="line"><span class="number">35</span> <span class="class"><span class="keyword">struct</span> <span class="title">net</span> &#123;</span></span><br><span class="line">...</span><br><span class="line"><span class="number">87</span> <span class="meta">#<span class="keyword">ifdef</span> CONFIG_XFRM</span></span><br><span class="line"><span class="number">88</span>         <span class="class"><span class="keyword">struct</span> <span class="title">netns_xfrm</span>       <span class="title">xfrm</span>;</span></span><br><span class="line"><span class="number">89</span> <span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
+<h3 id="calltrace"><a href="#calltrace" class="headerlink" title="calltrace"></a>calltrace</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><span class="line">== err = pfkey_process(sk, skb, hdr);</span><br><span class="line">== == err = pfkey_funcs[hdr-&gt;sadb_msg_type](sk, skb, hdr, ext_hdrs);</span><br><span class="line">== == == pfkey_dump</span><br><span class="line">== == == == pfkey_do_dump</span><br><span class="line">== == == == == pfk-&gt;dump.msg_pid = hdr-&gt;sadb_msg_pid;</span><br><span class="line">== == == == == pfk-&gt;dump.dump = pfkey_dump_sa;</span><br><span class="line">== == == == == pfk-&gt;dump.done = pfkey_dump_sa_done;</span><br><span class="line">== == == == == xfrm_state_walk_init(&amp;pfk-&gt;dump.u.state, proto);</span><br><span class="line">== == == <span class="keyword">return</span> pfkey_do_dump(pfk);</span><br><span class="line"></span><br><span class="line">## Data structure</span><br><span class="line"></span><br><span class="line"><span class="number">1.</span> 每个net都有一个netns_xfrm结构体，里面保存了xfrm的信息。</span><br><span class="line"></span><br><span class="line">```c</span><br><span class="line"><span class="number">35</span> <span class="class"><span class="keyword">struct</span> <span class="title">net</span> &#123;</span></span><br><span class="line">...</span><br><span class="line"><span class="number">87</span> <span class="meta">#<span class="keyword">ifdef</span> CONFIG_XFRM</span></span><br><span class="line"><span class="number">88</span>         <span class="class"><span class="keyword">struct</span> <span class="title">netns_xfrm</span>       <span class="title">xfrm</span>;</span></span><br><span class="line"><span class="number">89</span> <span class="meta">#<span class="keyword">endif</span></span></span><br></pre></td></tr></table></figure>
 
 <ol start="2">
 <li>netns_xfrm下有一个state_all的list（双向循环）挂这改net下的所有的xfrm state。</li>
@@ -138,8 +136,7 @@
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">118</span> <span class="class"><span class="keyword">struct</span> <span class="title">xfrm_state_walk</span> &#123;</span></span><br><span class="line"><span class="number">119</span>         <span class="class"><span class="keyword">struct</span> <span class="title">list_head</span>        <span class="title">all</span>;</span></span><br><span class="line"><span class="number">120</span>         u8                      state;</span><br><span class="line"><span class="number">121</span>         <span class="class"><span class="keyword">union</span> &#123;</span></span><br><span class="line"><span class="number">122</span>                 u8              dying;</span><br><span class="line"><span class="number">123</span>                 u8              proto;</span><br><span class="line"><span class="number">124</span>         &#125;;</span><br><span class="line"><span class="number">125</span>         u32                     seq;</span><br><span class="line"><span class="number">126</span> &#125;;      </span><br></pre></td></tr></table></figure>
 
 <p>因此遍历net-&gt;xfrm.state_all可以得到改net下的全部SA。</p>
-<p>##functions</p>
-<ol>
+<h2 id="functions"><a href="#functions" class="headerlink" title="functions"></a>functions</h2><ol>
 <li><code>pfkey_do_dump</code></li>
 </ol>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">279</span> <span class="type">static</span> <span class="type">int</span> <span class="title function_">pfkey_do_dump</span><span class="params">(<span class="keyword">struct</span> pfkey_sock *pfk)</span></span><br><span class="line">280 &#123;</span><br><span class="line"><span class="number">281</span>         <span class="class"><span class="keyword">struct</span> <span class="title">sadb_msg</span> *<span class="title">hdr</span>;</span></span><br><span class="line"><span class="number">282</span>         <span class="type">int</span> rc;</span><br><span class="line"><span class="number">283</span>        </span><br><span class="line"><span class="number">284</span>         rc = pfk-&gt;dump.dump(pfk);</span><br><span class="line"><span class="number">285</span>         <span class="keyword">if</span> (rc == -ENOBUFS)</span><br><span class="line"><span class="number">286</span>                 <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"><span class="number">287</span> </span><br><span class="line"><span class="number">288</span>         <span class="keyword">if</span> (pfk-&gt;dump.skb) &#123;</span><br><span class="line"><span class="number">289</span>                 <span class="keyword">if</span> (!pfkey_can_dump(&amp;pfk-&gt;sk))  </span><br><span class="line"><span class="number">290</span>                         <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"><span class="number">291</span>  </span><br><span class="line"><span class="number">292</span>                 hdr = (<span class="keyword">struct</span> sadb_msg *) pfk-&gt;dump.skb-&gt;data;</span><br><span class="line"><span class="number">293</span>                 hdr-&gt;sadb_msg_seq = <span class="number">0</span>;</span><br><span class="line"><span class="number">294</span>                 hdr-&gt;sadb_msg_errno = rc;</span><br><span class="line"><span class="number">295</span>                 pfkey_broadcast(pfk-&gt;dump.skb, GFP_ATOMIC, BROADCAST_ONE,</span><br><span class="line"><span class="number">296</span>                                 &amp;pfk-&gt;sk, sock_net(&amp;pfk-&gt;sk));</span><br><span class="line"><span class="number">297</span>                 pfk-&gt;dump.skb = <span class="literal">NULL</span>;</span><br><span class="line"><span class="number">298</span>         &#125;</span><br><span class="line"><span class="number">299</span> </span><br><span class="line"><span class="number">300</span>         pfkey_terminate_dump(pfk);</span><br><span class="line"><span class="number">301</span>         <span class="keyword">return</span> rc;</span><br><span class="line"><span class="number">302</span> &#125;</span><br></pre></td></tr></table></figure>
@@ -158,7 +155,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2012/02/10/2012-02-21-xfrm-dump-sa/" data-id="cuidZLdhDQUt8zj3_PlfuZnzJ" data-title="xfrm dump sa" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2012/02/10/2012-02-21-xfrm-dump-sa/" data-id="cuid_2QoSvTsyLZoa3o2jzO0e" data-title="xfrm dump sa" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -202,6 +199,10 @@
       <ul>
         
           <li>
+            <a href="/2026/03/08/fib-data-struct/">fib data struct</a>
+          </li>
+        
+          <li>
             <a href="/2026/03/08/fib-node-animation/">FIB Trie 路由动画演示</a>
           </li>
         
@@ -215,10 +216,6 @@
         
           <li>
             <a href="/2025/07/06/fib-lo-and-local-route-table/">lo口与local路由表</a>
-          </li>
-        
-          <li>
-            <a href="/2025/06/22/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
           </li>
         
       </ul>

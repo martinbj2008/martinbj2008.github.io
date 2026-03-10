@@ -14,7 +14,7 @@
 <meta property="og:description" content="对nl_table的操作：读操作: netlink_lock_table 和 netlink_unlock_table写操作netlink_table_grab 和 netlink_table_ungrab      原子变量nl_table_users 用来保存对nl_table的读者引用计数。 只要没有进行的写者，即使有n个写者在等待，m个读者也可以同时读。当没有任何读者时，写着才可以获得权限">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2013-03-10T16:00:00.000Z">
-<meta property="article:modified_time" content="2026-03-06T23:09:06.611Z">
+<meta property="article:modified_time" content="2026-03-09T07:20:31.138Z">
 <meta property="article:author" content="Martinbj2008">
 <meta property="article:tag" content="netlink">
 <meta name="twitter:card" content="summary">
@@ -115,7 +115,8 @@
 <li>写者之间的互斥</li>
 </ol>
 <h3 id="nl-table-users"><a href="#nl-table-users" class="headerlink" title="nl_table_users"></a><code>nl_table_users</code></h3><p>读者的引用计数。</p>
-<p>感觉很类是读写锁，只是写着可以睡眠。<br>#data struct<br>134 static DECLARE_WAIT_QUEUE_HEAD(nl_table_wait);<br>138 static DEFINE_RWLOCK(nl_table_lock);<br>139 static atomic_t nl_table_users &#x3D; ATOMIC_INIT(0);</p>
+<p>感觉很类是读写锁，只是写着可以睡眠。</p>
+<h1 id="data-struct"><a href="#data-struct" class="headerlink" title="data struct"></a>data struct</h1><p>134 static DECLARE_WAIT_QUEUE_HEAD(nl_table_wait);<br>138 static DEFINE_RWLOCK(nl_table_lock);<br>139 static atomic_t nl_table_users &#x3D; ATOMIC_INIT(0);</p>
 <h4 id="读操作上锁："><a href="#读操作上锁：" class="headerlink" title="读操作上锁："></a>读操作上锁：</h4><p>a. 获取锁<code>nl_table_lock</code>的读权限，<br>b. 访问数增加1.<br>c. 释放读锁。</p>
 <p> 229 static inline void<br> 230 netlink_lock_table(void)<br> 231 {<br> 232         &#x2F;* read_lock() synchronizes us to netlink_table_grab *&#x2F;<br> 233<br> 234         read_lock(&amp;nl_table_lock);<br> 235         atomic_inc(&amp;nl_table_users);<br> 236         read_unlock(&amp;nl_table_lock);<br> 237 }  </p>
 <h4 id="读操作开锁："><a href="#读操作开锁：" class="headerlink" title="读操作开锁："></a>读操作开锁：</h4><p> nl_table_users减一，<br> 判断nl_table_users &#x3D;&#x3D; 0？<br> YES, nl_table_users为0，表示没有读者, 调用wakeup唤醒等待的写操作。<br> NO, –return.</p>
@@ -128,7 +129,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2013/03/11/2013-06-22-netlink-grab/" data-id="cuidMWmfoAVH_v619PzExk8T8" data-title="netlink grab" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2013/03/11/2013-06-22-netlink-grab/" data-id="cuid-IVq6WkOaLIzSNfBvjmNy" data-title="netlink grab" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -172,6 +173,10 @@
       <ul>
         
           <li>
+            <a href="/2026/03/08/fib-data-struct/">fib data struct</a>
+          </li>
+        
+          <li>
             <a href="/2026/03/08/fib-node-animation/">FIB Trie 路由动画演示</a>
           </li>
         
@@ -185,10 +190,6 @@
         
           <li>
             <a href="/2025/07/06/fib-lo-and-local-route-table/">lo口与local路由表</a>
-          </li>
-        
-          <li>
-            <a href="/2025/06/22/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
           </li>
         
       </ul>

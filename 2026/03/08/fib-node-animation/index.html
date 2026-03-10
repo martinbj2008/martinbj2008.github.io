@@ -6,16 +6,16 @@
   
   <title>FIB Trie 路由动画演示 | Kernel Study Notes</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="内核 FIB Trie 路由效果演示通过动画展示下内核路由树(FIB trie) 插入路由时，对应节点的变化。 👉 点击这里全屏查看动画">
+  <meta name="description" content="内核 FIB Trie 路由效果演示通过动画展示下内核路由树(FIB trie) 插入路由时，对应节点的变化。👉 点击这里全屏查看动画 FIB trie 介绍linux 内核里的fib 路由树， 如何插入一个fib 路由查找插入点一句话：遍历当前节点， 如果前缀相同，根据index值，递归找孩子(子树). 【关键点1】get_cindex计算index值 12index &#x3D; get_cindex">
 <meta property="og:type" content="article">
 <meta property="og:title" content="FIB Trie 路由动画演示">
 <meta property="og:url" content="https://martinbj2008.github.io/2026/03/08/fib-node-animation/index.html">
 <meta property="og:site_name" content="Kernel Study Notes">
-<meta property="og:description" content="内核 FIB Trie 路由效果演示通过动画展示下内核路由树(FIB trie) 插入路由时，对应节点的变化。 👉 点击这里全屏查看动画">
+<meta property="og:description" content="内核 FIB Trie 路由效果演示通过动画展示下内核路由树(FIB trie) 插入路由时，对应节点的变化。👉 点击这里全屏查看动画 FIB trie 介绍linux 内核里的fib 路由树， 如何插入一个fib 路由查找插入点一句话：遍历当前节点， 如果前缀相同，根据index值，递归找孩子(子树). 【关键点1】get_cindex计算index值 12index &#x3D; get_cindex">
 <meta property="og:locale" content="en_US">
 <meta property="og:image" content="https://martinbj2008.github.io/images/fib_trie_final.svg">
 <meta property="article:published_time" content="2026-03-08T07:58:00.000Z">
-<meta property="article:modified_time" content="2026-03-07T17:37:53.702Z">
+<meta property="article:modified_time" content="2026-03-09T11:09:09.955Z">
 <meta property="article:author" content="Martinbj2008">
 <meta property="article:tag" content="fib">
 <meta property="article:tag" content="kernel">
@@ -104,14 +104,48 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <h2 id="内核-FIB-Trie-路由效果演示"><a href="#内核-FIB-Trie-路由效果演示" class="headerlink" title="内核 FIB Trie 路由效果演示"></a>内核 FIB Trie 路由效果演示</h2><p>通过动画展示下内核路由树(FIB trie) 插入路由时，对应节点的变化。</p>
-<p>👉 <a href="/html/fib_animation.html">点击这里全屏查看动画</a></p>
-<p><img src="/images/fib_trie_final.svg" alt="FIB Trie 路由树最终状态"></p>
-
+        <h2 id="内核-FIB-Trie-路由效果演示"><a href="#内核-FIB-Trie-路由效果演示" class="headerlink" title="内核 FIB Trie 路由效果演示"></a>内核 FIB Trie 路由效果演示</h2><p>通过动画展示下内核路由树(FIB trie) 插入路由时，对应节点的变化。<br>👉 <a href="/html/fib_animation.html">点击这里全屏查看动画</a><br><img src="/images/fib_trie_final.svg" alt="FIB Trie 路由树最终状态"></p>
+<h2 id="FIB-trie-介绍"><a href="#FIB-trie-介绍" class="headerlink" title="FIB trie 介绍"></a>FIB trie 介绍</h2><p>linux 内核里的fib 路由树，</p>
+<h2 id="如何插入一个fib-路由"><a href="#如何插入一个fib-路由" class="headerlink" title="如何插入一个fib 路由"></a>如何插入一个fib 路由</h2><h3 id="查找插入点"><a href="#查找插入点" class="headerlink" title="查找插入点"></a>查找插入点</h3><p>一句话：遍历当前节点， 如果前缀相同，根据index值，递归找孩子(子树).</p>
+<p>【关键点1】<code>get_cindex</code>计算index值</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">index = get_cindex(key, n);</span><br><span class="line">// 展开: index = (key ^ n-&gt;key) &gt;&gt; n-&gt;pos </span><br></pre></td></tr></table></figure>
+<ul>
+<li>异或运算后，然后右移pos位。保留（前缀+bis位)<br><em><strong>包含前缀运算</strong></em></li>
+</ul>
+<p>【关键点2】前缀检查：一石二鸟的判断<br>当前节点n和key的前缀是否一致。</p>
+<p>n-&gt;bits 表示该节点有 2^bits 个子节点，所以合法的 index 范围是 [0, 2^bits)。如果 index &gt;&#x3D; 2^bits，说明：<br>key 和 n-&gt;key 在前缀部分就已经不同了（差异出现在 pos+bits 之上的高位）</p>
+<p>换句话说：key 不属于这个子树，前缀不匹配<br>备注：因为fib trie的根节点一定不为空。所以第一次算index值一定位0，不会出现前缀不匹配的场景。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><span class="line"><span class="number">930</span> <span class="type">static</span> <span class="keyword">struct</span> key_vector *<span class="title function_">fib_find_node</span><span class="params">(<span class="keyword">struct</span> trie *t,</span></span><br><span class="line"><span class="params"><span class="number">931</span>                                         <span class="keyword">struct</span> key_vector **tp, u32 key)</span></span><br><span class="line">932 &#123;</span><br><span class="line"><span class="number">933</span>         <span class="class"><span class="keyword">struct</span> <span class="title">key_vector</span> *<span class="title">pn</span>, *<span class="title">n</span> =</span> t-&gt;kv;</span><br><span class="line"><span class="number">934</span>         <span class="type">unsigned</span> <span class="type">long</span> index = <span class="number">0</span>;</span><br><span class="line"><span class="number">935</span></span><br><span class="line"><span class="number">936</span>         <span class="keyword">do</span> &#123;</span><br><span class="line"><span class="number">937</span>                 pn = n;                          <span class="comment">// 当前节点保存为父节点</span></span><br><span class="line"><span class="number">938</span>                 n = get_child_rcu(n, index);     <span class="comment">// 根据index值，找孩子</span></span><br><span class="line"><span class="number">939</span></span><br><span class="line"><span class="number">940</span>                 <span class="keyword">if</span> (!n)                          <span class="comment">// 孩子为空. 找到了 ==&gt; case1：空的孩子节点（前缀相同的tnode，孩子节点为空）</span></span><br><span class="line"><span class="number">941</span>                         <span class="keyword">break</span>;</span><br><span class="line"><span class="number">942</span>                                                  <span class="comment">// 孩子非空, 深度+1</span></span><br><span class="line"><span class="number">943</span>                 index = get_cindex(key, n);      <span class="comment">// 根据key和当前节点计算index值</span></span><br><span class="line"><span class="number">944</span></span><br><span class="line">...</span><br><span class="line"><span class="number">959</span>                 <span class="keyword">if</span> (index &gt;= (<span class="number">1ul</span> &lt;&lt; n-&gt;bits)) &#123; <span class="comment">// index越界：前缀不相同 ==&gt; case2: 前缀不同的tnode节点</span></span><br><span class="line"><span class="number">960</span>                         n = <span class="literal">NULL</span>;</span><br><span class="line"><span class="number">961</span>                         <span class="keyword">break</span>;</span><br><span class="line"><span class="number">962</span>                 &#125;</span><br><span class="line"><span class="number">963</span>                                                  <span class="comment">// index合理，继续下次循环</span></span><br><span class="line"><span class="number">965</span>         &#125; <span class="keyword">while</span> (IS_TNODE(n));                   <span class="comment">//当前节点是叶子时候。 case3: 前缀相同的叶子。</span></span><br><span class="line"><span class="number">966</span></span><br><span class="line"><span class="number">967</span>         *tp = pn;</span><br><span class="line"><span class="number">968</span></span><br><span class="line"><span class="number">969</span>         <span class="keyword">return</span> n;</span><br><span class="line"><span class="number">970</span> &#125;</span><br></pre></td></tr></table></figure>
+<h4 id="场景1：当前一个节点的叶子"><a href="#场景1：当前一个节点的叶子" class="headerlink" title="场景1：当前一个节点的叶子"></a>场景1：当前一个节点的叶子</h4><p>匹配条件：</p>
+<ul>
+<li>前缀相同。</li>
+<li>index值对应的孩子节点指针为空<br>处理方式：</li>
+<li>创建叶子节点，当前当前节点的第index个节点。<br>例子：key: 9.9.0.0&#x2F;16</li>
+</ul>
+<h4 id="场景2：前缀不同"><a href="#场景2：前缀不同" class="headerlink" title="场景2：前缀不同"></a>场景2：前缀不同</h4><p>匹配条件：</p>
+<ul>
+<li>前缀不相同。</li>
+<li>index &gt;&#x3D; 2^bits：index值大于或者等于2的bit次方。</li>
+</ul>
+<p>处理方式：</p>
+<ul>
+<li>创建一个新的中间节点<ul>
+<li>bit位置是根据前缀里不相同的位里，最高的一位。</li>
+<li>当前节点挂到中间节点，当孩子。</li>
+</ul>
+</li>
+<li>创建一个叶子节点<ul>
+<li>新叶子节点挂到中间节点，当孩子。</li>
+</ul>
+</li>
+<li>中间节点，挂到父节点当孩子。<br>例如：增加路由9.24.0.0&#x2F;24</li>
+</ul>
+<h4 id="场景3：前缀相同的叶子节点"><a href="#场景3：前缀相同的叶子节点" class="headerlink" title="场景3：前缀相同的叶子节点"></a>场景3：前缀相同的叶子节点</h4><p>相同前缀，不同掩码长度的。<br>在叶子节点里，向FIlist里增加Fib alias节点。<br>例如：9.9.8.0&#x2F;30 dev veth0</p>
+<h3 id="执行插入操作"><a href="#执行插入操作" class="headerlink" title="执行插入操作"></a>执行插入操作</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br></pre></td><td class="code"><pre><span class="line">     <span class="comment">/* fib_insert_alias - 将新的 fib_alias 插入到叶子节点的链表中</span></span><br><span class="line"><span class="comment">      *</span></span><br><span class="line"><span class="comment">      * @t:   trie 根</span></span><br><span class="line"><span class="comment">      * @tp:  父节点 (tnode)</span></span><br><span class="line"><span class="comment">      * @l:   叶子节点 (fib_find_node 找到的)，为 NULL 表示叶子不存在</span></span><br><span class="line"><span class="comment">      * @new: 待插入的 fib_alias</span></span><br><span class="line"><span class="comment">      * @fa:  精确匹配到的已有 fib_alias（同 slen + 同 tb_id + 同 tos + 同 priority），可为 NULL</span></span><br><span class="line"><span class="comment">      * @key: 路由前缀 key</span></span><br><span class="line"><span class="comment">      */</span></span><br><span class="line"><span class="number">1154</span> <span class="type">static</span> <span class="type">int</span> <span class="title function_">fib_insert_alias</span><span class="params">(<span class="keyword">struct</span> trie *t, <span class="keyword">struct</span> key_vector *tp,</span></span><br><span class="line"><span class="params"><span class="number">1155</span>                             <span class="keyword">struct</span> key_vector *l, <span class="keyword">struct</span> fib_alias *new,</span></span><br><span class="line"><span class="params"><span class="number">1156</span>                             <span class="keyword">struct</span> fib_alias *fa, t_key key)</span></span><br><span class="line">1157 &#123;</span><br><span class="line"><span class="number">1158</span>         <span class="keyword">if</span> (!l)  </span><br><span class="line"><span class="number">1159</span>                 <span class="keyword">return</span> fib_insert_node(t, tp, new, key);  <span class="comment">/* 场景1 &amp; 场景2：叶子节点不存在，*/</span></span><br><span class="line"><span class="number">1160</span></span><br><span class="line">             <span class="comment">/* === 以下是场景3：叶子节点已存在，往叶子的 fa_list 链表中插入 === */</span></span><br><span class="line"><span class="number">1161</span>         <span class="keyword">if</span> (fa) &#123; <span class="comment">/* 精确匹配到已有 fa（替换/追加场景）：插到它前面*/</span></span><br><span class="line"><span class="number">1162</span>                 hlist_add_before_rcu(&amp;new-&gt;fa_list, &amp;fa-&gt;fa_list);</span><br><span class="line"><span class="number">1163</span>         &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">                     <span class="comment">/* 没有精确匹配，需要按排序规则找到合适的插入位置</span></span><br><span class="line"><span class="comment">                      * 排序规则：</span></span><br><span class="line"><span class="comment">                      *   1) fa_slen 升序 (slen = 32 - prefixlen，slen 越小 = 掩码越长 = 越精确)</span></span><br><span class="line"><span class="comment">                      *   2) slen 相同时，tb_id 降序 (local 表 id=255 排在 main 表 id=254 前面) */</span></span><br><span class="line"><span class="number">1164</span>                 <span class="keyword">struct</span> fib_alias *last;</span><br><span class="line"><span class="number">1165</span></span><br><span class="line"><span class="number">1166</span>                 hlist_for_each_entry(last, &amp;l-&gt;leaf, fa_list) &#123;</span><br><span class="line"><span class="number">1167</span>                         <span class="keyword">if</span> (new-&gt;fa_slen &lt; last-&gt;fa_slen)</span><br><span class="line"><span class="number">1168</span>                                 <span class="keyword">break</span>;</span><br><span class="line"><span class="number">1169</span>                         <span class="keyword">if</span> ((new-&gt;fa_slen == last-&gt;fa_slen) &amp;&amp;</span><br><span class="line"><span class="number">1170</span>                             (new-&gt;tb_id &gt; last-&gt;tb_id))</span><br><span class="line"><span class="number">1171</span>                                 <span class="keyword">break</span>;           <span class="comment">// 掩码相同，但 tb_id 更大，插到前面</span></span><br><span class="line"><span class="number">1172</span>                         fa = last;               <span class="comment">// 继续往后找，fa 记录&quot;插入点的前一个节点&quot;</span></span><br><span class="line"><span class="number">1173</span>                 &#125;</span><br><span class="line"><span class="number">1174</span></span><br><span class="line"><span class="number">1175</span>                 <span class="keyword">if</span> (fa)</span><br><span class="line"><span class="number">1176</span>                         hlist_add_behind_rcu(&amp;new-&gt;fa_list, &amp;fa-&gt;fa_list);  <span class="comment">// 插到 fa 后面</span></span><br><span class="line"><span class="number">1177</span>                 <span class="keyword">else</span></span><br><span class="line"><span class="number">1178</span>                         hlist_add_head_rcu(&amp;new-&gt;fa_list, &amp;l-&gt;leaf);        <span class="comment">// 链表为空或应插到最前面</span></span><br><span class="line"><span class="number">1179</span>         &#125;</span><br><span class="line"><span class="number">1180</span></span><br><span class="line">             </span><br><span class="line"><span class="number">1181</span>         <span class="keyword">if</span> (l-&gt;slen &lt; new-&gt;fa_slen) &#123;  <span class="comment">/* 如果新插入的 fa_slen 比叶子当前记录的 slen 更大（掩码更短），需要更新叶子的 slen，并向上传播 suffix 长度*/</span></span><br><span class="line"><span class="number">1182</span>                 l-&gt;slen = new-&gt;fa_slen;</span><br><span class="line"><span class="number">1183</span>                 node_push_suffix(tp, new-&gt;fa_slen);</span><br><span class="line"><span class="number">1184</span>         &#125;</span><br><span class="line"><span class="number">1185</span></span><br><span class="line"><span class="number">1186</span>         <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line"><span class="number">1187</span> &#125;</span><br></pre></td></tr></table></figure>
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2026/03/08/fib-node-animation/" data-id="cuidB8gVaDymOCCHYFl7TAH1b" data-title="FIB Trie 路由动画演示" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2026/03/08/fib-node-animation/" data-id="cuiddYjEcFW-nGnTeXDjFybfC" data-title="FIB Trie 路由动画演示" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -122,6 +156,15 @@
   
     
 <nav id="article-nav">
+  
+    <a href="/2026/03/08/fib-data-struct/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Newer</strong>
+      <div class="article-nav-title">
+        
+          fib data struct
+        
+      </div>
+    </a>
   
   
     <a href="/2025/07/12/fib-ip-address-and-route/" id="article-nav-older" class="article-nav-link-wrap">
@@ -146,6 +189,10 @@
       <ul>
         
           <li>
+            <a href="/2026/03/08/fib-data-struct/">fib data struct</a>
+          </li>
+        
+          <li>
             <a href="/2026/03/08/fib-node-animation/">FIB Trie 路由动画演示</a>
           </li>
         
@@ -159,10 +206,6 @@
         
           <li>
             <a href="/2025/07/06/fib-lo-and-local-route-table/">lo口与local路由表</a>
-          </li>
-        
-          <li>
-            <a href="/2025/06/22/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
           </li>
         
       </ul>

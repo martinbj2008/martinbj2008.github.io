@@ -6,18 +6,18 @@
   
   <title>IPv4 route fib trie inflate | Kernel Study Notes</title>
   <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-  <meta name="description" content="##summaryinflate duplicate a new node whose child array is double of orignal node,and put original node’s child into the new node.">
+  <meta name="description" content="summaryinflate duplicate a new node whose child array is double of orignal node,and put original node’s child into the new node.">
 <meta property="og:type" content="article">
 <meta property="og:title" content="IPv4 route fib trie inflate">
 <meta property="og:url" content="https://martinbj2008.github.io/2013/09/29/2013-09-29-ipv4-route-fib-tree-inflate/index.html">
 <meta property="og:site_name" content="Kernel Study Notes">
-<meta property="og:description" content="##summaryinflate duplicate a new node whose child array is double of orignal node,and put original node’s child into the new node.">
+<meta property="og:description" content="summaryinflate duplicate a new node whose child array is double of orignal node,and put original node’s child into the new node.">
 <meta property="og:locale" content="en_US">
 <meta property="og:image" content="https://martinbj2008.github.io/images/fib_trie/inflate.case1.jpg">
 <meta property="og:image" content="https://martinbj2008.github.io/images/fib_trie/inflate.case2.jpg">
 <meta property="og:image" content="https://martinbj2008.github.io/images/fib_trie/inflate.case3.jpg">
 <meta property="article:published_time" content="2013-09-29T09:16:00.000Z">
-<meta property="article:modified_time" content="2026-03-06T23:09:06.615Z">
+<meta property="article:modified_time" content="2026-03-09T07:20:31.143Z">
 <meta property="article:author" content="Martinbj2008">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:image" content="https://martinbj2008.github.io/images/fib_trie/inflate.case1.jpg">
@@ -107,17 +107,22 @@
     
     <div class="e-content article-entry" itemprop="articleBody">
       
-        <p>##summary<br><code>inflate</code> duplicate a new node whose child array is double of orignal node,<br>and put original node’s child into the new node.</p>
+        <h2 id="summary"><a href="#summary" class="headerlink" title="summary"></a>summary</h2><p><code>inflate</code> duplicate a new node whose child array is double of orignal node,<br>and put original node’s child into the new node.</p>
 <span id="more"></span>
 
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">tn<span class="string">&#x27;s bits = 2 * oldnode-&gt;bits</span></span><br><span class="line"><span class="string"></span></span><br><span class="line"><span class="string">`struct tnode *oldnode` is the orignal node.</span></span><br><span class="line"><span class="string">`struct tnode *tn` is the new malloc node.</span></span><br></pre></td></tr></table></figure>
 
 <p>Just like the comment in the source, child nodes are divided into 3 kind nodes:</p>
-<p>###case 1. child node is a leaf or an internal node with skipped bits.<br>	节点不变，直接挂到新的节点下面，作为第2<em>i或者2</em>i+1个孩子节点。</p>
+<h3 id="case-1-child-node-is-a-leaf-or-an-internal-node-with-skipped-bits"><a href="#case-1-child-node-is-a-leaf-or-an-internal-node-with-skipped-bits" class="headerlink" title="case 1. child node is a leaf or an internal node with skipped bits."></a>case 1. child node is a leaf or an internal node with skipped bits.</h3><pre><code>节点不变，直接挂到新的节点下面，作为第2*i或者2*i+1个孩子节点。
+</code></pre>
 <p><img src="/images/fib_trie/inflate.case1.jpg" alt="case 1"></p>
-<p>###case 2. an internal node with two children.<br>	释放节点，并将其左右两个孩子挂到新的节点下面，依次作第2<em>i和2</em>i+1个孩子节点。</p>
+<h3 id="case-2-an-internal-node-with-two-children"><a href="#case-2-an-internal-node-with-two-children" class="headerlink" title="case 2. an internal node with two children."></a>case 2. an internal node with two children.</h3><pre><code>释放节点，并将其左右两个孩子挂到新的节点下面，依次作第2*i和2*i+1个孩子节点。
+</code></pre>
 <p><img src="/images/fib_trie/inflate.case2.jpg" alt="case 2"></p>
-<p>###case 3. an internal node with more than two children.<br>        释放节点，该节点的孩子节点从中间一分为二， 并分别被复制到两个新的节点（<br>	left和right）。这两个新节点被依次作为新节点的第2<em>i和2</em>i+1孩子节点。<br>	left和right节点要重新经过<code>resize</code>函数处理，然后再挂到新节点上。</p>
+<h3 id="case-3-an-internal-node-with-more-than-two-children"><a href="#case-3-an-internal-node-with-more-than-two-children" class="headerlink" title="case 3. an internal node with more than two children."></a>case 3. an internal node with more than two children.</h3><pre><code>    释放节点，该节点的孩子节点从中间一分为二， 并分别被复制到两个新的节点（
+left和right）。这两个新节点被依次作为新节点的第2*i和2*i+1孩子节点。
+left和right节点要重新经过`resize`函数处理，然后再挂到新节点上。
+</code></pre>
 <p><img src="/images/fib_trie/inflate.case3.jpg" alt="case 3"></p>
 <h3 id="NOTE"><a href="#NOTE" class="headerlink" title="NOTE:"></a>NOTE:</h3><ol>
 <li><p>预分配内存：<br> 为了防止中间过程内存不足，在函数一开始，就先为第三类节点分配足够的内存(只有第三类情况需要新建节点)。<br> 等真正处理的时候，只是先把left和right节点从新节点上取下来，待把中间节点(internal node)的所有子孩子重新分配后，再重新把left和right节点挂到新节点下。</p>
@@ -134,7 +139,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2013/09/29/2013-09-29-ipv4-route-fib-tree-inflate/" data-id="cuidMpogpmtSWGQiqoCSaN3qI" data-title="IPv4 route fib trie inflate" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2013/09/29/2013-09-29-ipv4-route-fib-tree-inflate/" data-id="cuid3Mn-gEljq4JIRCf9mOV80" data-title="IPv4 route fib trie inflate" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -176,6 +181,10 @@
       <ul>
         
           <li>
+            <a href="/2026/03/08/fib-data-struct/">fib data struct</a>
+          </li>
+        
+          <li>
             <a href="/2026/03/08/fib-node-animation/">FIB Trie 路由动画演示</a>
           </li>
         
@@ -189,10 +198,6 @@
         
           <li>
             <a href="/2025/07/06/fib-lo-and-local-route-table/">lo口与local路由表</a>
-          </li>
-        
-          <li>
-            <a href="/2025/06/22/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
           </li>
         
       </ul>

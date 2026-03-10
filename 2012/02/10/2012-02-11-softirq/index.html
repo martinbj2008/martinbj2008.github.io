@@ -14,7 +14,7 @@
 <meta property="og:description" content="为什么需要软中断  引入软中断的目的是为了中断要尽快返回。 把一些不紧急的工作放到下半部里执行。 软中断是下半部的一种实现方式。其他的还有tasklet和workqueue。 软中断特点  软中断特点是可以同时运行在CPU上，而tasklet则是整个系统中只有一个。 软中断和tasklet都不允许睡眠，因此必须避免执行引发睡眠的操作。 workqueue则允许睡眠。">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2012-02-09T16:00:00.000Z">
-<meta property="article:modified_time" content="2026-03-06T23:09:06.609Z">
+<meta property="article:modified_time" content="2026-03-09T07:20:31.133Z">
 <meta property="article:author" content="Martinbj2008">
 <meta property="article:tag" content="bh">
 <meta property="article:tag" content="irq">
@@ -118,10 +118,9 @@
 2. 硬件实现
 	高端的网卡： 如ixgbe 网卡， xlr/xlp的nae等专用平台：网卡（或nae）本身通过参数设置，可以让不同的数据包分别在不同的cpu上触发硬中断上。从而达到将网络包交给到个cpu处理，避免单个cpu过于繁忙。
 </code></pre>
-<h2 id="软中断在内核的实现"><a href="#软中断在内核的实现" class="headerlink" title="软中断在内核的实现"></a>软中断在内核的实现</h2><p>软中断的数据结构:<br>###软中断的类型</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">enum</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">    HI_SOFTIRQ=<span class="number">0</span>,</span><br><span class="line">    TIMER_SOFTIRQ,</span><br><span class="line">    NET_TX_SOFTIRQ,</span><br><span class="line">    NET_RX_SOFTIRQ,</span><br><span class="line">    BLOCK_SOFTIRQ,</span><br><span class="line">    BLOCK_IOPOLL_SOFTIRQ,</span><br><span class="line">    TASKLET_SOFTIRQ,</span><br><span class="line">    SCHED_SOFTIRQ,</span><br><span class="line">    HRTIMER_SOFTIRQ,</span><br><span class="line">    RCU_SOFTIRQ, <span class="comment">/* Preferable RCU should always be the last softirq */</span></span><br><span class="line">    NR_SOFTIRQS</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
-<p>###每个软中断有一个对应的处理函数。</p>
-<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">softirq_action</span> <span class="title">softirq_vec</span>[<span class="title">NR_SOFTIRQS</span>] __<span class="title">cacheline_aligned_in_smp</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">softirq_action</span> &#123;</span></span><br><span class="line">    <span class="type">void</span>(*action)(<span class="keyword">struct</span> softirq_action *);</span><br><span class="line">    &#125;;</span><br></pre></td></tr></table></figure>
+<h2 id="软中断在内核的实现"><a href="#软中断在内核的实现" class="headerlink" title="软中断在内核的实现"></a>软中断在内核的实现</h2><p>软中断的数据结构:</p>
+<h3 id="软中断的类型"><a href="#软中断的类型" class="headerlink" title="软中断的类型"></a>软中断的类型</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">enum</span></span></span><br><span class="line"><span class="class">&#123;</span></span><br><span class="line">    HI_SOFTIRQ=<span class="number">0</span>,</span><br><span class="line">    TIMER_SOFTIRQ,</span><br><span class="line">    NET_TX_SOFTIRQ,</span><br><span class="line">    NET_RX_SOFTIRQ,</span><br><span class="line">    BLOCK_SOFTIRQ,</span><br><span class="line">    BLOCK_IOPOLL_SOFTIRQ,</span><br><span class="line">    TASKLET_SOFTIRQ,</span><br><span class="line">    SCHED_SOFTIRQ,</span><br><span class="line">    HRTIMER_SOFTIRQ,</span><br><span class="line">    RCU_SOFTIRQ, <span class="comment">/* Preferable RCU should always be the last softirq */</span></span><br><span class="line">    NR_SOFTIRQS</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<h3 id="每个软中断有一个对应的处理函数。"><a href="#每个软中断有一个对应的处理函数。" class="headerlink" title="每个软中断有一个对应的处理函数。"></a>每个软中断有一个对应的处理函数。</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">static</span> <span class="class"><span class="keyword">struct</span> <span class="title">softirq_action</span> <span class="title">softirq_vec</span>[<span class="title">NR_SOFTIRQS</span>] __<span class="title">cacheline_aligned_in_smp</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">softirq_action</span> &#123;</span></span><br><span class="line">    <span class="type">void</span>(*action)(<span class="keyword">struct</span> softirq_action *);</span><br><span class="line">    &#125;;</span><br></pre></td></tr></table></figure>
 <h3 id="percpu的变量-local-softirq-pending-其每一位对应一个软中断类型。"><a href="#percpu的变量-local-softirq-pending-其每一位对应一个软中断类型。" class="headerlink" title="percpu的变量 local_softirq_pending(), 其每一位对应一个软中断类型。"></a>percpu的变量<code> local_softirq_pending()</code>, 其每一位对应一个软中断类型。</h3><p>X86 和mips存储方式略有不同。</p>
 <ol>
 <li>X86</li>
@@ -152,7 +151,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://martinbj2008.github.io/2012/02/10/2012-02-11-softirq/" data-id="cuidv9HCxy_6xl71GVbbomkwx" data-title="softirq" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      <a data-url="https://martinbj2008.github.io/2012/02/10/2012-02-11-softirq/" data-id="cuidGvbGDGU3s_l6xuQqUbwv2" data-title="softirq" class="article-share-link"><span class="fa fa-share">Share</span></a>
       
       
       
@@ -196,6 +195,10 @@
       <ul>
         
           <li>
+            <a href="/2026/03/08/fib-data-struct/">fib data struct</a>
+          </li>
+        
+          <li>
             <a href="/2026/03/08/fib-node-animation/">FIB Trie 路由动画演示</a>
           </li>
         
@@ -209,10 +212,6 @@
         
           <li>
             <a href="/2025/07/06/fib-lo-and-local-route-table/">lo口与local路由表</a>
-          </li>
-        
-          <li>
-            <a href="/2025/06/22/tcpdump-and-PROMISC-state-label/">tcpdump命令与网口`PROMISC`状态标志位</a>
           </li>
         
       </ul>

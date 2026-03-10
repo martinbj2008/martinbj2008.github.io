@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>fib data struct | Kernel Study Notes</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="综述fib tie是一个多叉树。其原理可以简化为：根据前缀每一位是0还是1， 决定走左子树还是右子树。绝大部分路由树，都没有那么多条目路由，所以再优化下，  多个联系节点只有一个子树,如 仅有两条路由：8.8.2.0&#x2F;24和8.8.3.0&#x2F;24, 前面16+6位都完全一样。 多级子树转换成一个节点下多个孩子。 仅有5条路由：  123458.8.4.0&#x2F;248.8.5.0&#x2F;248.8.6.0&#x2F;24">
+<meta property="og:type" content="article">
+<meta property="og:title" content="fib data struct">
+<meta property="og:url" content="https://martinbj2008.github.io/2026/03/08/fib-data-struct/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="综述fib tie是一个多叉树。其原理可以简化为：根据前缀每一位是0还是1， 决定走左子树还是右子树。绝大部分路由树，都没有那么多条目路由，所以再优化下，  多个联系节点只有一个子树,如 仅有两条路由：8.8.2.0&#x2F;24和8.8.3.0&#x2F;24, 前面16+6位都完全一样。 多级子树转换成一个节点下多个孩子。 仅有5条路由：  123458.8.4.0&#x2F;248.8.5.0&#x2F;248.8.6.0&#x2F;24">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/simple.fib.trie.svg">
+<meta property="og:image" content="https://martinbj2008.github.io/images/fib.data.struct.svg">
+<meta property="og:image" content="https://martinbj2008.github.io/images/fib_node_kv28c5.svg">
+<meta property="article:published_time" content="2026-03-08T10:36:29.000Z">
+<meta property="article:modified_time" content="2026-03-10T12:20:45.570Z">
+<meta property="article:author" content="Martinbj2008">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/simple.fib.trie.svg">
+  
+    <link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+    
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/typeface-source-code-pro@0.0.71/index.min.css">
+
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 8.1.1"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Kernel Study Notes</a>
+      </h1>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS Feed"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="Search"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="Search"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://martinbj2008.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-fib-data-struct" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/03/08/fib-data-struct/" class="article-date">
+  <time class="dt-published" datetime="2026-03-08T10:36:29.000Z" itemprop="datePublished">2026-03-08</time>
+</a>
+    
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      fib data struct
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h3 id="综述"><a href="#综述" class="headerlink" title="综述"></a>综述</h3><p>fib tie是一个多叉树。其原理可以简化为：<br><code>根据前缀每一位是0还是1， 决定走左子树还是右子树。</code><br>绝大部分路由树，都没有那么多条目路由，所以再优化下，</p>
+<ol>
+<li>多个联系节点只有一个子树,如<br> 仅有两条路由：<code>8.8.2.0/24</code>和<code>8.8.3.0/24</code>, 前面16+6位都完全一样。</li>
+<li>多级子树转换成一个节点下多个孩子。<br> 仅有5条路由：</li>
+</ol>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">8.8.4.0/24</span><br><span class="line">8.8.5.0/24</span><br><span class="line">8.8.6.0/24</span><br><span class="line">8.8.7.0/24</span><br><span class="line">8.8.8.0/24</span><br></pre></td></tr></table></figure>
+<p>这就催生了Fib compress tree的产生。</p>
+<p><img src="/images/simple.fib.trie.svg" alt="fib data struct overview"></p>
+<span id="more"></span>
+
+<h4 id="fib-Trie-节点类型"><a href="#fib-Trie-节点类型" class="headerlink" title="fib Trie 节点类型"></a>fib Trie 节点类型</h4><ol>
+<li>Trie：是个多叉树。</li>
+<li>Tnode&#x2F;key vector: 每个树节点是个,包含两个关键信息<ul>
+<li>前缀： 前缀相同继续找孩子。前缀不同，则回溯。</li>
+<li>孩子： 前缀相同，根据指定区域位的值，继续在子树里查找。</li>
+</ul>
+</li>
+<li>Leaf:<ul>
+<li>每个叶子节点是路由终点，但不是对应路由条目。</li>
+<li>每个叶子节点有一个FA节点链在一起的list链。</li>
+</ul>
+</li>
+<li>Fib alias: <ul>
+<li>每个Fib info对应一条路由。</li>
+</ul>
+</li>
+<li>Fib info： 与fib alias一一对应？</li>
+<li>Fib nh: <ul>
+<li>对应每条路由下的每个下一跳。</li>
+<li>ECMP场景下，会有多个下一跳。</li>
+</ul>
+</li>
+</ol>
+<p><img src="/images/fib.data.struct.svg" alt="fib data struct overview"></p>
+<h4 id="Fib-Trie-查找逻辑："><a href="#Fib-Trie-查找逻辑：" class="headerlink" title="Fib Trie 查找逻辑："></a>Fib Trie 查找逻辑：</h4><ol>
+<li>根据目的IP地址，从Trie树根节点开始查找。</li>
+<li>遍历每个节点<ul>
+<li>如果前缀不相同，回溯上级节点，查找其他膝兄弟节点</li>
+<li>如果前缀相同， 查找孩子节点(子树)</li>
+</ul>
+</li>
+<li>到达叶子节点:<br> 遍历FA， 查找最长路径匹配。</li>
+</ol>
+<p>TODO：</p>
+<ul>
+<li>哪些场景需要回溯</li>
+<li>如何回溯。</li>
+</ul>
+<h3 id="节点类型"><a href="#节点类型" class="headerlink" title="节点类型"></a>节点类型</h3><h4 id="trie"><a href="#trie" class="headerlink" title="trie"></a><code>trie</code></h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><span class="line">167 struct trie &#123;</span><br><span class="line">168         struct key_vector kv[1];</span><br><span class="line">169 #ifdef CONFIG_IP_FIB_TRIE_STATS</span><br><span class="line">170         struct trie_use_stats __percpu *stats;</span><br><span class="line">171 #endif</span><br><span class="line">172 &#125;;</span><br></pre></td></tr></table></figure>
+
+<p>fib trie的入口节点，自带一个根节点kv[1]。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">struct key_vector kv[1];</span><br></pre></td></tr></table></figure>
+
+<h4 id="tnode"><a href="#tnode" class="headerlink" title="tnode"></a><code>tnode</code></h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">134 struct tnode &#123;</span><br><span class="line">135         struct rcu_head rcu;</span><br><span class="line">136         t_key empty_children;           /* KEYLENGTH bits needed */</span><br><span class="line">137         t_key full_children;            /* KEYLENGTH bits needed */</span><br><span class="line">138         struct key_vector __rcu *parent;</span><br><span class="line">139         struct key_vector kv[1];</span><br><span class="line">140 #define tn_bits kv[0].bits</span><br><span class="line">141 &#125;;</span><br></pre></td></tr></table></figure>
+
+<p><strong>【AI总结】tnode 是 key_vector 的”管理外壳”。</strong><br>empty_children 和 full_children 这两个计数器实时追踪子节点的填充状态，<br>让 resize() 能快速判断是否需要 inflate（扩大扇出）、halve（缩小扇出）或 collapse（合并节点）。<br>查找热路径完全绕开 tnode，只在 key_vector 层面操作。<br><strong>注：只有中间节点有tnode， Leaf节点是纯key_vector.</strong> </p>
+<h4 id="key-vector"><a href="#key-vector" class="headerlink" title="key_vector"></a><code>key_vector</code></h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">121 struct key_vector &#123;</span><br><span class="line">122         t_key key;</span><br><span class="line">123         unsigned char pos;              /* 2log(KEYLENGTH) bits needed */</span><br><span class="line">124         unsigned char bits;             /* 2log(KEYLENGTH) bits needed */</span><br><span class="line">125         unsigned char slen;</span><br><span class="line">126         union &#123;</span><br><span class="line">127                 /* This list pointer if valid if (pos | bits) == 0 (LEAF) */</span><br><span class="line">128                 struct hlist_head leaf;</span><br><span class="line">129                 /* This array is valid if (pos | bits) &gt; 0 (TNODE) */</span><br><span class="line">130                 DECLARE_FLEX_ARRAY(struct key_vector __rcu *, tnode);</span><br><span class="line">131         &#125;;</span><br><span class="line">132 &#125;;</span><br></pre></td></tr></table></figure>
+
+<p><code>key_vector</code> 是fib路由的核心数据结构。<br>【中间节点】</p>
+<ul>
+<li>key：路由前缀</li>
+<li>pos+bits：<strong>从pos开始的bits， 根据数值&#x2F;下标，去key_vector数组里去找child&#x2F;子树</strong></li>
+<li>slen：子树中最大的后缀长度 (32-plen)	max(pos, 子树中最大的 slen)</li>
+<li>struct key_vector *tnode：</li>
+</ul>
+<p><img src="/images/fib_node_kv28c5.svg" alt="kv_28c5 tnode and leaf"></p>
+<p>【叶子】</p>
+<ul>
+<li>Leaf链接相同前缀的所有路由Fib alias。</li>
+<li>pos &#x3D; 0</li>
+<li>bit &#x3D; 0</li>
+<li>slen：挂载路由的最大(fa_slen)</li>
+</ul>
+<h4 id="fib-alias"><a href="#fib-alias" class="headerlink" title="fib_alias"></a><code>fib_alias</code></h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><span class="line">struct fib_alias &#123;</span><br><span class="line">    struct hlist_node   fa_list;        // 链表节点</span><br><span class="line">    struct fib_info     *fa_info;       // 指向路由详细信息</span><br><span class="line">    dscp_t              fa_dscp;        // DSCP 匹配条件</span><br><span class="line">    u8                  fa_type;        // 路由类型, local，broadcast等</span><br><span class="line">    u8                  fa_state;       // 状态标记</span><br><span class="line">    u8                  fa_slen;        // 后缀长度 = 32 - prefix_len</span><br><span class="line">    u32                 tb_id;          // 路由表 ID</span><br><span class="line">    s16                 fa_default;     // 默认路由选择索引</span><br><span class="line">    u8                  offload;        // 硬件卸载标记</span><br><span class="line">    u8                  trap;           // 硬件 trap 标记</span><br><span class="line">    u8                  offload_failed; // 硬件卸载失败标记</span><br><span class="line">    struct rcu_head     rcu;            // RCU 延迟释放</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+<p>例:一个Leaf下有三条不同掩码和table的路由。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">192.168.1.1/32, local表</span><br><span class="line">192.168.1.0/24, main表</span><br><span class="line">192.168.0.0/16, main表</span><br></pre></td></tr></table></figure>
+
+<p>fa_slen从小到大排序（前缀越长越靠前），查找时优先匹配最长前缀。</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line">Leaf (key_vector, bits=0)</span><br><span class="line">  │</span><br><span class="line">  └── leaf (hlist_head)</span><br><span class="line">        │</span><br><span class="line">        ├── fib_alias [fa_slen=0,  tb_id=255]  ──→ fib_info ──→ fib_nh[]</span><br><span class="line">        │   (192.168.1.1/32, local表)</span><br><span class="line">        │</span><br><span class="line">        ├── fib_alias [fa_slen=8,  tb_id=254]  ──→ fib_info ──→ fib_nh[]</span><br><span class="line">        │   (192.168.1.0/24, main表)</span><br><span class="line">        │</span><br><span class="line">        └── fib_alias [fa_slen=16, tb_id=254]  ──→ fib_info ──→ fib_nh[]</span><br><span class="line">            (192.168.0.0/16, main表)</span><br></pre></td></tr></table></figure>
+
+<p>fa_state:<br> 目前就是一个 1-bit 的 “脏标记”.<br> 核心目的是：在路由变更时，避免对从未使用过的路由执行不必要的缓存刷新。<br> 目前只用了 bit 0（FA_S_ACCESSED）。</p>
+<h4 id="fib-info"><a href="#fib-info" class="headerlink" title="fib_info"></a><code>fib_info</code></h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><span class="line">struct fib_info &#123;</span><br><span class="line">    struct hlist_node   fib_hash;       // 全局 fib_info 哈希表节点（按路由属性去重）</span><br><span class="line">    struct hlist_node   fib_lhash;      // local地址哈希表节点（按 fib_prefsrc 索引）</span><br><span class="line">    struct list_head    nh_list;        // 挂载到 nexthop-&gt;fi_list，用于 nexthop 更新时遍历</span><br><span class="line">    struct net          *fib_net;       // 所属 netname space</span><br><span class="line">    refcount_t          fib_treeref;    // Trie 树引用计数（fib_alias 引用）</span><br><span class="line">    refcount_t          fib_clntref;    // 外部引用计数（路由缓存等）</span><br><span class="line">    unsigned int        fib_flags;      // 路由标志, 如 RTNH_F_DEAD, RTNH_F_ONLINK</span><br><span class="line">    unsigned char       fib_dead;       // 标记路由已删除，阻止新引用</span><br><span class="line">    unsigned char       fib_protocol;   // 路由来源协议, 如 RTPROT_STATIC, RTPROT_BOOT</span><br><span class="line">    unsigned char       fib_scope;      // 路由作用域, 如 RT_SCOPE_LINK, RT_SCOPE_UNIVERSE</span><br><span class="line">    unsigned char       fib_type;       // 路由类型, 如 RTN_UNICAST, RTN_LOCAL</span><br><span class="line">    __be32              fib_prefsrc;    // 首选源地址（src hint）</span><br><span class="line">    u32                 fib_tb_id;      // 路由表 ID, main,local or 其他</span><br><span class="line">    u32                 fib_priority;   // 路由优先级（metric）</span><br><span class="line">    struct dst_metrics  *fib_metrics;   // 路由度量指标（MTU, MSS, RTT等）</span><br><span class="line">#define fib_mtu fib_metrics-&gt;metrics[RTAX_MTU-1]</span><br><span class="line">#define fib_window fib_metrics-&gt;metrics[RTAX_WINDOW-1]</span><br><span class="line">#define fib_rtt fib_metrics-&gt;metrics[RTAX_RTT-1]</span><br><span class="line">#define fib_advmss fib_metrics-&gt;metrics[RTAX_ADVMSS-1]</span><br><span class="line">    int                 fib_nhs;        // 下一跳数量（ECMP 场景 &gt;1）</span><br><span class="line">    bool                fib_nh_is_v6;   // 下一跳是否为 IPv6 地址</span><br><span class="line">    bool                nh_updated;     // nexthop 对象更新标记，触发路由重新评估</span><br><span class="line">    bool                pfsrc_removed;  // 首选源地址被删除标记</span><br><span class="line">    struct nexthop      *nh;            // 新版 nexthop 对象指针（与 fib_nh[] 互斥）</span><br><span class="line">    struct rcu_head     rcu;            // RCU 延迟释放</span><br><span class="line">    struct fib_nh       fib_nh[];       // 下一跳数组（传统模式, 长度 = fib_nhs）</span><br><span class="line">&#125;;</span><br></pre></td></tr></table></figure>
+
+
+<h4 id="fib-nh"><a href="#fib-nh" class="headerlink" title="fib_nh"></a><code>fib_nh</code></h4><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><span class="line">107 struct fib_nh &#123;</span><br><span class="line">108         struct fib_nh_common    nh_common;</span><br><span class="line">109         struct hlist_node       nh_hash;</span><br><span class="line">110         struct fib_info         *nh_parent;</span><br><span class="line">111 #ifdef CONFIG_IP_ROUTE_CLASSID</span><br><span class="line">112         __u32                   nh_tclassid;</span><br><span class="line">113 #endif</span><br><span class="line">114         __be32                  nh_saddr;</span><br><span class="line">115         int                     nh_saddr_genid;</span><br><span class="line">116 #define fib_nh_family           nh_common.nhc_family</span><br><span class="line">117 #define fib_nh_dev              nh_common.nhc_dev</span><br><span class="line">118 #define fib_nh_dev_tracker      nh_common.nhc_dev_tracker</span><br><span class="line">119 #define fib_nh_oif              nh_common.nhc_oif</span><br><span class="line">120 #define fib_nh_flags            nh_common.nhc_flags</span><br><span class="line">121 #define fib_nh_lws              nh_common.nhc_lwtstate</span><br><span class="line">122 #define fib_nh_scope            nh_common.nhc_scope</span><br><span class="line">123 #define fib_nh_gw_family        nh_common.nhc_gw_family</span><br><span class="line">124 #define fib_nh_gw4              nh_common.nhc_gw.ipv4</span><br><span class="line">125 #define fib_nh_gw6              nh_common.nhc_gw.ipv6</span><br><span class="line">126 #define fib_nh_weight           nh_common.nhc_weight</span><br><span class="line">127 #define fib_nh_upper_bound      nh_common.nhc_upper_bound</span><br><span class="line">128 &#125;;</span><br></pre></td></tr></table></figure>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://martinbj2008.github.io/2026/03/08/fib-data-struct/" data-id="cuidGO2NYlo-69tylU9F-xbwt" data-title="fib data struct" class="article-share-link"><span class="fa fa-share">Share</span></a>
+      
+      
+      
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2026/03/08/fib-node-animation/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">Older</strong>
+      <div class="article-nav-title">FIB Trie 路由动画演示</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Recent Posts</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/03/08/fib-data-struct/">fib data struct</a>
+          </li>
+        
+          <li>
+            <a href="/2026/03/08/fib-node-animation/">FIB Trie 路由动画演示</a>
+          </li>
+        
+          <li>
+            <a href="/2025/07/12/fib-ip-address-and-route/">ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</a>
+          </li>
+        
+          <li>
+            <a href="/2025/07/12/fib-unmerge-local-from-main/">fib_unmerge：把local路由从main表里切割出来</a>
+          </li>
+        
+          <li>
+            <a href="/2025/07/06/fib-lo-and-local-route-table/">lo口与local路由表</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Categories</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/IPv6/">IPv6</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/bpf/">bpf</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/debug/">debug</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/gcc/">gcc</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/git/">git</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/irq/">irq</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/memory/">memory</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/neighbour/">neighbour</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netdev/">netdev</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/netlink/">netlink</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/others/">others</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/route/">route</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/sched/">sched</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/socket/">socket</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/vim/">vim</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/xfrm/">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">Tags</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv4/" rel="tag">IPv4</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/IPv6/" rel="tag">IPv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/TODO/" rel="tag">TODO</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/address/" rel="tag">address</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bh/" rel="tag">bh</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/bpf/" rel="tag">bpf</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/checksum/" rel="tag">checksum</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/debug/" rel="tag">debug</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/epoll/" rel="tag">epoll</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/fib/" rel="tag">fib</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/gcc/" rel="tag">gcc</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/git/" rel="tag">git</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ipv6/" rel="tag">ipv6</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/irq/" rel="tag">irq</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/kernel/" rel="tag">kernel</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/memory/" rel="tag">memory</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/namespace/" rel="tag">namespace</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/neighbour/" rel="tag">neighbour</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netdev/" rel="tag">netdev</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/netlink/" rel="tag">netlink</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/network/" rel="tag">network</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/others/" rel="tag">others</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/ovs/" rel="tag">ovs</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/route/" rel="tag">route</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/sched/" rel="tag">sched</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket/" rel="tag">socket</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/socket-tcp/" rel="tag">socket, tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcp/" rel="tag">tcp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/tcpdump/" rel="tag">tcpdump</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vim/" rel="tag">vim</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xdp/" rel="tag">xdp</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/xfrm/" rel="tag">xfrm</a></li></ul>
+    </div>
+  </div>
+
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Martinbj2008<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
