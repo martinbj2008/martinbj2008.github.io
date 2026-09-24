@@ -1,0 +1,881 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="fib_unmerge 是内核路由子系统中一个精巧的按需优化设计：  默认状态下，local 表只是 main 表的别名，所有路由合并在一张表里，fib_lookup 只需查一次表，性能最优 添加策略路由时，fib_unmerge 将 local 路由从 main 表中切割出来，放入独立的 local 表，确保策略路由能正确匹配 切割四步走：创建新 local 表 → 复制 local 路由 →">
+<meta property="og:type" content="article">
+<meta property="og:title" content="fib_unmerge：把local路由从main表里切割出来">
+<meta property="og:url" content="https://martinbj2008.github.io/2025/07/12/fib-unmerge-local-from-main/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="fib_unmerge 是内核路由子系统中一个精巧的按需优化设计：  默认状态下，local 表只是 main 表的别名，所有路由合并在一张表里，fib_lookup 只需查一次表，性能最优 添加策略路由时，fib_unmerge 将 local 路由从 main 表中切割出来，放入独立的 local 表，确保策略路由能正确匹配 切割四步走：创建新 local 表 → 复制 local 路由 →">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2025-07-12T02:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.754Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="fib">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>fib_unmerge：把local路由从main表里切割出来 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="fib_unmerge：把local路由从main表里切割出来"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2025-07-12 10:00" pubdate>
+          July 12, 2025 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          4.8k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          40 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">fib_unmerge：把local路由从main表里切割出来</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <p><code>fib_unmerge</code> 是内核路由子系统中一个精巧的按需优化设计：</p>
+<ul>
+<li><strong>默认状态下</strong>，local 表只是 main 表的别名，所有路由合并在一张表里，<code>fib_lookup</code> 只需查一次表，性能最优</li>
+<li><strong>添加策略路由时</strong>，<code>fib_unmerge</code> 将 local 路由从 main 表中切割出来，放入独立的 local 表，确保策略路由能正确匹配</li>
+<li><strong>切割四步走</strong>：创建新 local 表 → 复制 local 路由 → 替换旧表 → 清理 main 表中的残留条目</li>
+<li><strong>幂等设计</strong>：只在首次添加策略路由时执行分离，后续再添加时 <code>fib_trie_unmerge</code> 检测到已分离，直接返回</li>
+</ul>
+<p>本文将从调用点入手，逐步分析 <code>fib_unmerge</code> 的实现细节。</p>
+<span id="more"></span>
+
+<h3 id="背景">0.0.1. 背景</h3><p>前面文章提到，local 路由默认情况下是插入到 main 表里的。</p>
+<p>在 <a href="/2025/07/03/fib-ip-address-and-route/">ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</a> 中我们分析了 <code>fib_lookup</code> 函数：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">374</span> <span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> <span class="hljs-type">int</span> <span class="hljs-title function_">fib_lookup</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net *net, <span class="hljs-keyword">struct</span> flowi4 *flp,</span><br><span class="hljs-params"><span class="hljs-number">375</span>                              <span class="hljs-keyword">struct</span> fib_result *res, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> flags)</span><br>376 &#123;<br>...<br><span class="hljs-number">381</span>         <span class="hljs-keyword">if</span> (net-&gt;ipv4.fib_has_custom_rules)<br><span class="hljs-number">382</span>                 <span class="hljs-keyword">return</span> __fib_lookup(net, flp, res, flags);<br>...<br><span class="hljs-number">388</span>         tb = rcu_dereference_rtnl(net-&gt;ipv4.fib_main);<br><span class="hljs-number">389</span>         <span class="hljs-keyword">if</span> (tb)<br><span class="hljs-number">390</span>                 err = fib_table_lookup(tb, flp, res, flags);<br>...<br><span class="hljs-number">395</span>         tb = rcu_dereference_rtnl(net-&gt;ipv4.fib_default);<br><span class="hljs-number">396</span>         <span class="hljs-keyword">if</span> (tb)<br><span class="hljs-number">397</span>                 err = fib_table_lookup(tb, flp, res, flags);<br></code></pre></td></tr></table></figure>
+
+<p>没有自定义策略路由规则时（<code>fib_has_custom_rules</code> 为 false），<code>fib_lookup</code> 只查找 main 和 default 两张表，并没有查找 local 表。</p>
+<p>这是因为在初始化时，local 表被创建为 main 表的别名：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs c">local_table = fib_trie_table(RT_TABLE_LOCAL, main_table);<br></code></pre></td></tr></table></figure>
+
+<p>所有 local 路由实际上都被插入到了 main 表里。这样做的好处是减少一次路由表查找，提升性能。</p>
+<p>那问题来了：当用户添加了自定义的策略路由规则后，路由查找走的是 <code>__fib_lookup</code> → <code>fib_rules_lookup</code>，会按策略路由顺序依次查找 local&#x2F;main&#x2F;default 三张表。如果 local 路由还在 main 表里，那 local 表就是空的，查找 local 表就没有意义了。</p>
+<p>所以，<strong>只有在用户添加了自定义策略路由规则后，local 路由才需要从 main 表里分离出来，放到独立的 local 表里</strong>。</p>
+<p>函数 <code>fib_unmerge</code> 就是做这个事情的。</p>
+<h3 id="调用点">0.0.2. 调用点</h3><p><code>fib_unmerge</code> 的调用点有两个：</p>
+<ul>
+<li><code>fib4_rule_configure</code>：添加策略路由</li>
+<li><code>fib4_rule_delete</code>：删除策略路由</li>
+</ul>
+<p>这两个函数是 IPv4 策略路由模版 <code>fib4_rules_ops_template</code> 里的 <code>configure</code> 和 <code>delete</code> 函数定义。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">470</span> <span class="hljs-type">static</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">fib_rules_ops</span> __<span class="hljs-title">net_initconst</span> <span class="hljs-title">fib4_rules_ops_template</span> =</span> &#123;<br><span class="hljs-number">471</span>         .family         = AF_INET,<br><span class="hljs-number">472</span>         .rule_size      = <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> fib4_rule),<br>...<br><span class="hljs-number">476</span>         .match          = fib4_rule_match,<br><span class="hljs-number">477</span>         .configure      = fib4_rule_configure,<br><span class="hljs-number">478</span>         .delete         = fib4_rule_delete,<br>...<br></code></pre></td></tr></table></figure>
+
+<p>以函数 <code>fib4_rule_configure</code> 为例：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">269</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">fib4_rule_configure</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> fib_rule *rule, <span class="hljs-keyword">struct</span> sk_buff *skb,</span><br><span class="hljs-params"><span class="hljs-number">270</span>                                <span class="hljs-keyword">struct</span> fib_rule_hdr *frh,</span><br><span class="hljs-params"><span class="hljs-number">271</span>                                <span class="hljs-keyword">struct</span> nlattr **tb,</span><br><span class="hljs-params"><span class="hljs-number">272</span>                                <span class="hljs-keyword">struct</span> netlink_ext_ack *extack)</span><br>273 &#123;<br><span class="hljs-number">274</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net</span> *<span class="hljs-title">net</span> =</span> sock_net(skb-&gt;sk);<br><span class="hljs-number">275</span>         <span class="hljs-type">int</span> err = -EINVAL;<br><span class="hljs-number">276</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">fib4_rule</span> *<span class="hljs-title">rule4</span> =</span> (<span class="hljs-keyword">struct</span> fib4_rule *) rule;<br><span class="hljs-number">277</span><br><span class="hljs-number">278</span>         <span class="hljs-keyword">if</span> (frh-&gt;tos &amp; ~IPTOS_TOS_MASK) &#123;<br><span class="hljs-number">279</span>                 NL_SET_ERR_MSG(extack, <span class="hljs-string">&quot;Invalid tos&quot;</span>);<br><span class="hljs-number">280</span>                 <span class="hljs-keyword">goto</span> errout;<br><span class="hljs-number">281</span>         &#125;<br><span class="hljs-number">282</span><br>...<br><span class="hljs-number">288</span>         <span class="hljs-keyword">if</span> (rule-&gt;table == RT_TABLE_UNSPEC &amp;&amp; rule-&gt;action == FR_ACT_TO_TBL) &#123;<br><span class="hljs-number">289</span>                 <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">fib_table</span> *<span class="hljs-title">table</span>;</span><br><span class="hljs-number">290</span><br><span class="hljs-number">291</span>                 table = fib_empty_table(net);<br><span class="hljs-number">292</span>                 <span class="hljs-keyword">if</span> (!table) &#123;<br><span class="hljs-number">293</span>                         err = -ENOBUFS;<br><span class="hljs-number">294</span>                         <span class="hljs-keyword">goto</span> errout;<br><span class="hljs-number">295</span>                 &#125;<br><span class="hljs-number">296</span><br><span class="hljs-number">297</span>                 rule-&gt;table = table-&gt;tb_id;<br><span class="hljs-number">298</span>         &#125;<br><span class="hljs-number">299</span><br><span class="hljs-number">300</span>         <span class="hljs-comment">/* split local/main if they are not already split */</span><br><span class="hljs-number">301</span>         err = fib_unmerge(net);<br><span class="hljs-number">302</span>         <span class="hljs-keyword">if</span> (err)<br><span class="hljs-number">303</span>                 <span class="hljs-keyword">goto</span> errout;<br><span class="hljs-number">304</span><br><span class="hljs-number">305</span>         rule4-&gt;src_len = frh-&gt;src_len;<br><span class="hljs-number">306</span>         rule4-&gt;srcmask = inet_make_mask(rule4-&gt;src_len);<br><span class="hljs-number">307</span>         rule4-&gt;dst_len = frh-&gt;dst_len;<br><span class="hljs-number">308</span>         rule4-&gt;dstmask = inet_make_mask(rule4-&gt;dst_len);<br>...<br></code></pre></td></tr></table></figure>
+
+<p>关键在第 300-303 行：<code>fib_unmerge(net)</code> —— 在配置新的策略路由规则时，先把 local 和 main 表分离开。</p>
+<h3 id="fib-unmerge-实现">0.0.3. fib_unmerge 实现</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-type">int</span> <span class="hljs-title function_">fib_unmerge</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net *net)</span><br>&#123;<br>        <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">fib_table</span> *<span class="hljs-title">old</span>, *<span class="hljs-title">new</span>, *<span class="hljs-title">main_table</span>;</span><br><br>        <span class="hljs-comment">/* attempt to fetch the local table */</span><br>        old = fib_get_table(net, RT_TABLE_LOCAL);<br>        <span class="hljs-keyword">if</span> (!old)<br>                <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><br>        <span class="hljs-comment">/* create new local table with routes from old */</span><br>        new = fib_trie_unmerge(old);<br>        <span class="hljs-keyword">if</span> (!new)<br>                <span class="hljs-keyword">return</span> -ENOMEM;<br><br>        <span class="hljs-comment">/* if they are the same, no unmerging needed */</span><br>        <span class="hljs-keyword">if</span> (new == old)<br>                <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><br>        <span class="hljs-comment">/* replace old local table with new one */</span><br>        fib_replace_table(net, old, new);<br>        fib_free_table(old);<br><br>        <span class="hljs-comment">/* flush local entries that were merged into main */</span><br>        main_table = fib_get_table(net, RT_TABLE_MAIN);<br>        <span class="hljs-keyword">if</span> (main_table)<br>                fib_table_flush_external(main_table);<br><br>        <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p><code>fib_unmerge</code> 的逻辑可以分为四步：</p>
+<h4 id="第一步：获取旧的-local-表">0.0.3.1. 第一步：获取旧的 local 表</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs c">old = fib_get_table(net, RT_TABLE_LOCAL);<br></code></pre></td></tr></table></figure>
+
+<p>获取当前的 local 路由表。如果不存在，说明不需要分离，直接返回。</p>
+<h4 id="第二步：创建新的-local-表">0.0.3.2. 第二步：创建新的 local 表</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs c">new = fib_trie_unmerge(old);<br></code></pre></td></tr></table></figure>
+
+<p><code>fib_trie_unmerge</code> 从旧的（合并在 main 表里的）local 表中，把 local 路由复制到一张新的独立 local 表里。</p>
+<p>如果返回的 new 和 old 相同，说明已经分离过了（不是第一次添加策略路由），直接返回。</p>
+<h4 id="第三步：替换旧表">0.0.3.3. 第三步：替换旧表</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs c">fib_replace_table(net, old, new);<br>fib_free_table(old);<br></code></pre></td></tr></table></figure>
+
+<p>用新创建的 local 表替换掉旧的（别名到 main 的）local 表，并释放旧表。</p>
+<h4 id="第四步：清理-main-表">0.0.3.4. 第四步：清理 main 表</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs c">main_table = fib_get_table(net, RT_TABLE_MAIN);<br><span class="hljs-keyword">if</span> (main_table)<br>        fib_table_flush_external(main_table);<br></code></pre></td></tr></table></figure>
+
+<p>由于之前 local 路由都在 main 表里，现在已经复制到了独立的 local 表，需要把 main 表里残留的 local 路由条目清理掉。<code>fib_table_flush_external</code> 负责刷新 main 表中的外部引用。</p>
+<h3 id="流程总结">0.0.4. 流程总结</h3><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs sql">初始状态：<br>  <span class="hljs-keyword">local</span>表 ──别名──<span class="hljs-operator">&gt;</span> main表（<span class="hljs-keyword">local</span>路由都在main表里）<br><br>用户执行 ip rule <span class="hljs-keyword">add</span> ... 添加策略路由：<br>  fib_newrule<br>    └── ops<span class="hljs-operator">-</span><span class="hljs-operator">&gt;</span>configure  即 fib4_rule_configure<br>         └── fib_unmerge(net)<br>              ├── <span class="hljs-number">1.</span> <span class="hljs-keyword">old</span> <span class="hljs-operator">=</span> fib_get_table(<span class="hljs-keyword">LOCAL</span>)<br>              ├── <span class="hljs-number">2.</span> <span class="hljs-keyword">new</span> <span class="hljs-operator">=</span> fib_trie_unmerge(<span class="hljs-keyword">old</span>)  <span class="hljs-operator">/</span><span class="hljs-operator">/</span> 复制<span class="hljs-keyword">local</span>路由到新表<br>              ├── <span class="hljs-number">3.</span> fib_replace_table(<span class="hljs-keyword">old</span>, <span class="hljs-keyword">new</span>)  <span class="hljs-operator">/</span><span class="hljs-operator">/</span> 替换<span class="hljs-keyword">local</span>表<br>              ├──    fib_free_table(<span class="hljs-keyword">old</span>)           <span class="hljs-operator">/</span><span class="hljs-operator">/</span> 释放旧表<br>              └── <span class="hljs-number">4.</span> fib_table_flush_external(main) <span class="hljs-operator">/</span><span class="hljs-operator">/</span> 清理main表中残留<br><br>分离后状态：<br>  <span class="hljs-keyword">local</span>表（独立，包含所有<span class="hljs-keyword">local</span>路由）<br>  main表（仅包含unicast路由）<br></code></pre></td></tr></table></figure>
+
+<h3 id="与-fib-has-custom-rules-的关系">0.0.5. 与 fib_has_custom_rules 的关系</h3><p>回顾 <code>fib_lookup</code> 的入口：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-keyword">if</span> (net-&gt;ipv4.fib_has_custom_rules)<br>        <span class="hljs-keyword">return</span> __fib_lookup(net, flp, res, flags);<br></code></pre></td></tr></table></figure>
+
+<p>当 <code>fib_has_custom_rules</code> 为 true 时，走 <code>__fib_lookup</code> 路径，会遍历策略路由链表，依次查找 local&#x2F;main&#x2F;default 三张表。此时 local 表已经通过 <code>fib_unmerge</code> 分离出来，包含了独立的 local 路由。</p>
+<p>当 <code>fib_has_custom_rules</code> 为 false 时，直接查找 main 表（其中包含了 local 路由）和 default 表。此时不需要分离。</p>
+<p>这两条路径保持了一致的路由查找语义，同时在没有自定义规则时通过合并表来优化性能。</p>
+<p>相关文章：<br>这个设计体现了内核”按需分离”的思想——在不需要策略路由时保持简单高效，在需要时才承担额外的开销。</p>
+<p>相关文章：</p>
+<ul>
+<li><a href="/2025/07/03/fib-ip-address-and-route/">ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</a></li>
+<li><a href="/2018/10/09/fib-how-ipv4-lookup-route-with-rule-route/">linux内核多路由表与策略路由的实现</a></li>
+<li><a href="/2025/07/06/fib-lo-and-local-route-table/">lo口与local路由表</a></li>
+</ul>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/FIB/" class="category-chain-item">FIB</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/fib/" class="print-no-link">#fib</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>fib_unmerge：把local路由从main表里切割出来</div>
+      <div>https://martinbj2008.github.io/2025/07/12/fib-unmerge-local-from-main/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>July 12, 2025</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2025/07/12/fib-ip-address-and-route/" title="ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2025/07/06/fib-lo-and-local-route-table/" title="lo口与local路由表">
+                        <span class="hidden-mobile">lo口与local路由表</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

@@ -1,0 +1,922 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="mysql访问延迟问题分析 0.1. 问题背景收到数据库同学的问题排查的请求，同一个数据中心里，dbproxy到mysql的连接失败率偏高，其tcp connect调用的超时时间是20ms+。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="slabinfo 惹的祸">
+<meta property="og:url" content="https://martinbj2008.github.io/2017/05/15/2017-05-15-slabinfo-cause-delay/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="mysql访问延迟问题分析 0.1. 问题背景收到数据库同学的问题排查的请求，同一个数据中心里，dbproxy到mysql的连接失败率偏高，其tcp connect调用的超时时间是20ms+。">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/slabinfo-delay-tcp.png">
+<meta property="article:published_time" content="2017-05-15T10:56:08.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.752Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IPv4">
+<meta property="article:tag" content="memory">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/slabinfo-delay-tcp.png">
+  
+  
+  
+  <title>slabinfo 惹的祸 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="slabinfo 惹的祸"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2017-05-15 18:56" pubdate>
+          May 15, 2017 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          8.1k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          68 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">slabinfo 惹的祸</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <p>mysql访问延迟问题分析</p>
+<h2 id="问题背景">0.1. 问题背景</h2><p>收到数据库同学的问题排查的请求，<br>同一个数据中心里，dbproxy到mysql的连接失败率偏高，其tcp connect调用的超时时间是20ms+。</p>
+<span id="more"></span>
+
+<h2 id="分析过程">0.2. 分析过程</h2><p>通过tcpdump在两端服务器上抓包，<br>发现<br>tcpdump抓包数据</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs yaml"><span class="hljs-string">（缺另外一侧数据）</span><br><span class="hljs-number">2017-04-27 16:01:09.403569 </span><span class="hljs-string">IP</span> <span class="hljs-number">100.69</span><span class="hljs-number">.103</span><span class="hljs-number">.13</span><span class="hljs-number">.50969</span> <span class="hljs-string">&gt;</span> <span class="hljs-attr">100.69.110.11.3306:</span> <span class="hljs-string">Flags</span> [<span class="hljs-string">S</span>]<span class="hljs-string">,</span> <span class="hljs-string">seq</span> <span class="hljs-number">3051956561</span><span class="hljs-string">,</span> <span class="hljs-string">win</span> <span class="hljs-number">14600</span><span class="hljs-string">,</span> <span class="hljs-string">options</span> [<span class="hljs-string">mss</span> <span class="hljs-number">1460</span>,<span class="hljs-string">sackOK</span>,<span class="hljs-string">TS</span> <span class="hljs-string">val</span> <span class="hljs-number">1801758554</span> <span class="hljs-string">ecr</span> <span class="hljs-number">0</span>,<span class="hljs-string">nop</span>,<span class="hljs-string">wscale</span> <span class="hljs-number">7</span>]<span class="hljs-string">,</span> <span class="hljs-string">length</span> <span class="hljs-number">0</span><br><span class="hljs-number">2017-04-27 16:01:09.430687 </span><span class="hljs-string">IP</span> <span class="hljs-number">100.69</span><span class="hljs-number">.110</span><span class="hljs-number">.11</span><span class="hljs-number">.3306</span> <span class="hljs-string">&gt;</span> <span class="hljs-attr">100.69.103.13.50969:</span> <span class="hljs-string">Flags</span> [<span class="hljs-string">S.</span>]<span class="hljs-string">,</span> <span class="hljs-string">seq</span> <span class="hljs-number">3148283284</span><span class="hljs-string">,</span> <span class="hljs-string">ack</span> <span class="hljs-number">3051956562</span><span class="hljs-string">,</span> <span class="hljs-string">win</span> <span class="hljs-number">14480</span><span class="hljs-string">,</span> <span class="hljs-string">options</span> [<span class="hljs-string">mss</span> <span class="hljs-number">1460</span>,<span class="hljs-string">sackOK</span>,<span class="hljs-string">TS</span> <span class="hljs-string">val</span> <span class="hljs-number">3143621189</span> <span class="hljs-string">ecr</span> <span class="hljs-number">1801758554</span>,<span class="hljs-string">nop</span>,<span class="hljs-string">wscale</span> <span class="hljs-number">7</span>]<span class="hljs-string">,</span> <span class="hljs-string">length</span> <span class="hljs-number">0</span><br><br></code></pre></td></tr></table></figure>
+<hr>
+<p>TCPDUMP数据分析<br><img src="/images/slabinfo-delay-tcp.png" srcset="/img/loading.gif" lazyload><br>四个时间点分别即为<code>t1</code>,<code>t2</code>,<code>t3</code>,<code>t4</code>：</p>
+<ul>
+<li>t1: syn报文在clieint端抓取的时间</li>
+<li>t2: syn报文在server端抓取的时间</li>
+<li>t3: syn+ack报文在server端抓取的时间</li>
+<li>t4: syn+ack报文在client端抓取的时间</li>
+</ul>
+<p>观察发现两类case：</p>
+<ul>
+<li><code>t1</code> 比<code>t2</code>早20ms+， 而<code>t2</code>, <code>t3</code>, t4的时间点相差不到2ms</li>
+<li>t4 比<code>t3</code>晚20ms+， 而<code>t1</code>, <code>t2</code>, <code>t3</code>的时间点相差不到2ms<br>因为我们的服务器上都部署了ntp服务，所以服务器之间的时间偏差控制的非常好，可以保证偏差在1ms左右（甚至更低）。<br>所以上面的四个时间点可以认为以同一个时间轴上的。<br>因次，可确定是报文数据被延迟了。</li>
+</ul>
+<p>该问题不是出现在单台服务器上，mysql的好多台服务器都存在不同程度的延迟。<br>因此延迟的怀疑对象有:</p>
+<ul>
+<li>物理传输网络（交换机及网线）</li>
+<li>服务器<br>根据历史经验判断交换机丢包的可疑点最大，因此找交换机同学寻求帮助，并建议进行交换机上的端口镜像抓包。</li>
+</ul>
+<h3 id="交换机网络排查">0.2.1. 交换机网络排查</h3><hr>
+<p>网络的同学提供了一个很好的检测工具，hping。<br>通过hping我们可以很容易的判断单台服务器是否存在报文延迟。<br>期间经过网络同学的尝试，得到一些测试信息（包含了同学们的血泪史）：</p>
+<ul>
+<li>数据库mysql服务停止，问题依然存在。</li>
+<li>更换服务器端的网线，问题依然存在。</li>
+<li>更换tor交换机的上联网线，问题依然存在。</li>
+<li>使用装机模板重新安装服务器，问题消失。</li>
+<li>重装后的服务器启用老的内核和网卡驱动，问题消失。</li>
+<li>reboot服务器，问题消失</li>
+<li>最终通过端口镜像，锁定该问题不是物理传输网络的问题，重新回到服务器端进行排查。</li>
+</ul>
+<h3 id="服务器端问题排查">0.2.2. 服务器端问题排查</h3><hr>
+<p>因为我们最开始的排查时候，已经使用tcpdump命令，锁定了这个问题是网络报文传输延迟。<br>现在排除服务器端网络报文延迟的可能后，<br>因为tcpdump抓包位置是在内核协议栈的入口<code>netif_receive_skb</code>里，通过<code>ptye_all</code>这个钩子链表，<br>捕获到报文的，整个过程是在内核软中断（确切说是RX softirq）里做的，<br>因此可以排除应用程序的干扰的可能。</p>
+<p>最值得怀疑的是：</p>
+<ul>
+<li>服务器端的网卡硬件</li>
+<li>网卡驱动</li>
+<li>其他可能</li>
+</ul>
+<p>那么接下来的任务及时进一步锁定排查的范围，</p>
+<p>首先从软硬件的角度去排查：<br>我们出问题的机器上使用的网卡是intel的x540万兆网卡, 硬件和驱动在圈里的口碑很不错的。<br>为此我们也跟intel的网卡同学进行了沟通，<br>尽管我们服务器上的网络配置存在瑕疵，但是不足以导致出现有1ms以上的报文延迟。</p>
+<p>受限于我们没有复现问题的手段，我们只能够从目前出问题的10+台服务器身上寻找突破。<br>同时，之前的排查也表明，这个问题在服务器重启之后就会消失，而且无法复现。</p>
+<h3 id="HPING测试结果再分析">0.2.3. HPING测试结果再分析</h3><hr>
+<p>我们手头的测试数据除了tcpdump，就只有hping测试结果可用，<br>因此只能在hping测试结果上，做文章。</p>
+<p>测试结果里出现了最大19ms+的延迟，</p>
+<figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs routeros"><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251230 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=19.2 ms<br></code></pre></td></tr></table></figure>
+<p>这是一个hping的测试结果</p>
+<figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><code class="hljs routeros">[mailto:root@gs-event2-mysql04.gz01:~$]root@gs-event2-mysql04.gz01:~$ !gre<br>grep 251230 -B 100 -C 20 B --color<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251294 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251295 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.0 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251296 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251297 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251298 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.0 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251299 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.0 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251300 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251301 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.0 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251302 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.0 ms​<br><span class="hljs-built_in">..</span><span class="hljs-built_in">..</span>(为方便讨论省略部分记录)<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251391 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251392 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251393 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.0 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251394 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251395 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251396 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251397 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251398 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251230 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=19.2 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251239 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=18.2 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251249 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=17.2 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251244 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=17.7 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251266 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=15.2 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251259 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=16.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251288 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=12.8 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251277 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=14.0 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251355 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=5.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251362 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=4.3 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251373 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=3.0 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251384 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=1.7 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251390 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=1.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251399 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251400 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251401 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251402 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251403 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251404 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.0 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251405 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.1 ms<br><span class="hljs-attribute">len</span>=46 <span class="hljs-attribute">ip</span>=100.69.110.41 <span class="hljs-attribute">ttl</span>=64 DF <span class="hljs-attribute">id</span>=0 <span class="hljs-attribute">sport</span>=0 <span class="hljs-attribute">flags</span>=RA <span class="hljs-attribute">seq</span>=251406 <span class="hljs-attribute">win</span>=0 <span class="hljs-attribute">rtt</span>=0.0 ms<br></code></pre></td></tr></table></figure>
+<p>把出问题的前100个和后20个报文打印，我们发现</p>
+<p>只是部分报文被延迟，其他报文是正常的。<br>打印下各个报文的， 发现序列号每增加1个，延迟大概降低100us，正好匹配发包时间间隔。</p>
+<figure class="highlight tap"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs tap">      序列号   延迟ms<br>1   <span class="hljs-number"> 251230 </span>19.2<br>2   <span class="hljs-number"> 251239 </span>18.2<br>3   <span class="hljs-number"> 251249 </span>17.2<br>4   <span class="hljs-number"> 251244 </span>17.7<br>5   <span class="hljs-number"> 251266 </span>15.2<br>6   <span class="hljs-number"> 251259 </span>16.1<br>7   <span class="hljs-number"> 251288 </span>12.8<br>8   <span class="hljs-number"> 251277 </span>14.0<br>9   <span class="hljs-number"> 251355 </span>5.1<br>10  <span class="hljs-number"> 251362 </span>4.3<br>11  <span class="hljs-number"> 251373 </span>3.0<br></code></pre></td></tr></table></figure>
+
+<p>相对第一个报文的序列号偏移， 延迟差值</p>
+<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs apache"><span class="hljs-attribute">1</span>	<span class="hljs-number">9</span> -<span class="hljs-number">1</span><br><span class="hljs-attribute">2</span>	<span class="hljs-number">19</span> -<span class="hljs-number">2</span><br><span class="hljs-attribute">3</span>	<span class="hljs-number">14</span> -<span class="hljs-number">1</span>.<span class="hljs-number">5</span><br><span class="hljs-attribute">4</span>	<span class="hljs-number">36</span> -<span class="hljs-number">4</span><br><span class="hljs-attribute">5</span>	<span class="hljs-number">29</span> -<span class="hljs-number">3</span>.<span class="hljs-number">1</span><br><span class="hljs-attribute">6</span>	<span class="hljs-number">58</span> -<span class="hljs-number">6</span>.<span class="hljs-number">4</span><br><span class="hljs-attribute">7</span>	<span class="hljs-number">47</span> -<span class="hljs-number">5</span>.<span class="hljs-number">2</span><br><span class="hljs-attribute">8</span>	<span class="hljs-number">125</span> -<span class="hljs-number">14</span>.<span class="hljs-number">1</span><br><span class="hljs-attribute">9</span>	<span class="hljs-number">132</span> -<span class="hljs-number">14</span>.<span class="hljs-number">9</span><br><span class="hljs-attribute">10</span>	<span class="hljs-number">143</span> -<span class="hljs-number">16</span>.<span class="hljs-number">2</span><br></code></pre></td></tr></table></figure>
+
+<p>通过上面分析我们可以确定：</p>
+<ul>
+<li>网络有问题: <code>部分报文被延迟了</code></li>
+<li>网络没问题: <code>不是全部报文被延迟</code><br>哈哈哈，<code>部分报文被延迟了， 但是不是全部报文</code>.</li>
+</ul>
+<h3 id="寻找被延迟的报文">0.2.4. 寻找被延迟的报文</h3><hr>
+<p>根据hping的分析，我们看到部分报文被延迟了，那么接下来需要排查下这个延迟是什么时候发生的，如果能够得到问题现场，<br>缩小排查的范围（比如硬件问题， 驱动问题，或者其他）。<br>经过考虑，设计一个测试场景，</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1 </span>启用hping报文的时间戳（timestamp）选项，让hping报文携带上client段的时间点（单位ms），<br><span class="hljs-symbol">2 </span>在服务器端（tcp server）增加一个直接编写的网桥KO，<br><span class="hljs-symbol">3 </span>网桥KO，检查hping报文的时间点跟服务器内核里的`tcp timestamp`的偏移<br><span class="hljs-symbol">4 </span>如果时间偏移超过预设值（<span class="hljs-number">10</span>ms+），那么可以判定该报文已经产生延迟了。<br></code></pre></td></tr></table></figure>
+
+<p>通过新编写的内核网桥测试模块， 我们获取到了出问题时候，内核的一些场景信息：</p>
+<figure class="highlight less"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><code class="hljs less"><span class="hljs-number">1</span>	<span class="hljs-selector-tag">Pid</span>: <span class="hljs-number">6579</span>, <span class="hljs-selector-tag">comm</span>: <span class="hljs-selector-tag">ss</span> <span class="hljs-selector-tag">Not</span> <span class="hljs-selector-tag">tainted</span> <span class="hljs-number">2.6</span><span class="hljs-selector-class">.32-573</span><span class="hljs-selector-class">.18</span><span class="hljs-selector-class">.1</span><span class="hljs-selector-class">.el6</span><span class="hljs-selector-class">.toav2</span><span class="hljs-selector-class">.x86_64</span> <span class="hljs-selector-id">#1</span>	<br><span class="hljs-number">2</span>	<span class="hljs-selector-tag">Call</span> <span class="hljs-selector-tag">Trace</span>:<br><span class="hljs-number">3</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">netdev_frame_hook</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x183</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x1ac</span> <span class="hljs-selector-attr">[hook]</span><br><span class="hljs-number">4</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">__netif_receive_skb</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x1c7</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x570</span><br><span class="hljs-number">5</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">netif_receive_skb</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x58</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x60</span><br><span class="hljs-number">6</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">napi_skb_finish</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x50</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x70</span><br><span class="hljs-number">7</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">napi_gro_receive</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x39</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x50</span><br><span class="hljs-number">8</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">ixgbe_clean_rx_irq</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x26a</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">xc70</span> <span class="hljs-selector-attr">[ixgbe]</span><br><span class="hljs-number">9</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">ixgbe_poll</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x40a</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x760</span> <span class="hljs-selector-attr">[ixgbe]</span><br><span class="hljs-number">10</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">net_rx_action</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x103</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x2f0</span><br><span class="hljs-number">11</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">__do_softirq</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">xc1</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x1e0</span><br><span class="hljs-number">12</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">tick_program_event</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x2f</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x40</span><br><span class="hljs-number">13</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">call_softirq</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x1c</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x30</span><br><span class="hljs-number">14</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">do_softirq</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x65</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">xa0</span><br><span class="hljs-number">15</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">irq_exit</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x85</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x90</span><br><span class="hljs-number">16</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">smp_apic_timer_interrupt</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x4a</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x60</span><br><span class="hljs-number">17</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">apic_timer_interrupt</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x13</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x20</span><br><span class="hljs-number">18</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">s_show</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x1ad</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x330</span><br><span class="hljs-number">19</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">s_show</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">xa7</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x330</span><br><span class="hljs-number">20</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">seq_read</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x289</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x400</span><br><span class="hljs-number">21</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">proc_reg_read</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x7e</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">xc0</span><br><span class="hljs-number">22</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">vfs_read</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">xb5</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x1a0</span><br><span class="hljs-number">23</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">fget_light_pos</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x16</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x50</span><br><span class="hljs-number">24</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">sys_read</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x51</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">xb0</span><br><span class="hljs-number">25</span>	<span class="hljs-selector-attr">[]</span> ? <span class="hljs-selector-tag">system_call_fastpath</span>+<span class="hljs-number">0</span><span class="hljs-selector-tag">x16</span>/<span class="hljs-number">0</span><span class="hljs-selector-tag">x1b</span><br></code></pre></td></tr></table></figure>
+<hr>
+<p>这里搜集到两个有用的信息：</p>
+<ul>
+<li>出问题的时候都是在ss命令的上下文里。</li>
+<li>出问题的时候都是在每个cpu的本地时钟中断里，而不是网卡中断里。<br>这两个信息对我们后续的排查起了很大的引导作用。</li>
+</ul>
+<p>SS命令的尝试</p>
+<ul>
+<li>跟数据库同学协调，在一个停了服务的机器上，删除了ss命令，问题消失。yeah！<br>因为断定SS命令会是问题的触发点。<br>期间，根据intel同学的建议，把网卡的亲和性做了调整，关闭掉irqbalance，发现问题依然存在。<br>但是问题出现的频率有所降低。</li>
+<li>根据出问题时候，cpu的调用栈没有在网卡中断的handler里，判定要么网卡中断被阻塞（关闭了），<br>要么是网卡本身就没有产生中断。<br>期间进行如下实验，但是失败了。</li>
+</ul>
+<p>尝试使jprobe去抓取网卡中断去处理函数失败。</p>
+<ul>
+<li>怀疑下半部被禁止了， 抓取bh的enable和disable的调用时间，未见异常。</li>
+<li>不停的跑ss命令20+分钟，未能复现问题。</li>
+<li>猜测这个问题是某个cpu出问题，卡顿了一下。同时，ss命令又跟问题触发条件相关。</li>
+</ul>
+<p>进行了一个实验：</p>
+<ul>
+<li>把ss运行的核跟网卡中断的核分割开，1问题消失了。ss不再导致报文延迟了。</li>
+<li>反向试验，ss命令强制跟网卡中断在一个cpu上，问题必现。<br>后续的测试试验，使用ss命令跟cpu在一个核上。</li>
+</ul>
+<h3 id="走弯路，掉进INET-DIAG坑里">0.2.5. 走弯路，掉进INET_DIAG坑里</h3><hr>
+<p>ss命令是用来dump 内核里的tcp的链接的。<br>其使用tcp diag和inet diag连个模块，通过netlink跟内核进行交互，<br>从而获取内核里的tcp socket的状态。<br>查看两个ko的代码，发现有基础bh相关的操作。<br>这是怀疑跟bh有关系， 虽然之前bh统计未见异常（疑神疑鬼哈哈哈——）</p>
+<p>把tcp diag和inetdiag重新加载，问题仍然存在<br>把tcp diag 和inet diag重新编译，并加入debug，发现bh前后工作很正常<br>结合网桥debug未发现异常</p>
+<h3 id="再次分析SS命令">0.2.6. 再次分析SS命令</h3><p>下载ss命令代码，研究ss命令的实现<br>发现关闭ss所有tcp socket dump的功能后，问题依然存在。<br>最后把一个不起眼的<code>读/proc/slabinfo的操作关闭后，问题消失了</code>！！！</p>
+<p>编写一个单独的程序读取&#x2F;proc&#x2F;slabinfo的程序，<br>发现一旦读的数据超过特定长度12000+，问题基本必现，只是延迟大小有些不同而已。</p>
+<h3 id="PROC-SLABINFO分析">0.2.7. &#x2F;PROC&#x2F;SLABINFO分析</h3><p>分析内核&#x2F;proc&#x2F;slabinfo代码发现， 其实现的代码里正好跟网桥debug时候输出的调用<code>s_show</code>重合。<br>其<code>s_show</code>的函数里会执行关闭irq的操作。<br>写一个内核debug ko，模拟了<code>s_show</code>做相同的操作，成功复现了ss相同的现象。报文延迟20+ms</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1 </span>   show_kmem_cache: <span class="hljs-number">1494580765</span>:<span class="hljs-number">721875</span> &lt;--- <span class="hljs-number">1494580765</span>:<span class="hljs-number">723446</span>, ext4_inode_cache: node0, full:<span class="hljs-number">16612</span>, partial:<span class="hljs-number">22</span>, free:<span class="hljs-number">0</span><br><span class="hljs-symbol">2 </span>   show_kmem_cache: <span class="hljs-number">1494580765</span>:<span class="hljs-number">726766</span> &lt;--- <span class="hljs-number">1494580765</span>:<span class="hljs-number">728612</span>, dentry: node0, full:<span class="hljs-number">18756</span>, partial:<span class="hljs-number">72</span>, free:<span class="hljs-number">0</span><br><span class="hljs-symbol">3 </span>   show_kmem_cache: <span class="hljs-number">1494580765</span>:<span class="hljs-number">729015</span> &lt;--- <span class="hljs-number">1494580765</span>:<span class="hljs-number">732834</span>, radix_tree_node: node0, full:<span class="hljs-number">29923</span>, partial:<span class="hljs-number">10315</span>, free:<span class="hljs-number">0</span><br><span class="hljs-symbol">4 </span>   show_kmem_cache: <span class="hljs-number">1494580765</span>:<span class="hljs-number">733024</span> &lt;--- <span class="hljs-number">1494580765</span>:<span class="hljs-number">738746</span>, radix_tree_node: node1, full:<span class="hljs-number">995</span>, partial:<span class="hljs-number">39315</span>, free:<span class="hljs-number">0</span><br><span class="hljs-symbol">5 </span>   show_kmem_cache: <span class="hljs-number">1494580765</span>:<span class="hljs-number">738960</span> &lt;--- <span class="hljs-number">1494580765</span>:<span class="hljs-number">757472</span>, buffer_head: node0, full:<span class="hljs-number">48009</span>, partial:<span class="hljs-number">148216</span>, free:<span class="hljs-number">0</span><br><span class="hljs-symbol">6 </span>   show_kmem_cache: <span class="hljs-number">1494580765</span>:<span class="hljs-number">758144</span> &lt;--- <span class="hljs-number">1494580765</span>:<span class="hljs-number">815435</span>, buffer_head: node1, full:<span class="hljs-number">1143</span>, partial:<span class="hljs-number">402863</span>, free:<span class="hljs-number">0</span><br></code></pre></td></tr></table></figure>
+
+<p>感谢隔壁老王对这个问题的技术指导，感谢数据库和网络兄弟团队的支持。</p>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/IRQ/" class="category-chain-item">IRQ</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/memory/" class="print-no-link">#memory</a>
+      
+        <a href="/tags/IPv4/" class="print-no-link">#IPv4</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>slabinfo 惹的祸</div>
+      <div>https://martinbj2008.github.io/2017/05/15/2017-05-15-slabinfo-cause-delay/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>May 15, 2017</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2018/10/03/xfrm-configure-xfrm-state-and-policy-with-iproute2/" title="xfrm: configure xfrm state and policy with iproute2">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">xfrm: configure xfrm state and policy with iproute2</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2016/11/23/what-is-tfo/" title="WHAT is TFO">
+                        <span class="hidden-mobile">WHAT is TFO</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

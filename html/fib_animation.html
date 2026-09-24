@@ -1,0 +1,421 @@
+---
+layout: false
+---
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>FIB Trie 路由效果演示</title>
+<style>
+body{font-family:Arial,sans-serif;background:#f5f5f5;margin:0;padding:6px 10px;display:flex;flex-direction:column;align-items:center}
+.header{display:flex;align-items:center;gap:16px;margin-bottom:2px;width:100%;max-width:1800px}
+.title{font-size:20px;font-weight:bold;color:#1565C0;white-space:nowrap}
+.controls{display:flex;gap:8px;align-items:center}
+.controls button{padding:4px 14px;font-size:12px;border:none;border-radius:4px;cursor:pointer;background:#1976D2;color:#fff}
+.controls button:hover{background:#1565C0}
+.status-row{display:flex;align-items:center;gap:12px;width:100%;max-width:1800px;margin-bottom:4px}
+.progress-bar{flex:1;height:5px;background:#ddd;border-radius:3px}
+.progress-bar .fill{height:100%;background:#43A047;border-radius:3px;transition:width 0.4s}
+.step-info{font-size:12px;color:#333;white-space:nowrap;min-width:280px;text-align:right}
+.svg-container{background:white;border:1px solid #ddd;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,0.08);overflow:auto;width:100%;max-width:1800px;box-sizing:border-box}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="title">FIB Trie 路由效果演示</div>
+  <div class="controls">
+    <button id="btn-play" onclick="startAnimation()">&#9654; 播放</button>
+    <button onclick="resetAnimation()">&#10227; 重置</button>
+  </div>
+</div>
+<div class="status-row">
+  <div class="progress-bar"><div class="fill" id="progress" style="width:0%"></div></div>
+  <div class="step-info" id="step-info">点击"播放"开始动画</div>
+</div>
+<div class="svg-container" id="svg-container"></div>
+<script>
+const POS = {"root": {"1": [873.5, 63], "2": [873.5, 63], "3": [873.5, 63], "4": [873.5, 63], "5": [873.5, 63], "6": [873.5, 63], "7": [873.5, 63]}, "87b9": {"2": [847.0, 170], "3": [847.0, 170], "4": [847.0, 170], "5": [692.0, 343], "6": [638.5, 343], "7": [638.5, 343]}, "46a7": {"5": [953.5, 170], "6": [953.5, 170], "7": [953.5, 170]}, "624f": {"6": [497.0, 516], "7": [652.0, 516]}, "7fff": {"1": [873.5, 168], "2": [1082.0, 341], "3": [1082.0, 341], "4": [1082.0, 341], "5": [927.0, 514], "6": [1122.0, 514], "7": [1277.0, 514]}, "ebbe": {"2": [772.0, 341], "3": [772.0, 341], "4": [772.0, 341], "5": [617.0, 514], "6": [502.0, 687], "7": [657.0, 687]}, "0056": {"5": [1237.0, 341], "6": [1432.0, 341], "7": [1587.0, 341]}, "8491": {"6": [812.0, 687], "7": [967.0, 687]}, "07c4": {"7": [160.0, 514]}};
+const BASE = {"root": [873.5, 63], "87b9": [847.0, 170], "46a7": [953.5, 170], "624f": [497.0, 516], "7fff": [873.5, 168], "ebbe": [772.0, 341], "0056": [1237.0, 341], "8491": [812.0, 687], "07c4": [160.0, 514]};
+const ELEM = {"root": "n-root", "87b9": "n-87b9", "46a7": "n-46a7", "624f": "n-624f", "7fff": "n-7fff", "ebbe": "n-ebbe", "0056": "n-0056", "8491": "n-8491", "07c4": "n-07c4"};
+const W=1747,H=799,AH=10,AHW=5;
+const ROUTES=[
+'9.9.24.0/24 dev veth0','9.9.8.0/24 dev veth0',
+'9.9.8.0/30 dev veth0','9.9.8.0/26 dev veth0',
+'9.24.0.0/24 dev veth0','9.9.9.0/24 dev veth2',
+'9.9.0.0/16 dev veth2'];
+const CMDS=[
+'ip r a 9.9.24.0/24 dev veth0','ip r a 9.9.8.0/24 dev veth0',
+'ip r a 9.9.8.0/30 dev veth0','ip r a 9.9.8.0/26 dev veth0',
+'ip r a 9.24.0.0/24 dev veth0','ip r a 9.9.9.0/24 dev veth2',
+'ip r a 9.9.0.0/16 dev veth2'];
+
+let spd=1,timers=[],playing=false;
+const si=document.getElementById('step-info');
+function el(id){return document.getElementById(id)}
+function sop(id,v){const e=el(id);if(e)e.setAttribute('opacity',v)}
+function T(ms){return ms*spd}
+function setProg(p){el('progress').style.width=p+'%'}
+function updateSpeed(){}
+function setCL(t){const e=el('cmd-label');if(e)e.textContent=t}
+
+function slotPos(nodeId,step,slotIdx){
+  const p=POS[nodeId][step];if(!p)return null;
+  const cx=p[0],ty=p[1],by=ty+119;let sx;
+  if(nodeId==='87b9')sx=cx+45+slotIdx*30;
+  else if(nodeId==='46a7')sx=cx-115+slotIdx*30;
+  else if(nodeId==='624f')sx=cx+125+slotIdx*30;
+  else{sx=cx;return[sx,ty+55]}
+  return[sx,by]}
+
+function tweenMove(id,x1,y1,x2,y2,dur,del,cb){
+  const e=el(id);if(!e)return;e.setAttribute('transform','translate('+x1+','+y1+')');
+  const s=performance.now()+(del||0);
+  function step(now){if(now<s){requestAnimationFrame(step);return}
+    const t=Math.min((now-s)/dur,1);
+    e.setAttribute('transform','translate('+(x1+(x2-x1)*t)+','+(y1+(y2-y1)*t)+')');
+    if(t<1)requestAnimationFrame(step);else if(cb)cb()}
+  requestAnimationFrame(step)}
+
+function moveNodeToStep(nodeId,step,dur,del,cb){
+  const p=POS[nodeId][step];if(!p)return;
+  const b=BASE[nodeId],eid=ELEM[nodeId],e=el(eid);if(!e)return;
+  const dx=p[0]-b[0],dy=p[1]-b[1];
+  const ct=e.getAttribute('transform')||'';let cx0=0,cy0=0;
+  const m=ct.match(/translate\(([^,]+),([^)]+)\)/);
+  if(m){cx0=parseFloat(m[1]);cy0=parseFloat(m[2])}
+  tweenMove(eid,cx0,cy0,dx,dy,dur,del,cb)}
+
+function setNodeAtStep(nodeId,step){
+  const p=POS[nodeId][step];if(!p)return;
+  const b=BASE[nodeId],e=el(ELEM[nodeId]);if(!e)return;
+  e.setAttribute('transform','translate('+(p[0]-b[0])+','+(p[1]-b[1])+')')}
+
+function tweenOp(id,fr,to,dur,del,cb){
+  const e=el(id);if(!e)return;e.setAttribute('opacity',fr);
+  const s=performance.now()+(del||0);
+  function step(now){if(now<s){requestAnimationFrame(step);return}
+    const t=Math.min((now-s)/dur,1);e.setAttribute('opacity',fr+(to-fr)*t);
+    if(t<1)requestAnimationFrame(step);else if(cb)cb()}
+  requestAnimationFrame(step)}
+
+function flashEl(id,n,iv,opts,cb){
+  const e=el(id);if(!e)return;let c=0;
+  const t=setInterval(()=>{c++;e.setAttribute('opacity',c%2===1?'0.2':'1');
+    if(c>=n*2){clearInterval(t);e.setAttribute('opacity','1');
+      if(opts&&opts.ff)e.setAttribute('fill',opts.ff);
+      if(opts&&opts.fw)e.setAttribute('font-weight',opts.fw);if(cb)cb()}},iv)}
+
+function flashThenFade(id,n,iv,fd,cb){
+  const e=el(id);if(!e)return;let c=0;
+  const t=setInterval(()=>{c++;e.setAttribute('opacity',c%2===1?'0.15':'1');
+    if(c>=n*2){clearInterval(t);e.setAttribute('opacity','1');tweenOp(id,1,0,fd,0,cb)}},iv)}
+
+function flashBg(id,n,iv,cb){
+  const e=el(id);if(!e)return;let c=0;
+  const t=setInterval(()=>{c++;e.setAttribute('opacity',c%2===1?'0.3':'1');
+    if(c>=n*2){clearInterval(t);e.setAttribute('opacity','1');if(cb)cb()}},iv)}
+
+function setEC(color,ids){ids.forEach(id=>{const g=el(id);if(!g)return;
+  g.querySelectorAll('path').forEach(p=>p.setAttribute('stroke',color));
+  g.querySelectorAll('polygon').forEach(p=>p.setAttribute('fill',color))})}
+
+function resetEdges(){setEC('#333',['e-root-7fff','e-root-87b9','e-root-46a7',
+  'e-87b9-ebbe','e-87b9-7fff','e-87b9-624f','e-87b9-07c4',
+  'e-46a7-87b9','e-46a7-0056','e-624f-ebbe','e-624f-8491'])}
+
+function showR(cnt,hl){for(let i=0;i<7;i++){const r=el('r'+i);if(!r)continue;
+  if(i<cnt){r.setAttribute('opacity','1');r.setAttribute('fill','#333');r.setAttribute('font-weight','normal')}
+  else r.setAttribute('opacity','0')}
+  if(hl>=0&&hl<cnt){const r=el('r'+hl);if(r){r.setAttribute('fill','#e03030');r.setAttribute('font-weight','bold')}}
+  resizeRoute(cnt)}
+function resizeRoute(cnt){
+  const bg=el('route-bg');const cl=el('cmd-label');if(!bg)return;
+  const hasBlank=(cnt<7)?1:0;
+  const cmdH=cnt>0?18:0;
+  const h=32+cnt*16+hasBlank*16+cmdH;
+  bg.setAttribute('height',h);
+  if(cl)cl.setAttribute('y',4+32+cnt*16+hasBlank*16+2)}
+function updateEdge(id,x1,y1,x2,y2){
+  const g=el(id);if(!g)return;const my=(y1+y2)/2,ey=y2-AH;
+  const path=g.querySelector('path'),poly=g.querySelector('polygon');
+  if(path)path.setAttribute('d','M '+x1+','+y1+' C '+x1+','+my+' '+x2+','+my+' '+x2+','+ey);
+  if(poly)poly.setAttribute('points',(x2-AHW)+','+ey+' '+x2+','+y2+' '+(x2+AHW)+','+ey)}
+
+function tweenEdge(id,x1a,y1a,x2a,y2a,x1b,y1b,x2b,y2b,dur,del,cb){
+  const s=performance.now()+(del||0);
+  function step(now){if(now<s){requestAnimationFrame(step);return}
+    const t=Math.min((now-s)/dur,1);
+    updateEdge(id,x1a+(x1b-x1a)*t,y1a+(y1b-y1a)*t,x2a+(x2b-x2a)*t,y2a+(y2b-y2a)*t);
+    if(t<1)requestAnimationFrame(step);else if(cb)cb()}
+  requestAnimationFrame(step)}
+
+function edgeEP(fromNode,fromSlot,toNode,step){
+  let x1,y1;
+  if(fromSlot!==null&&fromSlot!==undefined){const sp=slotPos(fromNode,step,fromSlot);x1=sp[0];y1=sp[1]}
+  else{const fp=POS[fromNode][step];x1=fp[0];y1=fp[1]+55}
+  const tp=POS[toNode][step];return[x1,y1,tp[0],tp[1]]}
+
+function setEdge(eid,fromNode,fromSlot,toNode,step){
+  const ep=edgeEP(fromNode,fromSlot,toNode,step);updateEdge(eid,ep[0],ep[1],ep[2],ep[3])}
+
+function morphEdge(eid,fromNode,fromSlot,toNode,sA,sB,dur,del,cb){
+  const a=edgeEP(fromNode,fromSlot,toNode,sA),b=edgeEP(fromNode,fromSlot,toNode,sB);
+  tweenEdge(eid,a[0],a[1],a[2],a[3],b[0],b[1],b[2],b[3],dur,del,cb)}
+
+function morphEdgeMix(eid,fromNode,fromSlot,toNode,sFromA,sToA,sFromB,sToB,dur,del,cb){
+  const sp1=fromSlot!==null&&fromSlot!==undefined?slotPos(fromNode,sFromA,fromSlot):[POS[fromNode][sFromA][0],POS[fromNode][sFromA][1]+55];
+  const tp1=POS[toNode][sToA];
+  const sp2=fromSlot!==null&&fromSlot!==undefined?slotPos(fromNode,sFromB,fromSlot):[POS[fromNode][sFromB][0],POS[fromNode][sFromB][1]+55];
+  const tp2=POS[toNode][sToB];
+  tweenEdge(eid,sp1[0],sp1[1],tp1[0],tp1[1],sp2[0],sp2[1],tp2[0],tp2[1],dur,del,cb)}
+
+function bEdge(id){
+  return '<g id="'+id+'" opacity="0"><path d="M 0,0 C 0,0 0,0 0,0" fill="none" stroke="#333" stroke-width="1.5"/><polygon points="0,0 0,0 0,0" fill="#333" stroke="none"/></g>'}
+
+function bLeaf(id,label,key,params,fas,cx,cy,bgid){
+  const h=64+(fas.length-1)*14,x=cx-140,y=cy;
+  let s='<g id="'+id+'" opacity="0"><rect id="'+bgid+'" x="'+x+'" y="'+y+'" width="280" height="'+h+'" rx="6" ry="6" fill="#FFF3E0" stroke="#E65100" stroke-width="2"/>';
+  s+='<rect x="'+(x+4)+'" y="'+(y+4)+'" width="52" height="14" rx="3" ry="3" fill="#E65100"/>';
+  s+='<text x="'+(x+30)+'" y="'+(y+11)+'" font-family="Arial" font-size="9" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="central">'+label+'</text>';
+  s+='<text x="'+cx+'" y="'+(y+22)+'" font-family="Arial" font-size="12" font-weight="bold" fill="#212121" text-anchor="middle" dominant-baseline="central">key: '+key+'</text>';
+  s+='<text x="'+cx+'" y="'+(y+38)+'" font-family="Arial" font-size="10" fill="#555" text-anchor="middle" dominant-baseline="central">'+params+'</text>';
+  for(let i=0;i<fas.length;i++)s+='<text x="'+cx+'" y="'+(y+52+i*14)+'" font-family="Arial" font-size="9" fill="#777" text-anchor="middle" dominant-baseline="central">'+fas[i]+'</text>';
+  return s+'</g>'}
+
+function bRoot(id,label,cx,cy,bgid){
+  const x=cx-110,y=cy;
+  return '<g id="'+id+'" opacity="1"><rect id="'+bgid+'" x="'+x+'" y="'+y+'" width="220" height="55" rx="6" ry="6" fill="#E3F2FD" stroke="#000" stroke-width="2"/><text x="'+(x+32)+'" y="'+(y+11)+'" font-family="Arial" font-size="11" font-weight="bold" fill="#000" text-anchor="middle" dominant-baseline="central">'+label+'</text><text x="'+cx+'" y="'+(y+24)+'" font-family="Arial" font-size="12" font-weight="bold" fill="#212121" text-anchor="middle" dominant-baseline="central">key: 0.0.0.0/0</text><text x="'+cx+'" y="'+(y+40)+'" font-family="Arial" font-size="10" fill="#555" text-anchor="middle" dominant-baseline="central">pos:32 bits:0 slen:32</text></g>'}
+
+function bNode(id,kv,ip,sl,bytes,pfx,bts,pos,cx,cy){
+  const bits32=[];for(let b=0;b<4;b++){const v=parseInt(bytes[b],16);for(let j=7;j>=0;j--)bits32.push((v>>j)&1?'1':'0')}
+  const L=cx-320,C=20;let s='<g id="'+id+'" opacity="0">';
+  s+='<rect x="'+L+'" y="'+cy+'" width="640" height="20" fill="#f0f0f0" stroke="black" stroke-width="1"/>';
+  s+='<text x="'+(L+5)+'" y="'+(cy+10)+'" font-family="Arial" font-size="14" dominant-baseline="central">'+kv+'</text>';
+  s+='<text x="'+cx+'" y="'+(cy+10)+'" font-family="Arial" font-size="14" font-weight="bold" text-anchor="middle" dominant-baseline="central">'+ip+'</text>';
+  s+='<text x="'+(L+635)+'" y="'+(cy+10)+'" font-family="Arial" font-size="14" fill="#555" text-anchor="end" dominant-baseline="central">'+sl+'</text>';
+  for(let i=0;i<4;i++){const bx=L+i*160;
+    s+='<rect x="'+bx+'" y="'+(cy+20)+'" width="160" height="20" fill="#e0e0e0" stroke="black" stroke-width="1"/>';
+    s+='<text x="'+(bx+80)+'" y="'+(cy+30)+'" font-family="Arial" font-size="12" text-anchor="middle" dominant-baseline="central">'+bytes[i]+'</text>'}
+  for(let i=0;i<32;i++){const bx=L+i*C;let f='#FFF',tf='black';
+    if(i>=pfx&&i<pfx+bts){f='#006400';tf='white'}else if(i>=pfx+bts)f='#FFF8E7';
+    s+='<rect x="'+bx+'" y="'+(cy+40)+'" width="'+C+'" height="'+C+'" fill="'+f+'" stroke="black" stroke-width="0.5"/>';
+    s+='<text x="'+(bx+10)+'" y="'+(cy+50)+'" font-family="Arial" font-size="8" fill="'+tf+'" text-anchor="middle" dominant-baseline="central">'+bits32[i]+'</text>'}
+  s+='<rect x="'+L+'" y="'+cy+'" width="640" height="60" fill="none" stroke="black" stroke-width="1.5"/>';
+  const bs=L+pfx*C;
+  s+='<rect x="'+L+'" y="'+(cy+60)+'" width="'+(pfx*C)+'" height="20" fill="none" stroke="black" stroke-width="1"/>';
+  s+='<text x="'+(L+pfx*C/2)+'" y="'+(cy+70)+'" font-family="Arial" font-size="9" text-anchor="middle" dominant-baseline="central">Prefix='+pfx+'</text>';
+  s+='<rect x="'+bs+'" y="'+(cy+60)+'" width="'+(bts*C)+'" height="20" fill="#E6E6FA" stroke="black" stroke-width="1"/>';
+  s+='<text x="'+(bs+bts*C/2)+'" y="'+(cy+70)+'" font-family="Arial" font-size="9" text-anchor="middle" dominant-baseline="central">bits='+bts+'</text>';
+  s+='<rect x="'+(bs+bts*C)+'" y="'+(cy+60)+'" width="'+(pos*C)+'" height="20" fill="#E6E6FA" stroke="black" stroke-width="1"/>';
+  s+='<text x="'+(bs+bts*C+pos*C/2)+'" y="'+(cy+70)+'" font-family="Arial" font-size="9" text-anchor="middle" dominant-baseline="central">pos='+pos+'</text>';
+  const eW=30,eH=24,eN=Math.pow(2,bts),eStart=bs-eW,eY=cy+80+15;
+  s+='<line x1="'+bs+'" y1="'+(cy+80)+'" x2="'+eStart+'" y2="'+eY+'" stroke="black" stroke-width="1.5"/>';
+  s+='<line x1="'+(bs+bts*C)+'" y1="'+(cy+80)+'" x2="'+(eStart+eN*eW)+'" y2="'+eY+'" stroke="black" stroke-width="1.5"/>';
+  for(let i=0;i<eN;i++){const ex=eStart+i*eW;
+    s+='<rect x="'+ex+'" y="'+eY+'" width="'+eW+'" height="'+eH+'" fill="#E6E6FA" stroke="black" stroke-width="0.5"/>';
+    s+='<text x="'+(ex+15)+'" y="'+(eY+12)+'" font-family="Arial" font-size="10" text-anchor="middle" dominant-baseline="central">'+i+'</text>'}
+  return s+'</g>'}
+
+function buildSVG(){
+  let s='<svg xmlns="http://www.w3.org/2000/svg" width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'"><rect width="'+W+'" height="'+H+'" fill="#FAFAFA"/>';
+s+='<g id="routeBox"><rect id="route-bg" x="467" y="4" width="282" height="32" rx="5" ry="5" fill="#F5F5F5" stroke="#9E9E9E" stroke-width="1" opacity="0.95"/>';
+  s+='<text x="479" y="20" font-family="Arial" font-size="12" font-weight="bold" fill="#1565C0" dominant-baseline="central">Route Table</text>';
+  s+='<line x1="471" y1="28" x2="745" y2="28" stroke="#9E9E9E" stroke-width="0.5"/>';
+  for(let i=0;i<7;i++)s+='<text x="479" y="'+(43+i*16)+'" id="r'+i+'" font-family="monospace" font-size="10" fill="#333" dominant-baseline="central" opacity="0">'+ROUTES[i]+'</text>';
+  s+='<text x="479" y="43" id="cmd-label" font-family="monospace" font-size="12" font-weight="bold" fill="#e03030" dominant-baseline="central" opacity="0"></text></g>';
+  // Edges
+  var eids=['e-root-7fff','e-root-87b9','e-root-46a7','e-87b9-ebbe','e-87b9-7fff','e-87b9-624f','e-87b9-07c4','e-46a7-87b9','e-46a7-0056','e-624f-ebbe','e-624f-8491'];
+  eids.forEach(function(eid){s+=bEdge(eid)});
+  // Nodes at first-appearance positions
+  s+=bRoot('n-root','Root_b87d',873.5,63,'root-bg');
+  s+=bNode('n-87b9','kv_87b9','9.9.0.0/19','slen=16',['09','09','00','00'],19,2,11,847.0,170);
+  s+=bNode('n-46a7','kv_46a7','9.0.0.0/11','slen=19',['09','00','00','00'],11,2,19,953.5,170);
+  s+=bNode('n-624f','kv_624f','9.9.8.0/23','slen=8',['09','09','08','00'],23,2,7,497.0,516);
+  s+=bLeaf('n-7fff','Leaf_7fff','9.9.24.0/24','pos:0 bits:0 slen:8',['FA_ea61a2: tb:254 slen:8 type:1 nh:1'],873.5,168,'bg-7fff');
+  s+=bLeaf('n-ebbe','Leaf_ebbe','9.9.8.0/24','pos:0 bits:0 slen:8',['FA_ded64e: tb:254 slen:2 type:1 nh:1','FA_ca217d: tb:254 slen:6 type:1 nh:1','FA_2733c0: tb:254 slen:8 type:1 nh:1'],772.0,341,'bg-ebbe');
+  s+=bLeaf('n-0056','Leaf_0056','9.24.0.0/24','pos:0 bits:0 slen:8',['FA_78ae4e: tb:254 slen:8 type:1 nh:1'],1237.0,341,'bg-0056');
+  s+=bLeaf('n-8491','Leaf_8491','9.9.9.0/24','pos:0 bits:0 slen:8',['FA_ae939f: tb:254 slen:8 type:1 nh:1'],812.0,687,'bg-8491');
+  s+=bLeaf('n-07c4','Leaf_07c4','9.9.0.0/16','pos:0 bits:0 slen:16',['FA_565ede: tb:254 slen:16 type:1 nh:1'],160.0,514,'bg-07c4');
+  s+='</svg>';return s}
+
+function showEmpty(){
+  ['e-root-7fff','e-root-87b9','e-root-46a7','e-87b9-ebbe','e-87b9-7fff','e-87b9-624f','e-87b9-07c4',
+   'e-46a7-87b9','e-46a7-0056','e-624f-ebbe','e-624f-8491',
+   'n-46a7','n-87b9','n-624f','n-7fff','n-ebbe','n-0056','n-8491','n-07c4'
+  ].forEach(id=>sop(id,0));
+  Object.keys(ELEM).forEach(nid=>{const e=el(ELEM[nid]);if(e)e.setAttribute('transform','translate(0,0)')});
+  showR(0,-1);sop('cmd-label',0);setProg(0);
+  const bg=el('route-bg');if(bg)bg.setAttribute('height','48')}
+
+document.getElementById('svg-container').innerHTML=buildSVG();
+showEmpty();
+
+function resetAnimation(){timers.forEach(t=>clearTimeout(t));timers=[];playing=false;
+  el('btn-play').textContent='\u25B6 播放';showEmpty();si.textContent='点击"播放"开始动画'}
+function at(ms,fn){timers.push(setTimeout(fn,T(ms)))}
+
+function startAnimation(){
+  if(playing)return;playing=true;el('btn-play').textContent='\u23F8 播放中...';showEmpty();
+  let t=500;const MD=800;
+
+  // === Route1 ===
+  at(t,()=>{setCL(CMDS[0]);si.textContent='\u23F5 Route1: '+CMDS[0];tweenOp('cmd-label',0,1,600,0);showR(1,0);flashEl('r0',3,200)});
+  t+=1300;
+  at(t,()=>{si.textContent='\u23F5 Route1: 新建 Leaf_7fff (9.9.24.0/24) 挂在 Root 下';
+    setEdge('e-root-7fff','root',null,'7fff',1);setEC('#E03030',['e-root-7fff']);
+    tweenOp('n-7fff',0,1,800,0);tweenOp('e-root-7fff',0,1,800,0)});
+  t+=1200;
+  at(t,()=>{flashEl('r0',2,250,{ff:'#333',fw:'normal'},()=>{sop('cmd-label',0);resetEdges();setProg(14);
+    si.textContent='\u2705 Route1 完成: Root \u2192 Leaf_7fff, 2节点'})});
+  t+=1500;
+
+  // === Route2 ===
+  at(t,()=>{setCL(CMDS[1]);si.textContent='\u23F5 Route2: '+CMDS[1];tweenOp('cmd-label',0,1,600,0);showR(2,1);flashEl('r1',3,200)});
+  t+=1300;
+  at(t,()=>{si.textContent='\u23F5 Route2-\u2460: 移动节点, 连线延伸';
+    setEC('#E03030',['e-root-7fff']);
+    moveNodeToStep('root',2,MD);moveNodeToStep('7fff',2,MD);
+    morphEdge('e-root-7fff','root',null,'7fff',1,2,MD)});
+  t+=1000;
+  at(t,()=>{si.textContent='⏵ Route2-②: 插入 Node(kv_87b9)';
+    setNodeAtStep('87b9',2);tweenOp('n-87b9',0,1,1000,0)});
+  t+=1200;
+  at(t,()=>{si.textContent='⏵ Route2-③a: 新建 Leaf_ebbe, 画 kv_87b9→Leaf_ebbe';
+    setNodeAtStep('ebbe',2);setEdge('e-87b9-ebbe','87b9',1,'ebbe',2);
+    setEC('#E03030',['e-87b9-ebbe']);
+    tweenOp('n-ebbe',0,1,800,0);tweenOp('e-87b9-ebbe',0,1,800,0)});
+  t+=1000;
+  at(t,()=>{si.textContent='⏵ Route2-③b: 画 kv_87b9→Leaf_7fff';
+    setEdge('e-87b9-7fff','87b9',3,'7fff',2);
+    setEC('#E03030',['e-87b9-7fff']);
+    tweenOp('e-87b9-7fff',0,1,800,0)});
+  t+=1000;
+  at(t,()=>{si.textContent='⏵ Route2-④: 删除旧连线 Root→Leaf_7fff';flashThenFade('e-root-7fff',3,180,800)});
+  t+=1500;
+  at(t,()=>{si.textContent='⏵ Route2-⑤: 建立 Root→kv_87b9';
+    setEdge('e-root-87b9','root',null,'87b9',2);
+    setEC('#E03030',['e-root-87b9']);
+    tweenOp('e-root-87b9',0,1,800,0)});  t+=1200;
+  at(t,()=>{flashEl('r1',2,250,{ff:'#333',fw:'normal'},()=>{sop('cmd-label',0);resetEdges();setProg(28);
+    si.textContent='\u2705 Route2 完成: 4节点'})});
+  t+=1500;
+
+  // === Route3 ===
+  at(t,()=>{setCL(CMDS[2]);si.textContent='\u23F5 Route3: '+CMDS[2];tweenOp('cmd-label',0,1,600,0);showR(3,2);flashEl('r2',3,200)});
+  t+=1300;
+  at(t,()=>{si.textContent='\u23F5 Route3: 节点微移, Leaf_ebbe +FA(slen:2)';
+    moveNodeToStep('root',3,MD);moveNodeToStep('87b9',3,MD);moveNodeToStep('7fff',3,MD);moveNodeToStep('ebbe',3,MD);
+    morphEdge('e-root-87b9','root',null,'87b9',2,3,MD);morphEdge('e-87b9-ebbe','87b9',1,'ebbe',2,3,MD);
+    morphEdge('e-87b9-7fff','87b9',3,'7fff',2,3,MD);flashBg('bg-ebbe',4,200)});
+  t+=1200;
+  at(t,()=>{flashEl('r2',2,250,{ff:'#333',fw:'normal'},()=>{sop('cmd-label',0);setProg(42);
+    si.textContent='\u2705 Route3 完成: +FA(/30)'})});
+  t+=1500;
+
+  // === Route4 ===
+  at(t,()=>{setCL(CMDS[3]);si.textContent='\u23F5 Route4: '+CMDS[3];tweenOp('cmd-label',0,1,600,0);showR(4,3);flashEl('r3',3,200)});
+  t+=1300;
+  at(t,()=>{si.textContent='\u23F5 Route4: 节点微移, Leaf_ebbe +FA(slen:6)';
+    moveNodeToStep('root',4,MD);moveNodeToStep('87b9',4,MD);moveNodeToStep('7fff',4,MD);moveNodeToStep('ebbe',4,MD);
+    morphEdge('e-root-87b9','root',null,'87b9',3,4,MD);morphEdge('e-87b9-ebbe','87b9',1,'ebbe',3,4,MD);
+    morphEdge('e-87b9-7fff','87b9',3,'7fff',3,4,MD);flashBg('bg-ebbe',4,200)});
+  t+=1200;
+  at(t,()=>{flashEl('r3',2,250,{ff:'#333',fw:'normal'},()=>{sop('cmd-label',0);setProg(57);
+    si.textContent='\u2705 Route4 完成: +FA(/26)'})});
+  t+=1500;
+
+  // === Route5 ===
+  at(t,()=>{setCL(CMDS[4]);si.textContent='\u23F5 Route5: '+CMDS[4];tweenOp('cmd-label',0,1,600,0);showR(5,4);flashEl('r4',3,200)});
+  t+=1300;
+  at(t,()=>{si.textContent='\u23F5 Route5-\u2460: 移动节点, 连线延伸';
+    setEC('#E03030',['e-root-87b9']);
+    moveNodeToStep('root',5,MD);moveNodeToStep('87b9',5,MD);moveNodeToStep('7fff',5,MD);moveNodeToStep('ebbe',5,MD);
+    morphEdge('e-root-87b9','root',null,'87b9',4,5,MD);morphEdge('e-87b9-ebbe','87b9',1,'ebbe',4,5,MD);
+    morphEdge('e-87b9-7fff','87b9',3,'7fff',4,5,MD)});
+  t+=1000;
+  at(t,()=>{si.textContent='\u23F5 Route5-\u2461: 插入 Node(kv_46a7)';
+    setNodeAtStep('46a7',5);tweenOp('n-46a7',0,1,1000,0)});
+  t+=1200;
+  at(t,()=>{si.textContent='⏵ Route5-③a: 画 kv_46a7→kv_87b9';
+    setEdge('e-46a7-87b9','46a7',1,'87b9',5);
+    setEC('#E03030',['e-46a7-87b9']);
+    tweenOp('e-46a7-87b9',0,1,800,0)});
+  t+=1000;
+  at(t,()=>{si.textContent='⏵ Route5-③b: 新建 Leaf_0056, 画 kv_46a7→Leaf_0056';
+    setNodeAtStep('0056',5);setEdge('e-46a7-0056','46a7',3,'0056',5);
+    setEC('#E03030',['e-46a7-0056']);
+    tweenOp('n-0056',0,1,800,0);tweenOp('e-46a7-0056',0,1,800,0)});
+  t+=1000;
+  at(t,()=>{si.textContent='⏵ Route5-④: 删除旧连线 Root→kv_87b9';flashThenFade('e-root-87b9',3,180,800)});
+  t+=1500;
+  at(t,()=>{si.textContent='⏵ Route5-⑤: 建立 Root→kv_46a7';
+    setEdge('e-root-46a7','root',null,'46a7',5);
+    setEC('#E03030',['e-root-46a7']);
+    tweenOp('e-root-46a7',0,1,800,0)});  t+=1200;
+  at(t,()=>{flashEl('r4',2,250,{ff:'#333',fw:'normal'},()=>{sop('cmd-label',0);resetEdges();setProg(71);
+    si.textContent='\u2705 Route5 完成: 6节点'})});
+  t+=1500;
+
+  // === Route6 ===
+  at(t,()=>{setCL(CMDS[5]);si.textContent='⏵ Route6: '+CMDS[5];tweenOp('cmd-label',0,1,600,0);showR(6,5);flashEl('r5',3,200)});
+  t+=1300;
+  // Route6 nodes have different offsets: 87b9(-53.5,0), 7fff(+195,0), ebbe(-115,+173), 0056(+195,0)
+  // Split into 2 sub-moves: left-movers first, then right-movers
+  at(t,()=>{si.textContent='⏵ Route6-①a: kv_87b9/Leaf_ebbe 向左移动, 相关连线跟随';
+    setEC('#E03030',['e-87b9-ebbe']);
+    moveNodeToStep('87b9',6,MD);moveNodeToStep('ebbe',6,MD);
+    morphEdge('e-46a7-87b9','46a7',1,'87b9',5,6,MD);morphEdge('e-87b9-ebbe','87b9',1,'ebbe',5,6,MD);
+    morphEdgeMix('e-87b9-7fff','87b9',3,'7fff',5,5,6,5,MD)});
+  t+=1000;
+  at(t,()=>{si.textContent='⏵ Route6-①b: Leaf_7fff/Leaf_0056 向右移动, 相关连线跟随';
+    moveNodeToStep('7fff',6,MD);moveNodeToStep('0056',6,MD);
+    morphEdge('e-46a7-0056','46a7',3,'0056',5,6,MD);
+    morphEdgeMix('e-87b9-7fff','87b9',3,'7fff',6,5,6,6,MD)});
+  t+=1000;
+  at(t,()=>{si.textContent='⏵ Route6-②: 插入 Node(kv_624f)';
+    setNodeAtStep('624f',6);tweenOp('n-624f',0,1,1000,0)});
+  t+=1200;
+  at(t,()=>{si.textContent='⏵ Route6-③a: 画 kv_624f→Leaf_ebbe';
+    setEdge('e-624f-ebbe','624f',0,'ebbe',6);
+    setEC('#E03030',['e-624f-ebbe']);
+    tweenOp('e-624f-ebbe',0,1,800,0)});
+  t+=1000;
+  at(t,()=>{si.textContent='⏵ Route6-③b: 新建 Leaf_8491, 画 kv_624f→Leaf_8491';
+    setNodeAtStep('8491',6);setEdge('e-624f-8491','624f',2,'8491',6);
+    setEC('#E03030',['e-624f-8491']);
+    tweenOp('n-8491',0,1,800,0);tweenOp('e-624f-8491',0,1,800,0)});
+  t+=1000;
+  at(t,()=>{si.textContent='⏵ Route6-④: 删除旧连线 kv_87b9→Leaf_ebbe';flashThenFade('e-87b9-ebbe',3,180,800)});
+  t+=1500;
+  at(t,()=>{si.textContent='⏵ Route6-⑤: 建立 kv_87b9→kv_624f';
+    setEdge('e-87b9-624f','87b9',1,'624f',6);
+    setEC('#E03030',['e-87b9-624f']);
+    tweenOp('e-87b9-624f',0,1,800,0)});  t+=1200;
+  at(t,()=>{flashEl('r5',2,250,{ff:'#333',fw:'normal'},()=>{sop('cmd-label',0);resetEdges();setProg(86);
+    si.textContent='\u2705 Route6 完成: 8节点'})});
+  t+=1500;
+
+  // === Route7 ===
+  at(t,()=>{setCL(CMDS[6]);si.textContent='\u23F5 Route7: '+CMDS[6];tweenOp('cmd-label',0,1,600,0);showR(7,6);flashEl('r6',3,200)});
+  t+=1300;
+  at(t,()=>{si.textContent='\u23F5 Route7-\u2460: 移动节点到最终位置';
+    moveNodeToStep('root',7,MD);moveNodeToStep('46a7',7,MD);moveNodeToStep('87b9',7,MD);
+    moveNodeToStep('624f',7,MD);moveNodeToStep('7fff',7,MD);moveNodeToStep('ebbe',7,MD);
+    moveNodeToStep('0056',7,MD);moveNodeToStep('8491',7,MD);
+    morphEdge('e-root-46a7','root',null,'46a7',6,7,MD);morphEdge('e-46a7-87b9','46a7',1,'87b9',6,7,MD);
+    morphEdge('e-46a7-0056','46a7',3,'0056',6,7,MD);morphEdge('e-87b9-7fff','87b9',3,'7fff',6,7,MD);
+    morphEdge('e-87b9-624f','87b9',1,'624f',6,7,MD);morphEdge('e-624f-ebbe','624f',0,'ebbe',6,7,MD);
+    morphEdge('e-624f-8491','624f',2,'8491',6,7,MD)});
+  t+=1000;
+  at(t,()=>{si.textContent='\u23F5 Route7-\u2461: 新建 Leaf_07c4 (9.9.0.0/16) 挂在 kv_87b9[c0]';
+    setNodeAtStep('07c4',7);setEdge('e-87b9-07c4','87b9',0,'07c4',7);
+    setEC('#E03030',['e-87b9-07c4']);tweenOp('n-07c4',0,1,800,0);tweenOp('e-87b9-07c4',0,1,800,0)});
+  t+=1500;
+  at(t,()=>{flashEl('r6',2,250,{ff:'#333',fw:'normal'},()=>{sop('cmd-label',0);resetEdges();setProg(100);
+    si.textContent='\u2705 全部完成! 7条路由, 共9个节点'})});
+}
+
+
+</script>
+</body>
+</html>

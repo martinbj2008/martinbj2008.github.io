@@ -1,0 +1,848 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. summaryinflate duplicate a new node whose child array is double of orignal node,and put original node’s child into the new node.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="IPv4 route fib trie inflate">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/09/29/2013-09-29-ipv4-route-fib-tree-inflate/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. summaryinflate duplicate a new node whose child array is double of orignal node,and put original node’s child into the new node.">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/fib_trie/inflate.case1.jpg">
+<meta property="og:image" content="https://martinbj2008.github.io/images/fib_trie/inflate.case2.jpg">
+<meta property="og:image" content="https://martinbj2008.github.io/images/fib_trie/inflate.case3.jpg">
+<meta property="article:published_time" content="2013-09-29T09:16:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.749Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IPv4">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/fib_trie/inflate.case1.jpg">
+  
+  
+  
+  <title>IPv4 route fib trie inflate - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="IPv4 route fib trie inflate"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2013-09-29 17:16" pubdate>
+          September 29, 2013 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          4.8k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          40 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">IPv4 route fib trie inflate</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="summary">0.1. summary</h2><p><code>inflate</code> duplicate a new node whose child array is double of orignal node,<br>and put original node’s child into the new node.</p>
+<span id="more"></span>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c">tn<span class="hljs-string">&#x27;s bits = 2 * oldnode-&gt;bits</span><br><span class="hljs-string"></span><br><span class="hljs-string">`struct tnode *oldnode` is the orignal node.</span><br><span class="hljs-string">`struct tnode *tn` is the new malloc node.</span><br></code></pre></td></tr></table></figure>
+
+<p>Just like the comment in the source, child nodes are divided into 3 kind nodes:</p>
+<h3 id="case-1-child-node-is-a-leaf-or-an-internal-node-with-skipped-bits">0.1.1. case 1. child node is a leaf or an internal node with skipped bits.</h3><pre><code class="hljs">节点不变，直接挂到新的节点下面，作为第2*i或者2*i+1个孩子节点。
+</code></pre>
+<p><img src="/images/fib_trie/inflate.case1.jpg" srcset="/img/loading.gif" lazyload alt="case 1"></p>
+<h3 id="case-2-an-internal-node-with-two-children">0.1.2. case 2. an internal node with two children.</h3><pre><code class="hljs">释放节点，并将其左右两个孩子挂到新的节点下面，依次作第2*i和2*i+1个孩子节点。
+</code></pre>
+<p><img src="/images/fib_trie/inflate.case2.jpg" srcset="/img/loading.gif" lazyload alt="case 2"></p>
+<h3 id="case-3-an-internal-node-with-more-than-two-children">0.1.3. case 3. an internal node with more than two children.</h3><pre><code class="hljs">    释放节点，该节点的孩子节点从中间一分为二， 并分别被复制到两个新的节点（
+left和right）。这两个新节点被依次作为新节点的第2*i和2*i+1孩子节点。
+left和right节点要重新经过`resize`函数处理，然后再挂到新节点上。
+</code></pre>
+<p><img src="/images/fib_trie/inflate.case3.jpg" srcset="/img/loading.gif" lazyload alt="case 3"></p>
+<h3 id="NOTE">0.1.4. NOTE:</h3><ol>
+<li><p>预分配内存：<br> 为了防止中间过程内存不足，在函数一开始，就先为第三类节点分配足够的内存(只有第三类情况需要新建节点)。<br> 等真正处理的时候，只是先把left和right节点从新节点上取下来，待把中间节点(internal node)的所有子孩子重新分配后，再重新把left和right节点挂到新节点下。</p>
+</li>
+<li><p>skipped bits:<br> a node’s <code>pos</code> is bigger than parent nodes’s <code>(pos+bits)</code>.</p>
+</li>
+</ol>
+<!-- more -->
+
+<h3 id="how-to-divid-child-nodes">0.1.5. how to divid child nodes</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-keyword">if</span> (a leaf node) then<br>    belong case1.<br><span class="hljs-keyword">else</span> <span class="hljs-comment">//assert: it must be a internal node).</span><br>     <span class="hljs-keyword">if</span> (it has skipped bits) then<br>        belong case1<br>     <span class="hljs-keyword">else</span> <span class="hljs-comment">//assert: pos= parent&#x27;s(pos+bits)</span><br>        <span class="hljs-keyword">if</span> (two child nodes)<br>            belong case2<br>        <span class="hljs-keyword">else</span> (more than two child nodes)<br>            belong case3<br>            (<span class="hljs-number">4</span>,<span class="hljs-number">8</span>,<span class="hljs-number">16.</span>.. child nodes)<br></code></pre></td></tr></table></figure>
+
+<h3 id="inflate">0.1.6. inflate</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">702</span>	<span class="hljs-type">static</span> <span class="hljs-keyword">struct</span> tnode *<span class="hljs-title function_">inflate</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> trie *t, <span class="hljs-keyword">struct</span> tnode *tn)</span><br>703	&#123;<br><span class="hljs-number">704</span>		<span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">tnode</span> *<span class="hljs-title">oldtnode</span> =</span> tn;<br><span class="hljs-number">705</span>		<span class="hljs-type">int</span> olen = tnode_child_length(tn);<br><span class="hljs-number">706</span>		<span class="hljs-type">int</span> i;<br><span class="hljs-number">707</span>	<br><span class="hljs-number">708</span>		pr_debug(<span class="hljs-string">&quot;In inflate\n&quot;</span>);<br><span class="hljs-number">709</span>		<span class="hljs-comment">/*扩展一个新的节点，其孩子节点的个数加倍*/</span><br><span class="hljs-number">710</span>		tn = tnode_new(oldtnode-&gt;key, oldtnode-&gt;pos, oldtnode-&gt;bits + <span class="hljs-number">1</span>);<br><span class="hljs-number">711</span>	<br><span class="hljs-number">712</span>		<span class="hljs-keyword">if</span> (!tn)<br><span class="hljs-number">713</span>			<span class="hljs-keyword">return</span> ERR_PTR(-ENOMEM);<br><span class="hljs-number">714</span>	<br><span class="hljs-number">715</span>		<span class="hljs-comment">/*</span><br><span class="hljs-comment">716		 * Preallocate and store tnodes before the actual work so we</span><br><span class="hljs-comment">717		 * don&#x27;t get into an inconsistent state if memory allocation</span><br><span class="hljs-comment">718		 * fails. In case of failure we return the oldnode and  inflate</span><br><span class="hljs-comment">719		 * of tnode is ignored.</span><br><span class="hljs-comment">720		 */</span><br><span class="hljs-number">721</span>	<br><span class="hljs-number">722</span>		<span class="hljs-keyword">for</span> (i = <span class="hljs-number">0</span>; i &lt; olen; i++) &#123;<br><span class="hljs-number">723</span>			<span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">tnode</span> *<span class="hljs-title">inode</span>;</span><br><span class="hljs-number">724</span>	<br><span class="hljs-number">725</span>			inode = (<span class="hljs-keyword">struct</span> tnode *) tnode_get_child(oldtnode, i);<br><span class="hljs-number">726</span>			<span class="hljs-keyword">if</span> (inode &amp;&amp;<br><span class="hljs-number">727</span>			    IS_TNODE(inode) &amp;&amp;<br><span class="hljs-number">728</span>			    inode-&gt;pos == oldtnode-&gt;pos + oldtnode-&gt;bits &amp;&amp;<br><span class="hljs-number">729</span>			    inode-&gt;bits &gt; <span class="hljs-number">1</span>) &#123;<br><span class="hljs-number">730</span>				<span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">tnode</span> *<span class="hljs-title">left</span>, *<span class="hljs-title">right</span>;</span><br><span class="hljs-number">731</span>				t_key m = ~<span class="hljs-number">0U</span> &lt;&lt; (KEYLENGTH - <span class="hljs-number">1</span>) &gt;&gt; inode-&gt;pos;<br><span class="hljs-number">732</span>	<br><span class="hljs-number">733</span>				left = tnode_new(inode-&gt;key&amp;(~m), inode-&gt;pos + <span class="hljs-number">1</span>,<br><span class="hljs-number">734</span>						 inode-&gt;bits - <span class="hljs-number">1</span>);<br><span class="hljs-number">735</span>				<span class="hljs-keyword">if</span> (!left)<br><span class="hljs-number">736</span>					<span class="hljs-keyword">goto</span> nomem;<br><span class="hljs-number">737</span>	<br><span class="hljs-number">738</span>				right = tnode_new(inode-&gt;key|m, inode-&gt;pos + <span class="hljs-number">1</span>,<br><span class="hljs-number">739</span>						  inode-&gt;bits - <span class="hljs-number">1</span>);<br><span class="hljs-number">740</span>	<br><span class="hljs-number">741</span>				<span class="hljs-keyword">if</span> (!right) &#123;<br><span class="hljs-number">742</span>					tnode_free(left);<br><span class="hljs-number">743</span>					<span class="hljs-keyword">goto</span> nomem;<br><span class="hljs-number">744</span>				&#125;<br><span class="hljs-number">745</span>	<br><span class="hljs-number">746</span>				put_child(tn, <span class="hljs-number">2</span>*i, (<span class="hljs-keyword">struct</span> rt_trie_node *) left);<br><span class="hljs-number">747</span>				put_child(tn, <span class="hljs-number">2</span>*i+<span class="hljs-number">1</span>, (<span class="hljs-keyword">struct</span> rt_trie_node *) right);<br><span class="hljs-number">748</span>			&#125;<br><span class="hljs-number">749</span>		&#125;<br><span class="hljs-number">750</span>	<br><span class="hljs-number">751</span>		<span class="hljs-keyword">for</span> (i = <span class="hljs-number">0</span>; i &lt; olen; i++) &#123;<br><span class="hljs-number">752</span>			<span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">tnode</span> *<span class="hljs-title">inode</span>;</span><br><span class="hljs-number">753</span>			<span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rt_trie_node</span> *<span class="hljs-title">node</span> =</span> tnode_get_child(oldtnode, i);<br><span class="hljs-number">754</span>			<span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">tnode</span> *<span class="hljs-title">left</span>, *<span class="hljs-title">right</span>;</span><br><span class="hljs-number">755</span>			<span class="hljs-type">int</span> size, j;<br><span class="hljs-number">756</span>	<br><span class="hljs-number">757</span>			<span class="hljs-comment">/* An empty child */</span><br><span class="hljs-number">758</span>			<span class="hljs-keyword">if</span> (node == <span class="hljs-literal">NULL</span>)<br><span class="hljs-number">759</span>				<span class="hljs-keyword">continue</span>;<br><span class="hljs-number">760</span>	<br><span class="hljs-number">761</span>			<span class="hljs-comment">/* A leaf or an internal node with skipped bits */</span><br><span class="hljs-number">762</span>	<br><span class="hljs-number">763</span>			<span class="hljs-keyword">if</span> (IS_LEAF(node) || ((<span class="hljs-keyword">struct</span> tnode *) node)-&gt;pos &gt;<br><span class="hljs-number">764</span>			   tn-&gt;pos + tn-&gt;bits - <span class="hljs-number">1</span>) &#123;<br><span class="hljs-number">765</span>				put_child(tn,<br><span class="hljs-number">766</span>					tkey_extract_bits(node-&gt;key, oldtnode-&gt;pos, oldtnode-&gt;bits + <span class="hljs-number">1</span>),<br><span class="hljs-number">767</span>					node);<br><span class="hljs-number">768</span>				<span class="hljs-keyword">continue</span>;<br><span class="hljs-number">769</span>			&#125;<br><span class="hljs-number">770</span>	<br><span class="hljs-number">771</span>			<span class="hljs-comment">/* An internal node with two children */</span><br><span class="hljs-number">772</span>			inode = (<span class="hljs-keyword">struct</span> tnode *) node;<br><span class="hljs-number">773</span>	<br><span class="hljs-number">774</span>			<span class="hljs-keyword">if</span> (inode-&gt;bits == <span class="hljs-number">1</span>) &#123;<br><span class="hljs-number">775</span>				put_child(tn, <span class="hljs-number">2</span>*i, rtnl_dereference(inode-&gt;child[<span class="hljs-number">0</span>]));<br><span class="hljs-number">776</span>				put_child(tn, <span class="hljs-number">2</span>*i+<span class="hljs-number">1</span>, rtnl_dereference(inode-&gt;child[<span class="hljs-number">1</span>]));<br><span class="hljs-number">777</span>	<br><span class="hljs-number">778</span>				tnode_free_safe(inode);<br><span class="hljs-number">779</span>				<span class="hljs-keyword">continue</span>;<br><span class="hljs-number">780</span>			&#125;<br><span class="hljs-number">781</span>	<br><span class="hljs-number">782</span>			<span class="hljs-comment">/* An internal node with more than two children */</span><br><span class="hljs-number">783</span>	<br><span class="hljs-number">784</span>			<span class="hljs-comment">/* We will replace this node &#x27;inode&#x27; with two new</span><br><span class="hljs-comment">785			 * ones, &#x27;left&#x27; and &#x27;right&#x27;, each with half of the</span><br><span class="hljs-comment">786			 * original children. The two new nodes will have</span><br><span class="hljs-comment">787			 * a position one bit further down the key and this</span><br><span class="hljs-comment">788			 * means that the &quot;significant&quot; part of their keys</span><br><span class="hljs-comment">789			 * (see the discussion near the top of this file)</span><br><span class="hljs-comment">790			 * will differ by one bit, which will be &quot;0&quot; in</span><br><span class="hljs-comment">791			 * left&#x27;s key and &quot;1&quot; in right&#x27;s key. Since we are</span><br><span class="hljs-comment">792			 * moving the key position by one step, the bit that</span><br><span class="hljs-comment">793			 * we are moving away from - the bit at position</span><br><span class="hljs-comment">794			 * (inode-&gt;pos) - is the one that will differ between</span><br><span class="hljs-comment">795			 * left and right. So... we synthesize that bit in the</span><br><span class="hljs-comment">796			 * two  new keys.</span><br><span class="hljs-comment">797			 * The mask &#x27;m&#x27; below will be a single &quot;one&quot; bit at</span><br><span class="hljs-comment">798			 * the position (inode-&gt;pos)</span><br><span class="hljs-comment">799			 */</span><br><span class="hljs-number">800</span>	<br><span class="hljs-number">801</span>			<span class="hljs-comment">/* Use the old key, but set the new significant</span><br><span class="hljs-comment">802			 *   bit to zero.</span><br><span class="hljs-comment">803			 */</span><br><span class="hljs-number">804</span>	<br><span class="hljs-number">805</span>			left = (<span class="hljs-keyword">struct</span> tnode *) tnode_get_child(tn, <span class="hljs-number">2</span>*i);<br><span class="hljs-number">806</span>			put_child(tn, <span class="hljs-number">2</span>*i, <span class="hljs-literal">NULL</span>);<br><span class="hljs-number">807</span>	<br><span class="hljs-number">808</span>			BUG_ON(!left);<br><span class="hljs-number">809</span>	<br><span class="hljs-number">810</span>			right = (<span class="hljs-keyword">struct</span> tnode *) tnode_get_child(tn, <span class="hljs-number">2</span>*i+<span class="hljs-number">1</span>);<br><span class="hljs-number">811</span>			put_child(tn, <span class="hljs-number">2</span>*i+<span class="hljs-number">1</span>, <span class="hljs-literal">NULL</span>);<br><span class="hljs-number">812</span>	<br><span class="hljs-number">813</span>			BUG_ON(!right);<br><span class="hljs-number">814</span>	<br><span class="hljs-number">815</span>			size = tnode_child_length(left);<br><span class="hljs-number">816</span>			<span class="hljs-keyword">for</span> (j = <span class="hljs-number">0</span>; j &lt; size; j++) &#123;<br><span class="hljs-number">817</span>				put_child(left, j, rtnl_dereference(inode-&gt;child[j]));<br><span class="hljs-number">818</span>				put_child(right, j, rtnl_dereference(inode-&gt;child[j + size]));<br><span class="hljs-number">819</span>			&#125;<br><span class="hljs-number">820</span>			put_child(tn, <span class="hljs-number">2</span>*i, resize(t, left));<br><span class="hljs-number">821</span>			put_child(tn, <span class="hljs-number">2</span>*i+<span class="hljs-number">1</span>, resize(t, right));<br><span class="hljs-number">822</span>	<br><span class="hljs-number">823</span>			tnode_free_safe(inode);<br><span class="hljs-number">824</span>		&#125;<br><span class="hljs-number">825</span>		tnode_free_safe(oldtnode);<br><span class="hljs-number">826</span>		<span class="hljs-keyword">return</span> tn;<br><span class="hljs-number">827</span>	nomem:<br><span class="hljs-number">828</span>		tnode_clean_free(tn);<br><span class="hljs-number">829</span>		<span class="hljs-keyword">return</span> ERR_PTR(-ENOMEM);<br><span class="hljs-number">830</span>	&#125;<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/FIB/" class="category-chain-item">FIB</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/IPv4/" class="print-no-link">#IPv4</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>IPv4 route fib trie inflate</div>
+      <div>https://martinbj2008.github.io/2013/09/29/2013-09-29-ipv4-route-fib-tree-inflate/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>September 29, 2013</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2013/10/07/2013-10-07-make-terminal-tab-more-markedness/" title="How to make selected tab in terminal more prominent">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">How to make selected tab in terminal more prominent</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2013/09/27/2013-09-27-ipv4-route-fib-tree-rebalance/" title="IPv4 route fib tree rebalance">
+                        <span class="hidden-mobile">IPv4 route fib tree rebalance</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

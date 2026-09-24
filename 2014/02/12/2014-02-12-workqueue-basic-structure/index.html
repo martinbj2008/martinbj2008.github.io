@@ -1,0 +1,849 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.0.1. summary">
+<meta property="og:type" content="article">
+<meta property="og:title" content="workqueue basic structure">
+<meta property="og:url" content="https://martinbj2008.github.io/2014/02/12/2014-02-12-workqueue-basic-structure/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.0.1. summary">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2014-02-12T10:19:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.751Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IRQ">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>workqueue basic structure - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="workqueue basic structure"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2014-02-12 18:19" pubdate>
+          February 12, 2014 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          7.1k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          59 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">workqueue basic structure</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h3 id="summary">0.0.1. summary</h3><span id="more"></span>
+
+<h4 id="worker">0.0.1.1. worker</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">15</span> <span class="hljs-comment">/*</span><br><span class="hljs-comment">16  * The poor guys doing the actual heavy lifting.  All on-duty workers are</span><br><span class="hljs-comment">17  * either serving the manager role, on idle list or on busy hash.  For</span><br><span class="hljs-comment">18  * details on the locking annotation (L, I, X...), refer to workqueue.c.</span><br><span class="hljs-comment">19  *</span><br><span class="hljs-comment">20  * Only to be used in workqueue and async.</span><br><span class="hljs-comment">21  */</span><br><span class="hljs-number">22</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">worker</span> &#123;</span><br><span class="hljs-number">23</span>         <span class="hljs-comment">/* on idle list while idle, on busy hash table while busy */</span><br><span class="hljs-number">24</span>         <span class="hljs-class"><span class="hljs-keyword">union</span> &#123;</span><br><span class="hljs-number">25</span>                 <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">entry</span>;</span>  <span class="hljs-comment">/* L: while idle */</span><br><span class="hljs-number">26</span>                 <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">hlist_node</span>       <span class="hljs-title">hentry</span>;</span> <span class="hljs-comment">/* L: while busy */</span><br><span class="hljs-number">27</span>         &#125;;<br><span class="hljs-number">28</span><br><span class="hljs-number">29</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">work_struct</span>      *<span class="hljs-title">current_work</span>;</span>  <span class="hljs-comment">/* L: work being processed */</span><br><span class="hljs-number">30</span>         <span class="hljs-type">work_func_t</span>             current_func;   <span class="hljs-comment">/* L: current_work&#x27;s fn */</span><br><span class="hljs-number">31</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">pool_workqueue</span>   *<span class="hljs-title">current_pwq</span>;</span> <span class="hljs-comment">/* L: current_work&#x27;s pwq */</span><br><span class="hljs-number">32</span>         <span class="hljs-type">bool</span>                    desc_valid;     <span class="hljs-comment">/* -&gt;desc is valid */</span><br><span class="hljs-number">33</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">scheduled</span>;</span>      <span class="hljs-comment">/* L: scheduled works */</span><br><span class="hljs-number">34</span><br><span class="hljs-number">35</span>         <span class="hljs-comment">/* 64 bytes boundary on 64bit, 32 on 32bit */</span><br><span class="hljs-number">36</span><br><span class="hljs-number">37</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">task_struct</span>      *<span class="hljs-title">task</span>;</span>          <span class="hljs-comment">/* I: worker task */</span><br><span class="hljs-number">38</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">worker_pool</span>      *<span class="hljs-title">pool</span>;</span>          <span class="hljs-comment">/* I: the associated pool */</span><br><span class="hljs-number">39</span>                                                 <span class="hljs-comment">/* L: for rescuers */</span><br><span class="hljs-number">40</span><br><span class="hljs-number">41</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span>           last_active;    <span class="hljs-comment">/* L: last active timestamp */</span><br><span class="hljs-number">42</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span>            flags;          <span class="hljs-comment">/* X: flags */</span><br><span class="hljs-number">43</span>         <span class="hljs-type">int</span>                     id;             <span class="hljs-comment">/* I: worker id */</span><br><span class="hljs-number">44</span><br><span class="hljs-number">45</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment">46          * Opaque string set with work_set_desc().  Printed out with task</span><br><span class="hljs-comment">47          * dump for debugging - WARN, BUG, panic or sysrq.</span><br><span class="hljs-comment">48          */</span><br><span class="hljs-number">49</span>         <span class="hljs-type">char</span>                    desc[WORKER_DESC_LEN];<br><span class="hljs-number">50</span><br><span class="hljs-number">51</span>         <span class="hljs-comment">/* used only by rescuers to point to the target workqueue */</span><br><span class="hljs-number">52</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">workqueue_struct</span> *<span class="hljs-title">rescue_wq</span>;</span>     <span class="hljs-comment">/* I: the workqueue to rescue */</span><br><span class="hljs-number">53</span> &#125;;<br></code></pre></td></tr></table></figure>
+<h4 id="workqueue-struct">0.0.1.2. workqueue_struct</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">228</span> <span class="hljs-comment">/*</span><br><span class="hljs-comment">229  * The externally visible workqueue.  It relays the issued work items to</span><br><span class="hljs-comment">230  * the appropriate worker_pool through its pool_workqueues.</span><br><span class="hljs-comment">231  */</span><br><span class="hljs-number">232</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">workqueue_struct</span> &#123;</span><br><span class="hljs-number">233</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">pwqs</span>;</span>           <span class="hljs-comment">/* WR: all pwqs of this wq */</span><br><span class="hljs-number">234</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">list</span>;</span>           <span class="hljs-comment">/* PL: list of all workqueues */</span><br><span class="hljs-number">235</span><br><span class="hljs-number">236</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">mutex</span>            <span class="hljs-title">mutex</span>;</span>          <span class="hljs-comment">/* protects this wq */</span><br><span class="hljs-number">237</span>         <span class="hljs-type">int</span>                     work_color;     <span class="hljs-comment">/* WQ: current work color */</span><br><span class="hljs-number">238</span>         <span class="hljs-type">int</span>                     flush_color;    <span class="hljs-comment">/* WQ: current flush color */</span><br><span class="hljs-number">239</span>         <span class="hljs-type">atomic_t</span>                nr_pwqs_to_flush; <span class="hljs-comment">/* flush in progress */</span><br><span class="hljs-number">240</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">wq_flusher</span>       *<span class="hljs-title">first_flusher</span>;</span> <span class="hljs-comment">/* WQ: first flusher */</span><br><span class="hljs-number">241</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">flusher_queue</span>;</span>  <span class="hljs-comment">/* WQ: flush waiters */</span><br><span class="hljs-number">242</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">flusher_overflow</span>;</span> <span class="hljs-comment">/* WQ: flush overflow list */</span><br><span class="hljs-number">243</span><br><span class="hljs-number">244</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">maydays</span>;</span>        <span class="hljs-comment">/* MD: pwqs requesting rescue */</span><br><span class="hljs-number">245</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">worker</span>           *<span class="hljs-title">rescuer</span>;</span>       <span class="hljs-comment">/* I: rescue worker */</span><br><span class="hljs-number">246</span><br><span class="hljs-number">247</span>         <span class="hljs-type">int</span>                     nr_drainers;    <span class="hljs-comment">/* WQ: drain in progress */</span><br><span class="hljs-number">248</span>         <span class="hljs-type">int</span>                     saved_max_active; <span class="hljs-comment">/* WQ: saved pwq max_active */</span><br><span class="hljs-number">249</span><br><span class="hljs-number">250</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">workqueue_attrs</span>  *<span class="hljs-title">unbound_attrs</span>;</span> <span class="hljs-comment">/* WQ: only for unbound wqs */</span><br><span class="hljs-number">251</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">pool_workqueue</span>   *<span class="hljs-title">dfl_pwq</span>;</span>       <span class="hljs-comment">/* WQ: only for unbound wqs */</span><br><span class="hljs-number">252</span><br><span class="hljs-number">253</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_SYSFS</span><br><span class="hljs-number">254</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">wq_device</span>        *<span class="hljs-title">wq_dev</span>;</span>        <span class="hljs-comment">/* I: for sysfs interface */</span><br><span class="hljs-number">255</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">256</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_LOCKDEP</span><br><span class="hljs-number">257</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">lockdep_map</span>      <span class="hljs-title">lockdep_map</span>;</span><br><span class="hljs-number">258</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">259</span>         <span class="hljs-type">char</span>                    name[WQ_NAME_LEN]; <span class="hljs-comment">/* I: workqueue name */</span><br><span class="hljs-number">260</span><br><span class="hljs-number">261</span>         <span class="hljs-comment">/* hot fields used during command issue, aligned to cacheline */</span><br><span class="hljs-number">262</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span>            flags ____cacheline_aligned; <span class="hljs-comment">/* WQ: WQ_* flags */</span><br><span class="hljs-number">263</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">pool_workqueue</span> __<span class="hljs-title">percpu</span> *<span class="hljs-title">cpu_pwqs</span>;</span> <span class="hljs-comment">/* I: per-cpu pwqs */</span><br><span class="hljs-number">264</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">pool_workqueue</span> __<span class="hljs-title">rcu</span> *<span class="hljs-title">numa_pwq_tbl</span>[];</span> <span class="hljs-comment">/* FR: unbound pwqs indexed by node */</span><br><span class="hljs-number">265</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h4 id="struct-worker-pool">0.0.1.3. struct worker_pool</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">143</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">worker_pool</span> &#123;</span><br><span class="hljs-number">144</span>         <span class="hljs-type">spinlock_t</span>              lock;           <span class="hljs-comment">/* the pool lock */</span><br><span class="hljs-number">145</span>         <span class="hljs-type">int</span>                     cpu;            <span class="hljs-comment">/* I: the associated cpu */</span><br><span class="hljs-number">146</span>         <span class="hljs-type">int</span>                     node;           <span class="hljs-comment">/* I: the associated node ID */</span><br><span class="hljs-number">147</span>         <span class="hljs-type">int</span>                     id;             <span class="hljs-comment">/* I: pool ID */</span><br><span class="hljs-number">148</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span>            flags;          <span class="hljs-comment">/* X: flags */</span><br><span class="hljs-number">149</span><br><span class="hljs-number">150</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">worklist</span>;</span>       <span class="hljs-comment">/* L: list of pending works */</span><br><span class="hljs-number">151</span>         <span class="hljs-type">int</span>                     nr_workers;     <span class="hljs-comment">/* L: total number of workers */</span><br><span class="hljs-number">152</span><br><span class="hljs-number">153</span>         <span class="hljs-comment">/* nr_idle includes the ones off idle_list for rebinding */</span><br><span class="hljs-number">154</span>         <span class="hljs-type">int</span>                     nr_idle;        <span class="hljs-comment">/* L: currently idle ones */</span><br><span class="hljs-number">155</span><br><span class="hljs-number">156</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">idle_list</span>;</span>      <span class="hljs-comment">/* X: list of idle workers */</span><br><span class="hljs-number">157</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">timer_list</span>       <span class="hljs-title">idle_timer</span>;</span>     <span class="hljs-comment">/* L: worker idle timeout */</span><br><span class="hljs-number">158</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">timer_list</span>       <span class="hljs-title">mayday_timer</span>;</span>   <span class="hljs-comment">/* L: SOS timer for workers */</span><br><span class="hljs-number">159</span><br><span class="hljs-number">160</span>         <span class="hljs-comment">/* a workers is either on busy_hash or idle_list, or the manager */</span><br><span class="hljs-number">161</span>         DECLARE_HASHTABLE(busy_hash, BUSY_WORKER_HASH_ORDER);<br><span class="hljs-number">162</span>                                                 <span class="hljs-comment">/* L: hash of busy workers */</span><br><span class="hljs-number">163</span><br><span class="hljs-number">164</span>         <span class="hljs-comment">/* see manage_workers() for details on the two manager mutexes */</span><br><span class="hljs-number">165</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">mutex</span>            <span class="hljs-title">manager_arb</span>;</span>    <span class="hljs-comment">/* manager arbitration */</span><br><span class="hljs-number">166</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">mutex</span>            <span class="hljs-title">manager_mutex</span>;</span>  <span class="hljs-comment">/* manager exclusion */</span><br><span class="hljs-number">167</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">idr</span>              <span class="hljs-title">worker_idr</span>;</span>     <span class="hljs-comment">/* MG: worker IDs and iteration */</span><br><span class="hljs-number">168</span><br><span class="hljs-number">169</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">workqueue_attrs</span>  *<span class="hljs-title">attrs</span>;</span>         <span class="hljs-comment">/* I: worker attributes */</span><br><span class="hljs-number">170</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">hlist_node</span>       <span class="hljs-title">hash_node</span>;</span>      <span class="hljs-comment">/* PL: unbound_pool_hash node */</span><br><span class="hljs-number">171</span>         <span class="hljs-type">int</span>                     refcnt;         <span class="hljs-comment">/* PL: refcnt for unbound pools */</span><br><span class="hljs-number">172</span><br><span class="hljs-number">173</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment">174          * The current concurrency level.  As it&#x27;s likely to be accessed</span><br><span class="hljs-comment">175          * from other CPUs during try_to_wake_up(), put it in a separate</span><br><span class="hljs-comment">176          * cacheline.</span><br><span class="hljs-comment">177          */</span><br><span class="hljs-number">178</span>         <span class="hljs-type">atomic_t</span>                nr_running ____cacheline_aligned_in_smp;<br><span class="hljs-number">179</span><br><span class="hljs-number">180</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment">181          * Destruction of pool is sched-RCU protected to allow dereferences</span><br><span class="hljs-comment">182          * from get_work_pool().</span><br><span class="hljs-comment">183          */</span><br><span class="hljs-number">184</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rcu_head</span>         <span class="hljs-title">rcu</span>;</span><br><span class="hljs-number">185</span> &#125; ____cacheline_aligned_in_smp;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">297</span> <span class="hljs-type">static</span> <span class="hljs-title function_">DEFINE_PER_CPU_SHARED_ALIGNED</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> worker_pool [NR_STD_WORKER_POOLS],</span><br><span class="hljs-params"><span class="hljs-number">298</span>                                      cpu_worker_pools)</span>;<br></code></pre></td></tr></table></figure>
+
+<h4 id="struct-pool-workqueue">0.0.1.4. struct pool_workqueue</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">193</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">pool_workqueue</span> &#123;</span><br><span class="hljs-number">194</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">worker_pool</span>      *<span class="hljs-title">pool</span>;</span>          <span class="hljs-comment">/* I: the associated pool */</span><br><span class="hljs-number">195</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">workqueue_struct</span> *<span class="hljs-title">wq</span>;</span>            <span class="hljs-comment">/* I: the owning workqueue */</span><br><span class="hljs-number">196</span>         <span class="hljs-type">int</span>                     work_color;     <span class="hljs-comment">/* L: current color */</span><br><span class="hljs-number">197</span>         <span class="hljs-type">int</span>                     flush_color;    <span class="hljs-comment">/* L: flushing color */</span><br><span class="hljs-number">198</span>         <span class="hljs-type">int</span>                     refcnt;         <span class="hljs-comment">/* L: reference count */</span><br><span class="hljs-number">199</span>         <span class="hljs-type">int</span>                     nr_in_flight[WORK_NR_COLORS];<br><span class="hljs-number">200</span>                                                 <span class="hljs-comment">/* L: nr of in_flight works */</span><br><span class="hljs-number">201</span>         <span class="hljs-type">int</span>                     nr_active;      <span class="hljs-comment">/* L: nr of active works */</span><br><span class="hljs-number">202</span>         <span class="hljs-type">int</span>                     max_active;     <span class="hljs-comment">/* L: max active works */</span><br><span class="hljs-number">203</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">delayed_works</span>;</span>  <span class="hljs-comment">/* L: delayed works */</span><br><span class="hljs-number">204</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">pwqs_node</span>;</span>      <span class="hljs-comment">/* WR: node on wq-&gt;pwqs */</span><br><span class="hljs-number">205</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">mayday_node</span>;</span>    <span class="hljs-comment">/* MD: node on wq-&gt;maydays */</span><br><span class="hljs-number">206</span><br><span class="hljs-number">207</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment">208          * Release of unbound pwq is punted to system_wq.  See put_pwq()</span><br><span class="hljs-comment">209          * and pwq_unbound_release_workfn() for details.  pool_workqueue</span><br><span class="hljs-comment">210          * itself is also sched-RCU protected so that the first pwq can be</span><br><span class="hljs-comment">211          * determined without grabbing wq-&gt;mutex.</span><br><span class="hljs-comment">212          */</span><br><span class="hljs-number">213</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">work_struct</span>      <span class="hljs-title">unbound_release_work</span>;</span><br><span class="hljs-number">214</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rcu_head</span>         <span class="hljs-title">rcu</span>;</span><br><span class="hljs-number">215</span> &#125; __aligned(<span class="hljs-number">1</span> &lt;&lt; WORK_STRUCT_FLAG_BITS);<br></code></pre></td></tr></table></figure>
+<h4 id="work-struct">0.0.1.5. work_struct</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">100</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">work_struct</span> &#123;</span><br><span class="hljs-number">101</span>         <span class="hljs-type">atomic_long_t</span> data;<br><span class="hljs-number">102</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span> <span class="hljs-title">entry</span>;</span><br><span class="hljs-number">103</span>         <span class="hljs-type">work_func_t</span> func;<br><span class="hljs-number">104</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_LOCKDEP</span><br><span class="hljs-number">105</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">lockdep_map</span> <span class="hljs-title">lockdep_map</span>;</span><br><span class="hljs-number">106</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">107</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h4 id="struct-delayed-work">0.0.1.6. struct delayed_work</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">113</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">delayed_work</span> &#123;</span><br><span class="hljs-number">114</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">work_struct</span> <span class="hljs-title">work</span>;</span><br><span class="hljs-number">115</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">timer_list</span> <span class="hljs-title">timer</span>;</span><br><span class="hljs-number">116</span><br><span class="hljs-number">117</span>         <span class="hljs-comment">/* target workqueue and CPU -&gt;timer uses to queue -&gt;work */</span><br><span class="hljs-number">118</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">workqueue_struct</span> *<span class="hljs-title">wq</span>;</span><br><span class="hljs-number">119</span>         <span class="hljs-type">int</span> cpu;<br><span class="hljs-number">120</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h4 id="Define-a-delayed-worker">0.0.1.7. Define a delayed worker.</h4><p>include two parts:</p>
+<ol>
+<li><p>timer: to process the ‘delay’, define a timer with <code>delayed_work_timer_fn</code>.<br> which just call <code>__queue_work</code>.</p>
+</li>
+<li><p>all the other parts are done for <code>work</code>.</p>
+</li>
+</ol>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-type">static</span> <span class="hljs-title function_">DECLARE_DELAYED_WORK</span><span class="hljs-params">(dst_gc_work, dst_gc_task)</span>;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">174</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> DECLARE_DELAYED_WORK(n, f)                                      \</span><br><span class="hljs-meta">175         struct delayed_work n = __DELAYED_WORK_INITIALIZER(n, f, 0)</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">164</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> __DELAYED_WORK_INITIALIZER(n, f, tflags) &#123;                      \</span><br><span class="hljs-meta">165         .work = __WORK_INITIALIZER((n).work, (f)),                      \</span><br><span class="hljs-meta">166         .timer = __TIMER_INITIALIZER(delayed_work_timer_fn,             \</span><br><span class="hljs-meta">167                                      0, (unsigned long)&amp;(n),            \</span><br><span class="hljs-meta">168                                      (tflags) | TIMER_IRQSAFE),         \</span><br><span class="hljs-meta">169         &#125;</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">157</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> __WORK_INITIALIZER(n, f) &#123;                                      \</span><br><span class="hljs-meta">158         .data = WORK_DATA_STATIC_INIT(),                                \</span><br><span class="hljs-meta">159         .entry  = &#123; &amp;(n).entry, &amp;(n).entry &#125;,                           \</span><br><span class="hljs-meta">160         .func = (f),                                                    \</span><br><span class="hljs-meta">161         __WORK_INIT_LOCKDEP_MAP(#n, &amp;(n))                               \</span><br><span class="hljs-meta">162         &#125;</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">109</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> WORK_DATA_INIT()        ATOMIC_LONG_INIT(WORK_STRUCT_NO_POOL)</span><br><span class="hljs-number">110</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> WORK_DATA_STATIC_INIT() \</span><br><span class="hljs-meta">111         ATOMIC_LONG_INIT(WORK_STRUCT_NO_POOL | WORK_STRUCT_STATIC)</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1444</span> <span class="hljs-type">void</span> <span class="hljs-title function_">delayed_work_timer_fn</span><span class="hljs-params">(<span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> __data)</span><br>1445 &#123;<br><span class="hljs-number">1446</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">delayed_work</span> *<span class="hljs-title">dwork</span> =</span> (<span class="hljs-keyword">struct</span> delayed_work *)__data;<br><span class="hljs-number">1447</span><br><span class="hljs-number">1448</span>         <span class="hljs-comment">/* should have been called from irqsafe timer with irq already off */</span><br><span class="hljs-number">1449</span>         __queue_work(dwork-&gt;cpu, dwork-&gt;wq, &amp;dwork-&gt;work);<br><span class="hljs-number">1450</span> &#125;<br><span class="hljs-number">1451</span> EXPORT_SYMBOL(delayed_work_timer_fn);<br></code></pre></td></tr></table></figure>
+<h4 id="define-a-work-or-deferrable-work">0.0.1.8. define a work or deferrable work.</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">171</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> DECLARE_WORK(n, f)                                              \</span><br><span class="hljs-meta">172         struct work_struct n = __WORK_INITIALIZER(n, f)</span><br><span class="hljs-number">177</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> DECLARE_DEFERRABLE_WORK(n, f)                                   \</span><br><span class="hljs-meta">178         struct delayed_work n = __DELAYED_WORK_INITIALIZER(n, f, TIMER_DEFERRABLE)</span><br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/IRQ/" class="category-chain-item">IRQ</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/IRQ/" class="print-no-link">#IRQ</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>workqueue basic structure</div>
+      <div>https://martinbj2008.github.io/2014/02/12/2014-02-12-workqueue-basic-structure/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>February 12, 2014</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2014/02/18/2014-02-18-worker-and-worker-thread/" title="worker and worker_thread">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">worker and worker_thread</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2014/02/11/2014-02-11-dst-garbage/" title="dst garbage">
+                        <span class="hidden-mobile">dst garbage</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

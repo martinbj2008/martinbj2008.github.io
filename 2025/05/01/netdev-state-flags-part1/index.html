@@ -1,0 +1,963 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="1. 常见问题我们在平常定位问题，经常会通过ip link或ifconfig查看网络环境和配置。其中网口的标志位是其中很重要的一个检查环节。在输出结果里，会有两组标志位信息  一组是尖括弧里包含的值&lt;BROADCAST,MULTICAST,UP,LOWER_UP\&gt;，有很多标志位的组合。 另一组是 state UP。还有其他状态如DOWN, LOWERLAYERDOWN等。这些信息">
+<meta property="og:type" content="article">
+<meta property="og:title" content="网口状态标志位详解(Part 1&#x2F;2)">
+<meta property="og:url" content="https://martinbj2008.github.io/2025/05/01/netdev-state-flags-part1/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="1. 常见问题我们在平常定位问题，经常会通过ip link或ifconfig查看网络环境和配置。其中网口的标志位是其中很重要的一个检查环节。在输出结果里，会有两组标志位信息  一组是尖括弧里包含的值&lt;BROADCAST,MULTICAST,UP,LOWER_UP\&gt;，有很多标志位的组合。 另一组是 state UP。还有其他状态如DOWN, LOWERLAYERDOWN等。这些信息">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/iplink.running.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/iplink.no.carrier.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/iplink.ifconfig.pic.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/veth.link.init.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/veth.link.up.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/operstate.png">
+<meta property="article:published_time" content="2025-05-01T02:24:11.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.754Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="netdev">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/ip_link/iplink.running.png">
+  
+  
+  
+  <title>网口状态标志位详解(Part 1/2) - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="网口状态标志位详解(Part 1/2)"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2025-05-01 10:24" pubdate>
+          May 1, 2025 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          10k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          87 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">网口状态标志位详解(Part 1/2)</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <!-- toc -->
+
+<h1 id="常见问题">1. 常见问题</h1><p>我们在平常定位问题，经常会通过<code>ip link</code>或<code>ifconfig</code>查看网络环境和配置。其中网口的标志位是其中很重要的一个检查环节。在输出结果里，会有两组标志位信息</p>
+<ul>
+<li>一组是尖括弧里包含的值<code>&lt;BROADCAST,MULTICAST,UP,LOWER_UP\&gt;</code>，有很多标志位的组合。</li>
+<li>另一组是 <code>state UP</code>。还有其他状态如<code>DOWN</code>, <code>LOWERLAYERDOWN</code>等。<br><img src="/images/ip_link/iplink.running.png" srcset="/img/loading.gif" lazyload alt="图1：ip link 输出结果"><br>这些信息有时候看起来是一致的, 有时候是重复的，甚至矛盾的。难免让人产生一些疑惑，这两组标志位分别代表什么？他们是什么关系？下面我们就这两组标志，逐个展开分析下。<br>我们先来看几个场景里，网口在不同状态下，输出的标志位有哪些差异。</li>
+</ul>
+<h2 id="场景1：网线没插，显示NO-CARRIER">1.1. 场景1：网线没插，显示NO-CARRIER</h2><p><img src="/images/ip_link/iplink.no.carrier.png" srcset="/img/loading.gif" lazyload alt="图2: 拔掉网线后的网口输出结果"></p>
+<ul>
+<li>【Q1】 网口状态标志位里有个明显特征，有个<code>NO-CARRIER</code>标志，但是状态里一个<code>UP</code>,一个<code>DOWN</code>，why? :(</li>
+</ul>
+<span id="more"></span>
+
+<h2 id="场景2-正常状态下物理口eth0-的输出">1.2. 场景2: 正常状态下物理口eth0 的输出</h2><p><code>ip link show dev eth0</code>命令输出网口eth0的一些状态标志位。<br><img src="/images/ip_link/iplink.ifconfig.pic.png" srcset="/img/loading.gif" lazyload alt="图3: 正常网口的ip link 命令和ifconfig命令结果"><br>这里有几个疑问：</p>
+<ul>
+<li>【Q2】<code>RUNNING</code>标志位：为什么ifconfig命令显示有这个标志位，而ip link 命令没有显示出来。<br>或者说，我们通过<code>ip link</code>命令能确认网口是<code>RUNNING</code>吗？还是只能通过<code>ifconfig</code>命令查看。</li>
+<li>【Q3】<code>LOWER_UP</code>标志位:<code>UP</code>紧跟个<code>LOWER_UP</code>. 标志位里这两个标记分别代表的意义是什么？有啥区别？是不是重复了？</li>
+</ul>
+<h2 id="场景3：veth口-UP-DOWN的状态变化">1.3. 场景3：veth口 UP&#x2F;DOWN的状态变化</h2><p>veth: 在对端<code>veth0</code>口down状态下，<code>veth1</code> down&#x2F;up状态下的对比</p>
+<ul>
+<li>通过ip link命令创建一对veth口。默认网口状态down。<br><img src="/images/ip_link/veth.link.init.png" srcset="/img/loading.gif" lazyload alt="图4: veth1口状态对比"></li>
+<li>【Q4】<code>M-DOWN</code>：veth0口上第一组状态标志位里是<code>M-DOWN</code>(不是<code>DOWN</code>)， 而第二组是<code>state DOWN</code></li>
+<li>设置<code>veth1</code> 网口<code>UP</code></li>
+</ul>
+<p><img src="/images/ip_link/veth.link.up.png" srcset="/img/loading.gif" lazyload alt="图5: veth1口状态对比"><br>veth1被UP后，有两个变化：</p>
+<ol>
+<li><code>M-DOWN</code>：veth0口上的<code>M-DOWN</code>消失了， veth1口UP后反而没有消失</li>
+<li><code>LOWERLAYERDOWN</code>： veth1口UP后， state没有变成UP而是<code>LOWERLAYERDOWN</code><br>这里就带来个问题：</li>
+</ol>
+<ul>
+<li>【Q5】<code>M-DOWN</code> <code>state LOWERLAYERDOWN</code>跟<code>UP/DOWN</code>的关联关系是什么，有哪些区别？</li>
+</ul>
+<h1 id="标记汇总：">2. 标记汇总：</h1><h2 id>2.1. &lt;flags&gt;</h2><ul>
+<li><code>UP</code>: 可以通过<code>ip link set dev xx up</code>设置，系统管理员启用某个网口，不代表网口可以正常使用。</li>
+<li><code>DOWN</code>：与<code>UP</code> 类似。通过ip命里停用某个网口。 停用后，网口无法收发包，设置可以因为节能，将设备断电。</li>
+<li><code>NO-CARRIER</code>: 如果是物理网口，网口上网线没有插好。如果是虚拟口，关联网口的状态不正常。如veth情况下，对端网口没有被UP</li>
+<li><code>RUNNING</code>: 通过ifconfig命令才能看到。在ip link命令不显示这个标志位。在 iplink 命令里如果网口有<code>UP</code>标志，没有<code>NO-CARRIER</code>，那么ifconfig一定能看到这个标志。反之也成立， 如果网口有<code>UP</code>和<code>NO-CARRIER</code>标志两个标志， ifconfig肯定看不到<code>RUNNING</code>。</li>
+<li><code>LOWER_UP</code>: 本意是指当网口被<code>UP</code>后，网口底层底层载体是正常的，如以太网口的网线是插好的（wifi情况是指信道是好的？待学习)。 对eth口来说，有&#96;&#96;LOWER_UP<code>, 等价与有</code>RUNNING&#96;</li>
+<li><code>DORMANT</code>:</li>
+<li><code>M-DOWN</code>: 当网口有配对端口时，对端网口如果没有<code>UP</code>标记，则本端网口会显示这个标记。 若 veth0&#x2F;1配对， veth0如果是<code>DOWN</code>, 则 veth1 口的状态里会有这个标记。</li>
+</ul>
+<h2 id="operate">2.2. operate</h2><ul>
+<li><code>state UP</code>: 代表网口可以正常使用。 对eth口，等于flag里的<code>UP</code>和<code>RUNNING</code>同时存在。</li>
+<li><code>state DOWN</code>: 代表网口不可用。有可能是flags的标志位<code>DOWN</code>了， 也有可能是网口被<code>UP</code>但是状态不正常（如<code>NO-CARRIER</code> 或者 wifi 网口的认证不通过）。</li>
+<li><code>state LOWERLAYERDOWN</code>：当网口配对使用时候，本端网口被<code>UP</code>， 但是对端网口没有<code>UP</code>时候，会显示这个状态。对veth口来说等同于<code>UP</code>和<code>M-DOWN</code>同时存在。</li>
+<li><code>state DORMANT</code>： 跟移动网络和节能相关。 工作中没有遇不到这种场景，现在只能贴英文, 待学习。</li>
+<li><code>state DORMANT</code>: A state in which the mobile restricts its ability to receive normal IP traffic by reducing monitoring of radio<br>channels.  This allows the mobile to save power and reduces signaling load on the network.&#96;</li>
+</ul>
+<p>以上提到的<code>UP</code>和<code>DOWN</code>，都是指 flags 标志位(<code>&lt;&gt;</code>)里的，不要跟下面的 state 标志混了。</p>
+<h1 id="标志位分类">3. 标志位分类</h1><h2 id="IP-link标志位分类">3.1. IP link标志位分类</h2><p>根据这些标志位的来源， 我们可以把他们分为三大类：<br>前两类都是在<code>&lt;XX, ...&gt;</code>里打印的， 第三类是在 <code>state XX</code>里打印的。</p>
+<ul>
+<li><code>ip link</code>类：<code>ip link</code>命令自己打印的，不是内核里携带过来的。这一类比较特殊，比如<code>NO_CARRIER</code>和<code>M-DOWMN</code>，</li>
+<li><code>flags</code>类：根据内核里网口的<code>dev-&gt;flags</code>对应的标志位转换而来的。 如<code>IFF_UP</code>，<code>IFF_PROMISC</code>等。</li>
+<li><code>operstate</code>类：与内核里对应网口下的<code>dev-&gt;operstate</code>一致。在第二组状态里，以<code>state XXX</code>形式显示。内核里网口的operstate是根据<code>dev-&gt;state</code>状态和网口类型等条件转换而来。</li>
+</ul>
+<h2 id="内核网口的3个状态变量">3.2. 内核网口的3个状态变量</h2><p>这两组状态都是从内核里读取过来的，分别对应内核里的两个状态标记，<code>dev-&gt;flags</code>和<code>dev-&gt;operstate</code><br>在具体实现实现时候，还要涉及另外一个状态标记<code>dev-&gt;state</code></p>
+<ul>
+<li><code>dev-&gt;flags</code>：每个位代表一个标志。</li>
+<li><code>dev-&gt;operstate</code>: </li>
+<li><code>dev-&gt;state</code>:</li>
+</ul>
+<p>ip link命令通过netlink消息跟内核交互，通过sendmsg下发req请求（命令）, 通过recvmsg获取内核返回结果（命令结果）。解析结果，以获取内核里网口(netdevice)的状态。根据内核返回网口状态信息，打印输出网口的标志位(falgs)和状态值(operstate)。<br>可以分为以下几步：</p>
+<ol>
+<li>构建一个<code>netlink socket</code>,并通过它往内核发送一个获取内核网口状态的命令，</li>
+<li>内核根据命令，读取网口状态并发送一个响应消息，通过<code>netlink socket</code>返回给<code>ip link</code>命令。</li>
+<li><code>ip link</code>根据内核返回结果，输出网口<code>flags</code>和状态</li>
+</ol>
+<p>netlink命令的实现机制涉及的内容很多，我们这里不展开讲解netlink在内核如何实现。只关注调用链两端的实现。即:</p>
+<ul>
+<li>ip命令如何解析并打印网口状态</li>
+<li>内核如何搜集并发回网口状态<br>后续我们按照标志位分类顺序，结合<code>ip link show eth0</code>命令，逐个解析各个标志位在两端(内核和 ip link)的实现。</li>
+</ul>
+<h1 id="ip-link命令的实现">4. ip link命令的实现</h1><h2 id="函数调用栈">4.1. 函数调用栈</h2><p>当执行命令<code>ip link show eth0</code>时候，具体函数调用关系如下：</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><code class="hljs dns">main / iplink.c<br>   |--&gt; do_cmd<br>        |--&gt; c-&gt;func<span class="hljs-punctuation">(</span>...<span class="hljs-punctuation">)</span> //等同于do_iplink<br>             do_iplink<span class="hljs-punctuation">(</span>...<span class="hljs-punctuation">)</span><br>             |--&gt; brlink_show<br>                  |--&gt; rtnl_linkdump_req<br>                  |--&gt; rtnl_dump_filter<span class="hljs-punctuation">(</span>&amp;rth, print_linkinfo, stdout<span class="hljs-punctuation">)</span> //rtnl_dump_filter_nc<br>                       rtnl_dump_filter_nc<br>                       |--&gt;  <span class="hljs-keyword">a</span>.filter = filter, // filter =&gt; `print_linkinfo`                      <br>                       |--&gt;  rtnl_dump_filter_l<span class="hljs-punctuation">(</span>rth, <span class="hljs-keyword">a</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>                            |--&gt; <span class="hljs-keyword">a</span>-&gt;filter<span class="hljs-punctuation">(</span>h, <span class="hljs-keyword">a</span>-&gt;arg1<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>                                 print_linkinfo<br>                                 |--&gt; print_name_and_link<span class="hljs-punctuation">(</span><span class="hljs-string">&quot;%s: &quot;</span>, name, tb<span class="hljs-punctuation">)</span> // 如<span class="hljs-string">&quot;eth0:&quot;</span><br>                                 |--&gt; print_link_flags<span class="hljs-punctuation">(</span>fp, ifi-&gt;ifi_flags, m_flag<span class="hljs-punctuation">)</span><span class="hljs-comment">; //如`&lt;..,UP,LOWER_UP\&gt;`</span><br>                                      |--&gt; if <span class="hljs-punctuation">(</span>flags &amp; IFF_UP &amp;&amp; !<span class="hljs-punctuation">(</span>flags &amp; IFF_RUNNING<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><br>                                           |--&gt; print_string<span class="hljs-punctuation">(</span>flags ? <span class="hljs-string">&quot;%s,&quot;</span> : <span class="hljs-string">&quot;%s&quot;</span>, <span class="hljs-string">&quot;NO-CARRIER&quot;</span><span class="hljs-punctuation">)</span><span class="hljs-comment">; //</span><br>                                      |--&gt; _PF<span class="hljs-punctuation">(</span>UP<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>                                      |--&gt; _PF<span class="hljs-punctuation">(</span>LOWER_UP<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>                                      |--&gt; _PF<span class="hljs-punctuation">(</span>DORMANT<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>                                      |--&gt; if <span class="hljs-punctuation">(</span>mdown<span class="hljs-punctuation">)</span><br>                                           |--&gt; print_string<span class="hljs-punctuation">(</span>PRINT_ANY, NULL, <span class="hljs-string">&quot;,%s&quot;</span>, <span class="hljs-string">&quot;M-DOWN&quot;</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>                                 |--&gt; print_operstate<span class="hljs-punctuation">(</span>fp, rta_getattr_u8<span class="hljs-punctuation">(</span>tb[IFLA_OPERSTATE]<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;//如`state UP`。</span><br>                                                                     |--&gt; color_fprintf<span class="hljs-punctuation">(</span>..., <span class="hljs-string">&quot;%s &quot;</span>, oper_states[state]<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+
+<p><code>ip link</code>命令, 因为没有指定具体网口，参数不同, 它的调用栈跟这个略有不同。</p>
+<figure class="highlight gherkin"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs gherkin">main / iplink.c<br>   |<span class="hljs-string">--&gt; do_cmd</span><br>        |<span class="hljs-string">--&gt; c-&gt;func(...) //等同于do_iplink</span><br>             do_iplink(...)<br>             |<span class="hljs-string">--&gt; ipaddr_list_link</span><br>                  |<span class="hljs-string">--&gt; ipaddr_list_flush_or_save</span><br>                         |<span class="hljs-string">--&gt; print_linkinfo //后续调用同上</span><br></code></pre></td></tr></table></figure>
+<p>但最终都会调用<code>print_linkinfo</code>去处理netlink返回消息，逐个打印返回消息里的网口信息。这里不展开讨论。</p>
+<h2 id="主要函数">4.2. 主要函数</h2><p>其中处理状态标志位的两个主要函数：函数<code>print_link_flags</code>和<code>print_operstate</code></p>
+<ol>
+<li>函数<code>print_link_flags</code>输出网口的flags。如<code>&lt;BROADCAST,MULTICAST,UP,LOWER_UP\&gt;</code>。</li>
+<li>函数<code>print_operstate</code>网卡operstate状态。 如<code>state UP</code>。</li>
+</ol>
+<h3 id="print-link-flags">4.2.1. print_link_flags</h3><figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><code class="hljs dns">  <span class="hljs-number">83</span> static void print_link_flags<span class="hljs-punctuation">(</span>FILE *fp, unsigned int flags, unsigned int mdown<span class="hljs-punctuation">)</span><br>  <span class="hljs-number">84</span> &#123;<br>  <span class="hljs-number">85</span>         open_json_array<span class="hljs-punctuation">(</span>PRINT_ANY, is_json_context<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span> ? <span class="hljs-string">&quot;flags&quot;</span> : <span class="hljs-string">&quot;&lt;&quot;</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>  <span class="hljs-number">86</span>         if <span class="hljs-punctuation">(</span>flags &amp; IFF_UP &amp;&amp; !<span class="hljs-punctuation">(</span>flags &amp; IFF_RUNNING<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><br>  <span class="hljs-number">87</span>                 print_string<span class="hljs-punctuation">(</span>PRINT_ANY, NULL,<br>  <span class="hljs-number">88</span>                              flags ? <span class="hljs-string">&quot;%s,&quot;</span> : <span class="hljs-string">&quot;%s&quot;</span>, <span class="hljs-string">&quot;NO-CARRIER&quot;</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>  <span class="hljs-number">89</span>         flags &amp;= ~IFF_RUNNING<span class="hljs-comment">;</span><br>  <span class="hljs-number">90</span> #define _PF<span class="hljs-punctuation">(</span>f<span class="hljs-punctuation">)</span> if <span class="hljs-punctuation">(</span>flags&amp;IFF_##f<span class="hljs-punctuation">)</span> &#123;                                     \<br>  <span class="hljs-number">91</span>                 flags &amp;= ~IFF_##f <span class="hljs-comment">;                                     \</span><br>  <span class="hljs-number">92</span>                 print_string<span class="hljs-punctuation">(</span>PRINT_ANY, NULL, flags ? <span class="hljs-string">&quot;%s,&quot;</span> : <span class="hljs-string">&quot;%s&quot;</span>, #f<span class="hljs-punctuation">)</span><span class="hljs-comment">; &#125;</span><br> ...<br> <span class="hljs-number">107</span>         _PF<span class="hljs-punctuation">(</span>UP<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br> <span class="hljs-number">108</span>         _PF<span class="hljs-punctuation">(</span>LOWER_UP<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br> <span class="hljs-number">109</span>         _PF<span class="hljs-punctuation">(</span>DORMANT<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>...<br> <span class="hljs-number">114</span>         if <span class="hljs-punctuation">(</span>mdown<span class="hljs-punctuation">)</span><br> <span class="hljs-number">115</span>                 print_string<span class="hljs-punctuation">(</span>PRINT_ANY, NULL, <span class="hljs-string">&quot;,%s&quot;</span>, <span class="hljs-string">&quot;M-DOWN&quot;</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br> <span class="hljs-number">116</span>         close_json_array<span class="hljs-punctuation">(</span>PRINT_ANY, <span class="hljs-string">&quot;&gt; &quot;</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br> <span class="hljs-number">117</span> &#125;<br></code></pre></td></tr></table></figure>
+<p>这个函数会打印<code>&lt;&gt;</code>中全部的标志位，因此我们后续拆分成几部分解释：</p>
+<ol>
+<li><code>NO_CARRIER</code>标志位:</li>
+<li><code>RUNNING</code>标志位:</li>
+<li><code>UP</code>、<code>LOWER_UP </code>、<code>DORMANT </code>标志位</li>
+<li><code>M-DOWN</code>标志位:</li>
+</ol>
+<h3 id="print-operstate">4.2.2. print_operstate</h3> <figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">124 </span>static void print_operstate(FILE *f, __u8 state)<br><span class="hljs-symbol">125 </span>&#123;<br><span class="hljs-symbol">126 </span>        <span class="hljs-keyword">if</span> (state &gt;= ARRAY_SIZE(oper_states)) &#123;<br><span class="hljs-symbol">127 </span>                <span class="hljs-keyword">if</span> (is_json_context())<br><span class="hljs-symbol">128 </span>                        print_uint(PRINT_JSON, <span class="hljs-string">&quot;operstate_index&quot;</span>, NULL, state);<br><span class="hljs-symbol">129 </span>                <span class="hljs-keyword">else</span><br><span class="hljs-symbol">130 </span>                        print_0xhex(PRINT_FP, NULL, <span class="hljs-string">&quot;state %#llx&quot;</span>, state);<br><span class="hljs-symbol">131 </span>        &#125; <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (brief) &#123;<br><span class="hljs-symbol">132 </span>                print_color_string(PRINT_ANY,<br><span class="hljs-symbol">133 </span>                                   oper_state_color(state),<br><span class="hljs-symbol">134 </span>                                   <span class="hljs-string">&quot;operstate&quot;</span>,<br><span class="hljs-symbol">135 </span>                                   <span class="hljs-string">&quot;%-14s &quot;</span>,<br><span class="hljs-symbol">136 </span>                                   oper_states[state]);<br><span class="hljs-symbol">137 </span>        &#125; <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-symbol">138 </span>                <span class="hljs-keyword">if</span> (is_json_context())<br><span class="hljs-symbol">139 </span>                        print_string(PRINT_JSON,<br><span class="hljs-symbol">140 </span>                                     <span class="hljs-string">&quot;operstate&quot;</span>,<br><span class="hljs-symbol">141 </span>                                     NULL, oper_states[state]);<br><span class="hljs-symbol">142 </span>                <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-symbol">143 </span>                        fprintf(f, <span class="hljs-string">&quot;state &quot;</span>);<br><span class="hljs-symbol">144 </span>                        color_fprintf(f, oper_state_color(state),<br><span class="hljs-symbol">145 </span>                                      <span class="hljs-string">&quot;%s &quot;</span>, oper_states[state]);<br><span class="hljs-symbol">146 </span>                &#125;<br><span class="hljs-symbol">147 </span>        &#125;<br><span class="hljs-symbol">148 </span>&#125;<br></code></pre></td></tr></table></figure>
+<p> 这个函数会打印<code>state XX</code>这个状态信息，具体数值是从内核传递回来的, 使用<code>oper_states</code>做了数值到状态字符串的转换。</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">119 </span>static const char *oper_states[] = &#123;<br><span class="hljs-symbol">120 </span>        <span class="hljs-string">&quot;UNKNOWN&quot;</span>, <span class="hljs-string">&quot;NOTPRESENT&quot;</span>, <span class="hljs-string">&quot;DOWN&quot;</span>, <span class="hljs-string">&quot;LOWERLAYERDOWN&quot;</span>,<br><span class="hljs-symbol">121 </span>        <span class="hljs-string">&quot;TESTING&quot;</span>, <span class="hljs-string">&quot;DORMANT&quot;</span>,    <span class="hljs-string">&quot;UP&quot;</span><br><span class="hljs-symbol">122 </span>&#125;;<br></code></pre></td></tr></table></figure>
+
+<h2 id="NO-CARRIER标志位">4.3. NO_CARRIER标志位</h2><p>在函数<code>print_link_flags</code>里，ip link命令根据内核返回的网口属性里的<code>ifi_flags</code>标志进行打印，实现了<code>NO_CARRIER</code>标志位的输出。<br>这个标志位比较特殊：不是内核里自带的，而是<code>ip link</code>根据返回结果自己追加的。<br> 只有在网口<code>UP</code>并且没有<code>RUNNING</code>时，<code>ip link</code>就会打印<code>NO_CARRIER</code>,这个标志。<br>或者说：<br>	+ 如果网口被<code>UP</code>了，没有<code>NO_CARRIER</code>，那说明网口是<code>RUNNING</code>状态。此时是<code>CARRIER_OK</code>(现实中没有这个标志位)<br>	+ 如网口被<code>DOWN</code>了(NOT <code>UP</code>），<code>RUNNING</code>标志位肯定就没有了。</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">86 </span>        <span class="hljs-keyword">if</span> (flags &amp; IFF_UP &amp;&amp; !(flags &amp; IFF_RUNNING))<br><span class="hljs-symbol">87 </span>                print_string(PRINT_ANY, NULL,<br><span class="hljs-symbol">88 </span>                             flags ? <span class="hljs-string">&quot;%s,&quot;</span> : <span class="hljs-string">&quot;%s&quot;</span>, <span class="hljs-string">&quot;NO-CARRIER&quot;</span>);<br></code></pre></td></tr></table></figure>
+<p><em><strong>【Q】</strong></em> 这里有个问题解释下：<br> <code>CARRIER</code>本意是表示网口上网线状态。现实中，网线是否插好，跟网口是否被<code>UP</code>或者<code>DOWN</code>没直接关系。<br>为什么必须网口被<code>UP</code>后，才能显示？网口被<code>DOWN</code>的时候，为什么不考虑显示？<br>A：【待完善】有些类型的物理网卡，当网口<code>DOWN</code>了，会做节能断电处理。 此时设备上没有光电信号，不可能去做网口的信号检测，因此不能判断光纤或者网线是否插好。</p>
+<h2 id="RUNNING标志位">4.4. RUNNING标志位</h2><p>【Q】为什么ip link命令，输出的网口状态标志位的列表里，看不到标志位<code>RUNNING</code>？<br>接前面<code>NO_CARRIER</code>的处理，<code>print_link_flags </code>处理完<code>NO_CARRIER</code>标志位的后，<br>就会把<em><strong>抹掉标志位<code>IFF_RUNNING</code>，不再处理。</strong></em>（见代码第89行）<br>因此即使内核携带<code>IFF_RUNNING</code>标记位返回给ip命令，在 iplink命令中也不会显示<code>RUNNING</code>标志位。这与ifconfig的处理是不一样的。</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">89 </span>        flags &amp;= ~IFF_RUNNING;<br></code></pre></td></tr></table></figure>
+
+<h2 id="UP-LOWER-UP-DORMANT标志位">4.5. UP``LOWER_UP ``DORMANT标志位</h2><p>这三个标志位处理比较简单， 都是根据内核里返回的标志位，打印对应的标记字符串。<br><code>_PF </code>的解释：<br>	每次打印一个标志位前，先清除掉这个标志位，再打印。<br>	打印时候，如果是最后一个标志(<code>flags</code>为0), 则只打印状态字符串(格式”%s”），否选择要多个<code>,</code>(格式”%s”,)。用<code>,</code>分割多个标志位。  </p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">90 </span>#define _PF(f) <span class="hljs-keyword">if</span> (flags&amp;IFF_##f) &#123;                                     \<br><span class="hljs-symbol">91 </span>                flags &amp;= ~IFF_##f ;                                     \<br><span class="hljs-symbol">92 </span>                print_string(PRINT_ANY, NULL, flags ? <span class="hljs-string">&quot;%s,&quot;</span> : <span class="hljs-string">&quot;%s&quot;</span>, #f); &#125;<br></code></pre></td></tr></table></figure>
+
+<h2 id="M-DOWN标志位">4.6. M-DOWN标志位:</h2><p>结论：当前网口的peer端口，没有UP时候，会在当前接口的<code>&lt;&gt;</code>里打印这个标志。</p>
+<ol>
+<li><code>print_name_and_link</code>：根据内核上传的网口的iflink的序号(IFLA_LINK属性)，查找到iflink对应的关联网口peer, 并返回peer网口的<code>flags</code>(m_flag)。</li>
+<li><code>print_link_flags</code>: 如果peer网口没有<code>IFF_UP</code>，打印<code>M-DOWN</code>标记。</li>
+</ol>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs dns"> <span class="hljs-number">962</span> int print_linkinfo<span class="hljs-punctuation">(</span>struct nlmsghdr *n, void *arg<span class="hljs-punctuation">)</span><br> <span class="hljs-number">963</span> &#123;<br> ...<br><span class="hljs-number">1027</span>         m_flag = print_name_and_link<span class="hljs-punctuation">(</span><span class="hljs-string">&quot;%s: &quot;</span>, name, tb<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">1028</span>         print_link_flags<span class="hljs-punctuation">(</span>fp, ifi-&gt;ifi_flags, m_flag<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+
+<h3 id="print-name-and-link">4.6.1. print_name_and_link</h3><figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs yaml"><span class="hljs-number">1269 </span><span class="hljs-string">unsigned</span> <span class="hljs-string">int</span> <span class="hljs-string">print_name_and_link(const</span> <span class="hljs-string">char</span> <span class="hljs-string">*fmt,</span><br><span class="hljs-number">1270                                  </span><span class="hljs-string">const</span> <span class="hljs-string">char</span> <span class="hljs-string">*name,</span> <span class="hljs-string">struct</span> <span class="hljs-string">rtattr</span> <span class="hljs-string">*tb[])</span><br><span class="hljs-number">1271</span> &#123;<br><span class="hljs-string">...</span><br><span class="hljs-number">1276         </span><span class="hljs-string">if</span> <span class="hljs-string">(tb</span>[<span class="hljs-string">IFLA_LINK</span>]<span class="hljs-string">)</span> &#123;<br><span class="hljs-number">1277                 </span><span class="hljs-string">int</span> <span class="hljs-string">iflink</span> <span class="hljs-string">=</span> <span class="hljs-string">rta_getattr_u32(tb</span>[<span class="hljs-string">IFLA_LINK</span>]<span class="hljs-string">);</span><br><span class="hljs-string">...</span><br><span class="hljs-number">1296                                 </span><span class="hljs-string">m_flag</span> <span class="hljs-string">=</span> <span class="hljs-string">ll_index_to_flags(iflink);</span><br><span class="hljs-number">1297                                 </span><span class="hljs-string">m_flag</span> <span class="hljs-string">=</span> <span class="hljs-type">!(m_flag</span> <span class="hljs-string">&amp;</span> <span class="hljs-string">IFF_UP);</span><br><span class="hljs-string">...</span><br><span class="hljs-number">1310</span>         &#125;<br><span class="hljs-string">...</span><br><span class="hljs-number">1314         </span><span class="hljs-string">return</span> <span class="hljs-string">m_flag;</span><br><span class="hljs-number">1315</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs cpp">  <span class="hljs-number">83</span> <span class="hljs-function"><span class="hljs-type">static</span> <span class="hljs-type">void</span> <span class="hljs-title">print_link_flags</span><span class="hljs-params">(FILE *fp, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> flags, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> mdown)</span></span><br><span class="hljs-function">  84 </span>&#123;<br>...<br> <span class="hljs-number">114</span>         <span class="hljs-keyword">if</span> (mdown)<br> <span class="hljs-number">115</span>                 <span class="hljs-built_in">print_string</span>(PRINT_ANY, <span class="hljs-literal">NULL</span>, <span class="hljs-string">&quot;,%s&quot;</span>, <span class="hljs-string">&quot;M-DOWN&quot;</span>);<br></code></pre></td></tr></table></figure>
+
+<h1 id="内核的网口状态标志位">5. 内核的网口状态标志位</h1><h2 id="struct-net-device的相关定义">5.1. struct net_device的相关定义</h2><ul>
+<li>每个网口在内核里有对应的<code>struct net_device</code>结构体。</li>
+</ul>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-number">2080</span> <span class="hljs-keyword">struct</span> <span class="hljs-title class_">net_device</span> &#123;<br>...<br><span class="hljs-number">2127</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span>           state;<br><span class="hljs-number">2128</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span>            flags;<br>...<br><span class="hljs-number">2232</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span>            operstate;<br></code></pre></td></tr></table></figure>
+
+<h2 id="标志位netdev-flags">5.2. 标志位netdev-&gt;flags</h2><p>每个<code>netdev</code>设备里有一个上的flags用来存放标志位，我们这里只关注up&#x2F;down相关的几个标志位</p>
+<ul>
+<li><code>IFF_UP</code></li>
+<li><code>IFF_RUNING</code></li>
+<li><code>IFF_LOWER_UP</code></li>
+<li><code>IFF_DORMANT</code></li>
+</ul>
+<h3 id="定义">5.2.1. 定义</h3><figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs cpp"> <span class="hljs-number">80</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">net_device_flags</span> &#123;<br> <span class="hljs-number">81</span> <span class="hljs-comment">/* for compatibility with glibc net/if.h */</span><br> <span class="hljs-number">82</span> <span class="hljs-meta">#<span class="hljs-keyword">if</span> __UAPI_DEF_IF_NET_DEVICE_FLAGS</span><br> <span class="hljs-number">83</span>         IFF_UP                          = <span class="hljs-number">1</span>&lt;&lt;<span class="hljs-number">0</span>,  <span class="hljs-comment">/* sysfs */</span><br>...<br> <span class="hljs-number">89</span>         IFF_RUNNING                     = <span class="hljs-number">1</span>&lt;&lt;<span class="hljs-number">6</span>,  <span class="hljs-comment">/* __volatile__ */</span><br>...<br><span class="hljs-number">100</span> <span class="hljs-meta">#<span class="hljs-keyword">if</span> __UAPI_DEF_IF_NET_DEVICE_FLAGS_LOWER_UP_DORMANT_ECHO</span><br><span class="hljs-number">101</span>         IFF_LOWER_UP                    = <span class="hljs-number">1</span>&lt;&lt;<span class="hljs-number">16</span>, <span class="hljs-comment">/* __volatile__ */</span><br><span class="hljs-number">102</span>         IFF_DORMANT                     = <span class="hljs-number">1</span>&lt;&lt;<span class="hljs-number">17</span>, <span class="hljs-comment">/* __volatile__ */</span><br><span class="hljs-number">103</span>         IFF_ECHO                        = <span class="hljs-number">1</span>&lt;&lt;<span class="hljs-number">18</span>, <span class="hljs-comment">/* __volatile__ */</span><br><span class="hljs-number">104</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span> <span class="hljs-comment">/* __UAPI_DEF_IF_NET_DEVICE_FLAGS_LOWER_UP_DORMANT_ECHO */</span></span><br><span class="hljs-number">105</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h3 id="状态获取函数">5.2.2. 状态获取函数</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">9191 </span>unsigned <span class="hljs-keyword">int</span> dev_get_flags(const struct net_device *dev)<br><span class="hljs-symbol">9192 </span>&#123;<br><span class="hljs-symbol">9193 </span>        unsigned <span class="hljs-keyword">int</span> flags;<br><span class="hljs-number">9194</span><br><span class="hljs-symbol">9195 </span>        flags = (READ_ONCE(dev-&gt;flags) &amp; ~(IFF_PROMISC |<br><span class="hljs-symbol">9196 </span>                                IFF_ALLMULTI |<br><span class="hljs-symbol">9197 </span>                                IFF_RUNNING |<br><span class="hljs-symbol">9198 </span>                                IFF_LOWER_UP |<br><span class="hljs-symbol">9199 </span>                                IFF_DORMANT)) |<br><span class="hljs-symbol">9200 </span>                (READ_ONCE(dev-&gt;gflags) &amp; (IFF_PROMISC |<br><span class="hljs-symbol">9201 </span>                                IFF_ALLMULTI));<br><span class="hljs-number">9202</span><br><span class="hljs-symbol">9203 </span>        <span class="hljs-keyword">if</span> (netif_running(dev)) &#123;<br><span class="hljs-symbol">9204 </span>                <span class="hljs-keyword">if</span> (netif_oper_up(dev))<br><span class="hljs-symbol">9205 </span>                        flags |= IFF_RUNNING;<br><span class="hljs-symbol">9206 </span>                <span class="hljs-keyword">if</span> (netif_carrier_ok(dev))<br><span class="hljs-symbol">9207 </span>                        flags |= IFF_LOWER_UP;<br><span class="hljs-symbol">9208 </span>                <span class="hljs-keyword">if</span> (netif_dormant(dev))<br><span class="hljs-symbol">9209 </span>                        flags |= IFF_DORMANT;<br><span class="hljs-symbol">9210 </span>        &#125;<br><span class="hljs-number">9211</span><br><span class="hljs-symbol">9212 </span>        <span class="hljs-keyword">return</span> flags;<br><span class="hljs-symbol">9213 </span>&#125;<br><span class="hljs-symbol">9214 </span>EXPORT_SYMBOL(dev_get_flags);<br></code></pre></td></tr></table></figure>
+
+<h2 id="标志位IFF-RUNNING">5.3. 标志位IFF_RUNNING</h2><p>放到后面跟<code>netif_oper_up</code>一起解释。</p>
+<h2 id="标志位IFF-LOWER-UP">5.4. 标志位IFF_LOWER_UP</h2><p>在内核里，<code>IFF_LOWER_UP</code>标志位被置位的两个前提条件：</p>
+<ul>
+<li>网口处于<code>UP</code>状态:  即前面解释的<code>IFF_UP</code>标志位被设置</li>
+<li>网口的载质(网线) OK:  内核判断函数netif_carrier_ok为<code>TRUE</code>，即<code>dev-&gt;state</code>上没有<code>__LINK_STATE_NOCARRIER</code>标志位<br>对应场景：以太网网口eth0，被管理员通过 ip link 命令设置<code>UP</code>后，并且网线正常接入对端交换机（交换机状态正常加电，且交换机上对应网口也被 UP）<br>当内核网口flags上有这个标志位时候，<code>ip link</code>打印网口标志位时候就会打印<code>LOWER_UP</code>标记。<br>这个等同于ifconfig命令里的<code>RUNNING</code>标记<br><em><strong>注意：</strong></em> 内核的<code>netif_running</code>跟用户态<code>ip link</code>命令里用到的<code>RUNNING</code>标志位含义是完全不一样的。<code>netif_running</code>在网口up时候，被设置标志位<code>__LINK_STATE_START</code></li>
+</ul>
+<h4 id="标志位-IFF-DORMANT">5.4.0.1. 标志位 IFF_DORMANT</h4><p><code>DORMANT</code>在我工作中没有接触到，看文档是wifi类的网口会使用，这里没有具体验证，只描述理解。<br>应用场景：wifi 网口， 当 wifi 网口连接到路由器后，记为 T1（carrier OK），跟以太网网口不一样的是，在物理载质检测通过后， wifi 口有时候还需要做一些安全认证， 也就是咱们平时配置 wifi 密码的哪些上层身份验证。<code>DORMANT</code>感觉翻译为<code>匿名</code>比较合适，因为没有还没有通过身份校验。<br>具体代码有机会在展开分析。对以太网网口没有意义。</p>
+<h2 id="netdev-state和netdev-operstate">5.5. netdev-&gt;state和netdev-&gt;operstate</h2><p>这部分我们放到后面part2里详细讲述。<br><em><strong>operstate的小插曲</strong></em><br>2006年内核引入<code>operstate</code>特性，在当时协议栈的维护者中也是颇有争议的！！！<br><a target="_blank" rel="noopener" href="https://web.git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=b00055aa">引入operstat特性的patch</a><br> <img src="/./images/ip_link/operstate.png" srcset="/img/loading.gif" lazyload alt="图4: 2006年协议栈加入operstate特性"></p>
+<p>&#x3D;&#x3D;注：更新源代码的内核版本：<code>v6.14</code>&#x3D;&#x3D;</p>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Netdev/" class="category-chain-item">Netdev</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/netdev/" class="print-no-link">#netdev</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>网口状态标志位详解(Part 1/2)</div>
+      <div>https://martinbj2008.github.io/2025/05/01/netdev-state-flags-part1/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>May 1, 2025</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2025/05/03/netdev-state-flags-part2/" title="网口状态标志位解析part2: 内核如何维护网卡carrier的状态">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2024/10/03/epoll-frame-summary/" title="epoll-frame-summary">
+                        <span class="hidden-mobile">epoll-frame-summary</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

@@ -1,0 +1,852 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="For the packet to localhost, ip_local_deliver_finish will be thelast funciton called by network layer. In ip_local_deliver_finish, it will be process the protocolhander of a array element of inet_prot">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How does IPV4&#x2F;6 process input tcp&#x2F;udp packet">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/11/25/2013-11-25-net-protocol-handler-for-tcp-udp/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="For the packet to localhost, ip_local_deliver_finish will be thelast funciton called by network layer. In ip_local_deliver_finish, it will be process the protocolhander of a array element of inet_prot">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2013-11-25T02:54:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.750Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="Socket">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>How does IPV4/6 process input tcp/udp packet - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="How does IPV4/6 process input tcp/udp packet"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2013-11-25 10:54" pubdate>
+          November 25, 2013 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          9.5k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          80 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">How does IPV4/6 process input tcp/udp packet</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <p>For the packet to localhost, <code>ip_local_deliver_finish</code> will be the<br>last funciton called by network layer.</p>
+<p>In <code>ip_local_deliver_finish</code>, it will be process the protocol<br>hander of a array element of <code>inet_protos</code> according the <code>protocol</code> value<br>in IPv4 header.</p>
+<p>IPv6 is very similar vs IPv4 except the name is a bit different.</p>
+<span id="more"></span>
+<h3 id="Data-structure-for-IPv4">0.0.1. Data structure for IPv4</h3><h4 id="net-protocol">0.0.1.1. net_protocol</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">34</span> <span class="hljs-comment">/* This is one larger than the largest protocol value that can be</span><br><span class="hljs-comment">35  * found in an ipv4 or ipv6 header.  Since in both cases the protocol</span><br><span class="hljs-comment">36  * value is presented in a __u8, this is defined to be 256.</span><br><span class="hljs-comment">37  */</span><br><span class="hljs-number">38</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> MAX_INET_PROTOS         256</span><br><span class="hljs-number">39</span> <br><span class="hljs-number">40</span> <span class="hljs-comment">/* This is used to register protocols. */</span><br><span class="hljs-number">41</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net_protocol</span> &#123;</span><br><span class="hljs-number">42</span>         <span class="hljs-type">void</span>                    (*early_demux)(<span class="hljs-keyword">struct</span> sk_buff *skb);<br><span class="hljs-number">43</span>         <span class="hljs-type">int</span>                     (*handler)(<span class="hljs-keyword">struct</span> sk_buff *skb);<br><span class="hljs-number">44</span>         <span class="hljs-type">void</span>                    (*err_handler)(<span class="hljs-keyword">struct</span> sk_buff *skb, u32 info);<br><span class="hljs-number">45</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span>            no_policy:<span class="hljs-number">1</span>,<br><span class="hljs-number">46</span>                                 netns_ok:<span class="hljs-number">1</span>;<br><span class="hljs-number">47</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<p>The <code>handler</code> is the main part, it will be called to process upper protol over IPv4.</p>
+<p>Fox example: tcpv4 will be <code>tcp_v4_rcv</code>.</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1540 </span>static const struct net_protocol tcp_protocol = &#123;<br><span class="hljs-symbol">1541 </span>        .early_demux    =       tcp_v4_early_demux,<br><span class="hljs-symbol">1542 </span>        .handler        =       tcp_v4_rcv,<br><span class="hljs-symbol">1543 </span>        .err_handler    =       tcp_v4_err,<br><span class="hljs-symbol">1544 </span>        .no_policy      =       <span class="hljs-number">1</span>,<br><span class="hljs-symbol">1545 </span>        .netns_ok       =       <span class="hljs-number">1</span>,<br><span class="hljs-symbol">1546 </span>&#125;;<br></code></pre></td></tr></table></figure>
+
+<h4 id="pointer-array-for-all-protocols">0.0.1.2. pointer array for all protocols</h4><p>There is a pointer array <code>inet_protos</code> to collect all the supported protocols by IPv4.</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">31 </span>const struct net_protocol __rcu *inet_protos[MAX_INET_PROTOS] __read_mostly;<br><span class="hljs-symbol">32 </span>const struct net_offload __rcu *inet_offloads[MAX_INET_PROTOS] __read_mostly;<br></code></pre></td></tr></table></figure>
+
+<p>The ‘ADD’ and ‘DEL” operation is done by <code>inet_add_protocol</code> and <code>inet_del_protocol</code></p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">34 </span>/*<br><span class="hljs-symbol">35 </span> *      Add a protocol handler <span class="hljs-keyword">to</span> the hash tables<br><span class="hljs-symbol">36 </span> */<br><span class="hljs-symbol">37 </span><br><span class="hljs-symbol">38 </span><span class="hljs-keyword">int</span> inet_add_protocol(const struct net_protocol *prot, unsigned char protocol)<br><span class="hljs-symbol">39 </span>&#123;<br><span class="hljs-symbol">40 </span>        <span class="hljs-keyword">if</span> (!prot-&gt;netns_ok) &#123;<br><span class="hljs-symbol">41 </span>                pr_err(<span class="hljs-string">&quot;Protocol %u is not namespace aware, cannot register.\n&quot;</span>,<br><span class="hljs-symbol">42 </span>                        protocol);<br><span class="hljs-symbol">43 </span>                <span class="hljs-keyword">return</span> -EINVAL;<br><span class="hljs-symbol">44 </span>        &#125;<br><span class="hljs-symbol">45 </span><br><span class="hljs-symbol">46 </span>        <span class="hljs-keyword">return</span> !cmpxchg((const struct net_protocol **)&amp;inet_protos[protocol],<br><span class="hljs-symbol">47 </span>                        NULL, prot) ? <span class="hljs-number">0</span> : -<span class="hljs-number">1</span>;<br><span class="hljs-symbol">48 </span>&#125;<br><span class="hljs-symbol">49 </span>EXPORT_SYMBOL(inet_add_protocol);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">58 </span>/*<br><span class="hljs-symbol">59 </span> *      <span class="hljs-comment">Remove a protocol from the hash tables.</span><br><span class="hljs-symbol">60 </span> */<br><span class="hljs-symbol">61 </span><br><span class="hljs-symbol">62 </span><span class="hljs-keyword">int</span> inet_del_protocol(const struct net_protocol *prot, unsigned char protocol)<br><span class="hljs-symbol">63 </span>&#123;<br><span class="hljs-symbol">64 </span>        <span class="hljs-keyword">int</span> ret;<br><span class="hljs-symbol">65 </span><br><span class="hljs-symbol">66 </span>        ret = (cmpxchg((const struct net_protocol **)&amp;inet_protos[protocol],<br><span class="hljs-symbol">67 </span>                       prot, NULL) == prot) ? <span class="hljs-number">0</span> : -<span class="hljs-number">1</span>;<br><span class="hljs-symbol">68 </span><br><span class="hljs-symbol">69 </span>        synchronize_net();<br><span class="hljs-symbol">70 </span><br><span class="hljs-symbol">71 </span>        <span class="hljs-keyword">return</span> ret;<br><span class="hljs-symbol">72 </span>&#125;<br><span class="hljs-symbol">73 </span>EXPORT_SYMBOL(inet_del_protocol);<br><span class="hljs-symbol">74 </span><br></code></pre></td></tr></table></figure>
+
+<p>All registered protocol handler.</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><code class="hljs dns">$ grep inet_add_protocol net/ -Rw<br>net/dccp/ipv4.c:	err = inet_add_protocol<span class="hljs-punctuation">(</span>&amp;dccp_v4_protocol, IPPROTO_DCCP<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>net/sctp/protocol.c:	if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;sctp_protocol, IPPROTO_SCTP<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><br>net/l2tp/l2tp_ip.c:	err = inet_add_protocol<span class="hljs-punctuation">(</span>&amp;l2tp_ip_protocol, IPPROTO_L2TP<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>net/ipv4/ipmr.c:	if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;pim_protocol, IPPROTO_PIM<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> &#123;<br>net/ipv4/esp4.c:	if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;esp4_protocol, IPPROTO_ESP<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> &#123;<br>net/ipv4/protocol.c:int inet_add_protocol<span class="hljs-punctuation">(</span>const struct net_protocol *prot, unsigned char protocol<span class="hljs-punctuation">)</span><br>net/ipv4/protocol.c:EXPORT_SYMBOL<span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>net/ipv4/af_inet.c:	if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;icmp_protocol, IPPROTO_ICMP<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><br>net/ipv4/af_inet.c:	if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;udp_protocol, IPPROTO_UDP<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><br>net/ipv4/af_inet.c:	if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;tcp_protocol, IPPROTO_TCP<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><br>net/ipv4/af_inet.c:	if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;igmp_protocol, IPPROTO_IGMP<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><br>net/ipv4/ah4.c:	if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;ah4_protocol, IPPROTO_AH<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> &#123;<br>net/ipv4/tunnel4.c:	if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;tunnel4_protocol, IPPROTO_IPIP<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> &#123;<br>net/ipv4/tunnel4.c:	if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;tunnel64_protocol, IPPROTO_IPV6<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> &#123;<br>net/ipv4/ipcomp.c:	if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;ipcomp4_protocol, IPPROTO_COMP<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> &#123;<br>net/ipv4/udplite.c:	if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;udplite_protocol, IPPROTO_UDPLITE<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><br>net/ipv4/gre_demux.c:	if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;net_gre_protocol, IPPROTO_GRE<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> &#123;<br></code></pre></td></tr></table></figure>
+<h4 id="regiter-protocol-handler-for-tcp-udp-and-icmp">0.0.1.3. regiter protocol handler for tcp, udp and icmp.</h4><figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">1670</span> static int __init inet_init<span class="hljs-punctuation">(</span>void<span class="hljs-punctuation">)</span><br><span class="hljs-number">1671</span> &#123;<br>...<br><span class="hljs-number">1710</span>         /*<br><span class="hljs-number">1711</span>          *      Add all the base protocols.<br><span class="hljs-number">1712</span>          */<br><span class="hljs-number">1713</span> <br><span class="hljs-number">1714</span>         if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;icmp_protocol, IPPROTO_ICMP<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><br><span class="hljs-number">1715</span>                 pr_crit<span class="hljs-punctuation">(</span><span class="hljs-string">&quot;%s: Cannot add ICMP protocol<span class="hljs-char escape_">\n</span>&quot;</span>, __func__<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">1716</span>         if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;udp_protocol, IPPROTO_UDP<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><br><span class="hljs-number">1717</span>                 pr_crit<span class="hljs-punctuation">(</span><span class="hljs-string">&quot;%s: Cannot add UDP protocol<span class="hljs-char escape_">\n</span>&quot;</span>, __func__<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">1718</span>         if <span class="hljs-punctuation">(</span>inet_add_protocol<span class="hljs-punctuation">(</span>&amp;tcp_protocol, IPPROTO_TCP<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><br><span class="hljs-number">1719</span>                 pr_crit<span class="hljs-punctuation">(</span><span class="hljs-string">&quot;%s: Cannot add TCP protocol<span class="hljs-char escape_">\n</span>&quot;</span>, __func__<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>...<br></code></pre></td></tr></table></figure>
+
+<h4 id="call-protocol-handler-in-the-end-of-IPv4-process">0.0.1.4. call protocol handler in the end of IPv4 process.</h4><p>NOTE:</p>
+<ol>
+<li><code>no_policy</code>: if it is set, <code>xfrm4_policy_check</code> will be<br>postponed and done by handler itself. such as <code>tcp</code>, <code>udp</code>.</li>
+</ol>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">190 </span>static <span class="hljs-keyword">int</span> ip_local_deliver_finish(struct sk_buff *skb)<br><span class="hljs-symbol">191 </span>&#123;<br><span class="hljs-symbol">192 </span>        struct net *net = dev_net(skb-&gt;dev);<br><span class="hljs-symbol">193 </span><br><span class="hljs-symbol">194 </span>        __skb_pull(skb, skb_network_header_len(skb));<br><span class="hljs-symbol">195 </span><br><span class="hljs-symbol">196 </span>        rcu_read_lock();<br><span class="hljs-symbol">197 </span>        &#123;<br><span class="hljs-symbol">198 </span>                <span class="hljs-keyword">int</span> protocol = ip_hdr(skb)-&gt;protocol;<br><span class="hljs-symbol">199 </span>                const struct net_protocol *ipprot;<br><span class="hljs-symbol">200 </span>                <span class="hljs-keyword">int</span> raw;<br><span class="hljs-symbol">201 </span><br><span class="hljs-symbol">202 </span>        resubmit:<br><span class="hljs-symbol">203 </span>                raw = raw_local_deliver(skb, protocol);<br><span class="hljs-symbol">204 </span><br><span class="hljs-symbol">205 </span>                ipprot = rcu_dereference(inet_protos[protocol]);<br><span class="hljs-symbol">206 </span>                <span class="hljs-keyword">if</span> (ipprot != NULL) &#123;<br><span class="hljs-symbol">207 </span>                        <span class="hljs-keyword">int</span> ret;<br><span class="hljs-symbol">208 </span><br><span class="hljs-symbol">209 </span>                        <span class="hljs-keyword">if</span> (!ipprot-&gt;no_policy) &#123;<br><span class="hljs-symbol">210 </span>                                <span class="hljs-keyword">if</span> (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) &#123;<br><span class="hljs-symbol">211 </span>                                        kfree_skb(skb);<br><span class="hljs-symbol">212 </span>                                        <span class="hljs-keyword">goto</span> <span class="hljs-keyword">out</span>;<br><span class="hljs-symbol">213 </span>                                &#125;<br><span class="hljs-symbol">214 </span>                                nf_reset(skb);<br><span class="hljs-symbol">215 </span>                        &#125;<br><span class="hljs-symbol">216 </span>                        ret = ipprot-&gt;handler(skb);<br><span class="hljs-symbol">217 </span>                        <span class="hljs-keyword">if</span> (ret &lt; <span class="hljs-number">0</span>) &#123;<br><span class="hljs-symbol">218 </span>                                protocol = -ret;<br><span class="hljs-symbol">219 </span>                                <span class="hljs-keyword">goto</span> resubmit;<br><span class="hljs-symbol">220 </span>                        &#125;<br><span class="hljs-symbol">221 </span>                        IP_INC_STATS_BH(net, IPSTATS_MIB_INDELIVERS);<br><span class="hljs-symbol">222 </span>                &#125; <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-symbol">223 </span>                        <span class="hljs-keyword">if</span> (!raw) &#123;<br><span class="hljs-symbol">224 </span>                                <span class="hljs-keyword">if</span> (xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) &#123;<br><span class="hljs-symbol">225 </span>                                        IP_INC_STATS_BH(net, IPSTATS_MIB_INUNKNOWNPROTOS);<br><span class="hljs-symbol">226 </span>                                        icmp_send(skb, ICMP_DEST_UNREACH,<br><span class="hljs-symbol">227 </span>                                                  ICMP_PROT_UNREACH, <span class="hljs-number">0</span>);<br><span class="hljs-symbol">228 </span>                                &#125;<br><span class="hljs-symbol">229 </span>                                kfree_skb(skb);<br><span class="hljs-symbol">230 </span>                        &#125; <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-symbol">231 </span>                                IP_INC_STATS_BH(net, IPSTATS_MIB_INDELIVERS);<br><span class="hljs-symbol">232 </span>                                consume_skb(skb);<br><span class="hljs-symbol">233 </span>                        &#125;<br><span class="hljs-symbol">234 </span>                &#125;<br><span class="hljs-symbol">235 </span>        &#125;<br><span class="hljs-symbol">236 </span> <span class="hljs-keyword">out</span>:<br><span class="hljs-symbol">237 </span>        rcu_read_unlock();<br><span class="hljs-symbol">238 </span><br><span class="hljs-symbol">239 </span>        <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-symbol">240 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+
+<h3 id="IPV6-part">0.0.2. IPV6 part</h3><h4 id="struct-inet6-protocol">0.0.2.1. struct inet6_protocol</h4><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">49 </span>#<span class="hljs-keyword">if</span> IS_ENABLED(CONFIG_IPV6)<br><span class="hljs-symbol">50 </span>struct inet6_protocol &#123;<br><span class="hljs-symbol">51 </span>        void    (*early_demux)(struct sk_buff *skb);<br><span class="hljs-symbol">52 </span><br><span class="hljs-symbol">53 </span>        <span class="hljs-keyword">int</span>     (*handler)(struct sk_buff *skb);<br><span class="hljs-symbol">54 </span><br><span class="hljs-symbol">55 </span>        void    (*err_handler)(struct sk_buff *skb,<br><span class="hljs-symbol">56 </span>                               struct inet6_skb_parm *opt,<br><span class="hljs-symbol">57 </span>                               u8 type, u8 code, <span class="hljs-keyword">int</span> offset,<br><span class="hljs-symbol">58 </span>                               __be32 info);<br><span class="hljs-symbol">59 </span>        unsigned <span class="hljs-keyword">int</span>    flags;  /* INET6_PROTO_xxx */<br><span class="hljs-symbol">60 </span>&#125;;<br><span class="hljs-symbol">61 </span><br><span class="hljs-symbol">62 </span>#define INET6_PROTO_NOPOLICY    <span class="hljs-number">0</span>x1<br><span class="hljs-symbol">63 </span>#define INET6_PROTO_FINAL       <span class="hljs-number">0</span>x2<br><span class="hljs-symbol">64 </span>#endif<br></code></pre></td></tr></table></figure>
+<h4 id="ADD-and-DEL">0.0.2.2. ADD and DEL</h4><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">29 </span>const struct inet6_protocol __rcu *inet6_protos[MAX_INET_PROTOS] __read_mostly;<br><span class="hljs-symbol">30 </span>EXPORT_SYMBOL(inet6_protos);<br><span class="hljs-symbol">31 </span><br><span class="hljs-symbol">32 </span><span class="hljs-keyword">int</span> inet6_add_protocol(const struct inet6_protocol *prot, unsigned char protocol)<br><span class="hljs-symbol">33 </span>&#123;<br><span class="hljs-symbol">34 </span>        <span class="hljs-keyword">return</span> !cmpxchg((const struct inet6_protocol **)&amp;inet6_protos[protocol],<br><span class="hljs-symbol">35 </span>                        NULL, prot) ? <span class="hljs-number">0</span> : -<span class="hljs-number">1</span>;<br><span class="hljs-symbol">36 </span>&#125;<br><span class="hljs-symbol">37 </span>EXPORT_SYMBOL(inet6_add_protocol);<br><span class="hljs-symbol">38 </span><br><span class="hljs-symbol">39 </span>/*<br><span class="hljs-symbol">40 </span> *      <span class="hljs-comment">Remove a protocol from the hash tables.</span><br><span class="hljs-symbol">41 </span> */<br><span class="hljs-symbol">42 </span><br><span class="hljs-symbol">43 </span><span class="hljs-keyword">int</span> inet6_del_protocol(const struct inet6_protocol *prot, unsigned char protocol)<br><span class="hljs-symbol">44 </span>&#123;<br><span class="hljs-symbol">45 </span>        <span class="hljs-keyword">int</span> ret;<br><span class="hljs-symbol">46 </span><br><span class="hljs-symbol">47 </span>        ret = (cmpxchg((const struct inet6_protocol **)&amp;inet6_protos[protocol],<br><span class="hljs-symbol">48 </span>                       prot, NULL) == prot) ? <span class="hljs-number">0</span> : -<span class="hljs-number">1</span>;<br><span class="hljs-symbol">49 </span><br><span class="hljs-symbol">50 </span>        synchronize_net();<br><span class="hljs-symbol">51 </span><br><span class="hljs-symbol">52 </span>        <span class="hljs-keyword">return</span> ret;<br><span class="hljs-symbol">53 </span>&#125;<br><span class="hljs-symbol">54 </span>EXPORT_SYMBOL(inet6_del_protocol);<br></code></pre></td></tr></table></figure>
+
+<h4 id="protocol-handlers">0.0.2.3. protocol handlers</h4><figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><code class="hljs dns">$ grep inet6_add_protocol net/ -Rw<br>net/dccp/ipv6.c:	err = inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;dccp_v6_protocol, IPPROTO_DCCP<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>net/sctp/ipv6.c:	if <span class="hljs-punctuation">(</span>inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;sctpv6_protocol, IPPROTO_SCTP<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><br>net/ipv6/exthdrs.c:	ret = inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;rthdr_protocol, IPPROTO_ROUTING<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>net/ipv6/exthdrs.c:	ret = inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;destopt_protocol, IPPROTO_DSTOPTS<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>net/ipv6/exthdrs.c:	ret = inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;nodata_protocol, IPPROTO_NONE<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>net/ipv6/icmp.c:	if <span class="hljs-punctuation">(</span>inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;icmpv6_protocol, IPPROTO_ICMPV6<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><br>net/ipv6/ip6mr.c:	if <span class="hljs-punctuation">(</span>inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;pim6_protocol, IPPROTO_PIM<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> &#123;<br>net/ipv6/esp6.c:	if <span class="hljs-punctuation">(</span>inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;esp6_protocol, IPPROTO_ESP<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> &#123;<br>net/ipv6/protocol.c:int inet6_add_protocol<span class="hljs-punctuation">(</span>const struct inet6_protocol *prot, unsigned char protocol<span class="hljs-punctuation">)</span><br>net/ipv6/protocol.c:EXPORT_SYMBOL<span class="hljs-punctuation">(</span>inet6_add_protocol<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>net/ipv6/ip6_gre.c:	err = inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;ip6gre_protocol, IPPROTO_GRE<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>net/ipv6/reassembly.c:	ret = inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;frag_protocol, IPPROTO_FRAGMENT<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>net/ipv6/ipcomp6.c:	if <span class="hljs-punctuation">(</span>inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;ipcomp6_protocol, IPPROTO_COMP<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> &#123;<br>net/ipv6/udp.c:	ret = inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;udpv6_protocol, IPPROTO_UDP<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>net/ipv6/ah6.c:	if <span class="hljs-punctuation">(</span>inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;ah6_protocol, IPPROTO_AH<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> &#123;<br>net/ipv6/tcp_ipv6.c:	ret = inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;tcpv6_protocol, IPPROTO_TCP<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>net/ipv6/udplite.c:	ret = inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;udplitev6_protocol, IPPROTO_UDPLITE<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>net/ipv6/tunnel6.c:	if <span class="hljs-punctuation">(</span>inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;tunnel6_protocol, IPPROTO_IPV6<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> &#123;<br>net/ipv6/tunnel6.c:	if <span class="hljs-punctuation">(</span>inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;tunnel46_protocol, IPPROTO_IPIP<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> &#123;<br>net/l2tp/l2tp_ip6.c:	err = inet6_add_protocol<span class="hljs-punctuation">(</span>&amp;l2tp_ip6_protocol, IPPROTO_L2TP<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1951 </span>static const struct inet6_protocol tcpv6_protocol = &#123;<br><span class="hljs-symbol">1952 </span>        .early_demux    =       tcp_v6_early_demux,<br><span class="hljs-symbol">1953 </span>        .handler        =       tcp_v6_rcv,<br><span class="hljs-symbol">1954 </span>        .err_handler    =       tcp_v6_err,<br><span class="hljs-symbol">1955 </span>        .flags          =       INET6_PROTO_NOPOLICY|INET6_PROTO_FINAL,<br><span class="hljs-symbol">1956 </span>&#125;;<br></code></pre></td></tr></table></figure>
+<h4 id="call-protocol-handler-in-the-end-of-ipv6-process">0.0.2.4. call protocol handler in the end of ipv6 process.</h4><figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">200</span> <br><span class="hljs-number">201</span> static int ip6_input_finish<span class="hljs-punctuation">(</span>struct sk_buff *skb<span class="hljs-punctuation">)</span><br><span class="hljs-number">202</span> &#123;<br>...<br><span class="hljs-number">222</span>         raw = raw6_local_deliver<span class="hljs-punctuation">(</span>skb, nexthdr<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">223</span>         if <span class="hljs-punctuation">(</span><span class="hljs-punctuation">(</span>ipprot = rcu_dereference<span class="hljs-punctuation">(</span>inet6_protos[nexthdr]<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> != NULL<span class="hljs-punctuation">)</span> &#123;<br><span class="hljs-number">224</span>                 int ret<span class="hljs-comment">;</span><br><span class="hljs-number">225</span> <br><span class="hljs-number">226</span>                 if <span class="hljs-punctuation">(</span>ipprot-&gt;flags &amp; INET6_PROTO_FINAL<span class="hljs-punctuation">)</span> &#123;<br><span class="hljs-number">227</span>                         const struct ipv6hdr *hdr<span class="hljs-comment">;</span><br><span class="hljs-number">228</span> <br><span class="hljs-number">229</span>                         /* Free reference early: we don&#x27;t need it any more,<br><span class="hljs-number">230</span>                            and it may hold ip_conntrack module loaded<br><span class="hljs-number">231</span>                            indefinitely. */<br><span class="hljs-number">232</span>                         nf_reset<span class="hljs-punctuation">(</span>skb<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">233</span> <br><span class="hljs-number">234</span>                         skb_postpull_rcsum<span class="hljs-punctuation">(</span>skb, skb_network_header<span class="hljs-punctuation">(</span>skb<span class="hljs-punctuation">)</span>,<br><span class="hljs-number">235</span>                                            skb_network_header_len<span class="hljs-punctuation">(</span>skb<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">236</span>                         hdr = ipv6_hdr<span class="hljs-punctuation">(</span>skb<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">237</span>                         if <span class="hljs-punctuation">(</span>ipv6_addr_is_multicast<span class="hljs-punctuation">(</span>&amp;hdr-&gt;daddr<span class="hljs-punctuation">)</span> &amp;&amp;<br><span class="hljs-number">238</span>                             !ipv6_chk_mcast_addr<span class="hljs-punctuation">(</span>skb-&gt;dev, &amp;hdr-&gt;daddr,<br><span class="hljs-number">239</span>                             &amp;hdr-&gt;saddr<span class="hljs-punctuation">)</span> &amp;&amp;<br><span class="hljs-number">240</span>                             !ipv6_is_mld<span class="hljs-punctuation">(</span>skb, nexthdr, skb_network_header_len<span class="hljs-punctuation">(</span>skb<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><br><span class="hljs-number">241</span>                                 goto discard<span class="hljs-comment">;</span><br><span class="hljs-number">242</span>                 &#125;<br><span class="hljs-number">243</span>                 if <span class="hljs-punctuation">(</span>!<span class="hljs-punctuation">(</span>ipprot-&gt;flags &amp; INET6_PROTO_NOPOLICY<span class="hljs-punctuation">)</span> &amp;&amp;<br><span class="hljs-number">244</span>                     !xfrm6_policy_check<span class="hljs-punctuation">(</span>NULL, XFRM_POLICY_IN, skb<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><br><span class="hljs-number">245</span>                         goto discard<span class="hljs-comment">;</span><br><span class="hljs-number">246</span> <br><span class="hljs-number">247</span>                 ret = ipprot-&gt;handler<span class="hljs-punctuation">(</span>skb<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">248</span>                 if <span class="hljs-punctuation">(</span>ret &gt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><br><span class="hljs-number">249</span>                         goto resubmit<span class="hljs-comment">;</span><br><span class="hljs-number">250</span>                 else if <span class="hljs-punctuation">(</span>ret == <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><br><span class="hljs-number">251</span>                         IP6_INC_STATS_BH<span class="hljs-punctuation">(</span>net, idev, IPSTATS_MIB_INDELIVERS<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">252</span>         &#125; else &#123;<br>...<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Socket/" class="category-chain-item">Socket</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/Socket/" class="print-no-link">#Socket</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>How does IPV4/6 process input tcp/udp packet</div>
+      <div>https://martinbj2008.github.io/2013/11/25/2013-11-25-net-protocol-handler-for-tcp-udp/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>November 25, 2013</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2014/01/14/2014-01-14-how-tcp-server-accept-a-new-connection-request/" title="how does tcp server accept a new connection request">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">how does tcp server accept a new connection request</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2013/11/22/2013-11-22-the-inheriting-of-linux-sock-type/" title="the inheriting of linux sock type">
+                        <span class="hidden-mobile">the inheriting of linux sock type</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

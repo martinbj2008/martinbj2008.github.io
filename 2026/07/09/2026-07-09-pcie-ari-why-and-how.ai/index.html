@@ -1,0 +1,1011 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="本文整理了 PCIe ARI 的背景动机与技术方法，以及 Linux 内核在 PCI 枚举扫描过程中对 ARI 的使用方式。讨论主线：传统 PCI BDF 的 8-function 限制 → SR-IOV 大量 VF 的编址困境 → ARI 的解决方案 → 内核实现细节。 本文中所有代码引用均基于内核 v7.2-rc2-22-g0e35b9b6ec0f 的源码。【Claude-4.7-Opus】">
+<meta property="og:type" content="article">
+<meta property="og:title" content="PCIe ARI（Alternative Routing-ID Interpretation）：为什么需要 &amp; 如何工作">
+<meta property="og:url" content="https://martinbj2008.github.io/2026/07/09/2026-07-09-pcie-ari-why-and-how.ai/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="本文整理了 PCIe ARI 的背景动机与技术方法，以及 Linux 内核在 PCI 枚举扫描过程中对 ARI 的使用方式。讨论主线：传统 PCI BDF 的 8-function 限制 → SR-IOV 大量 VF 的编址困境 → ARI 的解决方案 → 内核实现细节。 本文中所有代码引用均基于内核 v7.2-rc2-22-g0e35b9b6ec0f 的源码。【Claude-4.7-Opus】">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-07-09T07:50:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.753Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="ai">
+<meta property="article:tag" content="ari">
+<meta property="article:tag" content="linux-kernel">
+<meta property="article:tag" content="pci">
+<meta property="article:tag" content="pcie">
+<meta property="article:tag" content="sr-iov">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>PCIe ARI（Alternative Routing-ID Interpretation）：为什么需要 &amp; 如何工作 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="PCIe ARI（Alternative Routing-ID Interpretation）：为什么需要 &amp; 如何工作"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2026-07-09 15:50" pubdate>
+          July 9, 2026 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          6.4k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          54 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">PCIe ARI（Alternative Routing-ID Interpretation）：为什么需要 &amp; 如何工作</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <p>本文整理了 PCIe ARI 的背景动机与技术方法，以及 Linux 内核在 PCI 枚举扫描过程中对 ARI 的使用方式。<br>讨论主线：传统 PCI BDF 的 8-function 限制 → SR-IOV 大量 VF 的编址困境 → ARI 的解决方案 → 内核实现细节。</p>
+<p>本文中所有代码引用均基于内核 <code>v7.2-rc2-22-g0e35b9b6ec0f</code> 的源码。【Claude-4.7-Opus】</p>
+<hr>
+<h2 id="一、背景：为什么需要-ARI">0.1. 一、背景：为什么需要 ARI</h2><h3 id="1-1-传统-PCI-的-BDF-编址">0.1.1. 1.1 传统 PCI 的 BDF 编址</h3><p>PCI 配置事务里，Routing ID（RID）总长 16 bit，用来在总线上唯一寻址一个 function：</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs dns"> <span class="hljs-number">15</span>                      <span class="hljs-number">8</span> <span class="hljs-number">7</span>          <span class="hljs-number">3</span> <span class="hljs-number">2</span>       <span class="hljs-number">0</span><br>┌────────────────────────┬────────────┬─────────┐<br>│         Bus Number     │  Device #  │  Func # │<br>│         <span class="hljs-punctuation">(</span><span class="hljs-number">8</span> bits<span class="hljs-punctuation">)</span>       │  <span class="hljs-punctuation">(</span><span class="hljs-number">5</span> bits<span class="hljs-punctuation">)</span>  │ <span class="hljs-punctuation">(</span><span class="hljs-number">3</span> bits<span class="hljs-punctuation">)</span>│<br>│         <span class="hljs-number">0</span>..<span class="hljs-number">255</span>         │   <span class="hljs-number">0</span>..<span class="hljs-number">31</span>    │  <span class="hljs-number">0</span>..<span class="hljs-number">7</span>   │<br>└────────────────────────┴────────────┴─────────┘<br></code></pre></td></tr></table></figure>
+
+<ul>
+<li><strong>Bus</strong>：8 bit，0..255；</li>
+<li><strong>Device</strong>：5 bit，一条 bus 最多 32 个 slot；</li>
+<li><strong>Function</strong>：3 bit，<strong>一个 Device 最多 8 个 function</strong>。</li>
+</ul>
+<p>这就是”一个 D 下最多 8 个 function”的<strong>硬性来源</strong>——协议字段就 3 bit，不可能表达超过 8 的 function 号。</p>
+<h3 id="1-2-SR-IOV-的编址困境">0.1.2. 1.2 SR-IOV 的编址困境</h3><p>SR-IOV（Single Root I&#x2F;O Virtualization）允许一个物理设备（<strong>PF, Physical Function</strong>）虚拟出很多个 <strong>VF（Virtual Function）</strong>，每个 VF 都是<strong>标准的 PCI Function</strong>：</p>
+<ul>
+<li>有自己独立的 Configuration Space；</li>
+<li>有自己独立的 BAR；</li>
+<li>有自己独立的中断；</li>
+<li>可以被独立地 passthrough 给虚拟机。</li>
+</ul>
+<p>问题来了：一块现代网卡（如 Mellanox ConnectX、Intel 82599 后继型号）常常需要 <strong>64&#x2F;128&#x2F;256</strong> 个 VF，而传统 3-bit function 字段最多只能编址 8 个 function，<strong>根本装不下</strong>。</p>
+<p>如果只靠”多条 Bus 号分散”来放 VF：128 个 VF 就得至少占 16 条 bus，效率低，且浪费宝贵的 Bus 号资源。</p>
+<p><strong>ARI 就是为了解决这个编址困境而设计的。</strong></p>
+<span id="more"></span>
+
+<hr>
+<h2 id="二、方法：ARI-的核心思想">0.2. 二、方法：ARI 的核心思想</h2><h3 id="2-1-重新解释-Routing-ID">0.2.1. 2.1 重新解释 Routing ID</h3><p>ARI 使能后，在<strong>支持 ARI 的 bus 上</strong>，Routing ID 低 8 bit <strong>不再拆成 5 bit Device + 3 bit Function</strong>，而是<strong>整体作为 Function 号</strong>：</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs dns">      传统解释（Non-ARI）                    ARI 解释<br> <span class="hljs-number">15</span>         <span class="hljs-number">8</span> <span class="hljs-number">7</span>      <span class="hljs-number">3</span> <span class="hljs-number">2</span>   <span class="hljs-number">0</span>            <span class="hljs-number">15</span>         <span class="hljs-number">8</span> <span class="hljs-number">7</span>          <span class="hljs-number">0</span><br>┌───────────┬────────┬─────┐          ┌───────────┬─────────────┐<br>│    Bus    │  Dev   │ Fn  │          │    Bus    │  Function   │<br>│  <span class="hljs-punctuation">(</span><span class="hljs-number">8</span> bits<span class="hljs-punctuation">)</span> │<span class="hljs-punctuation">(</span><span class="hljs-number">5</span> bits<span class="hljs-punctuation">)</span>│<span class="hljs-punctuation">(</span><span class="hljs-number">3</span>b<span class="hljs-punctuation">)</span> │          │  <span class="hljs-punctuation">(</span><span class="hljs-number">8</span> bits<span class="hljs-punctuation">)</span> │   <span class="hljs-punctuation">(</span><span class="hljs-number">8</span> bits<span class="hljs-punctuation">)</span>  │<br>└───────────┴────────┴─────┘          └───────────┴─────────────┘<br>       <span class="hljs-number">32</span> dev × <span class="hljs-number">8</span> fn                            <span class="hljs-number">256</span> function<br>       = <span class="hljs-number">256</span> addressable                        <span class="hljs-punctuation">(</span>Device 概念消失<span class="hljs-punctuation">)</span><br></code></pre></td></tr></table></figure>
+
+<p><strong>关键变化</strong>：</p>
+<ul>
+<li>ARI bus 上，<strong>Device 号概念被”抹掉”</strong>，全部 8 bit 都当 function 号；</li>
+<li>一条 bus 上理论上最多 <strong>256 个 function</strong>（0..255）；</li>
+<li><strong>代价</strong>：一条 ARI bus 上<strong>只能有一个”逻辑设备”</strong>（因为 Device 域不再存在）。</li>
+</ul>
+<h3 id="2-2-ARI-使能的两个必要条件">0.2.2. 2.2 ARI 使能的两个必要条件</h3><p>必须同时满足：</p>
+<ol>
+<li><strong>上游桥支持并使能 ARI Forwarding</strong>（PCIe Capability 里的 <code>ARI Forwarding Enable</code> bit）；</li>
+<li><strong>端点设备支持 ARI</strong>（Extended Capability 里有 ARI Capability，报告 <code>Next Function Number</code>）。</li>
+</ol>
+<p>只要上游桥或者端点任一方不支持，就退化为传统 Non-ARI 行为。</p>
+<h3 id="2-3-SR-IOV-中-VF-的-Routing-ID-计算">0.2.3. 2.3 SR-IOV 中 VF 的 Routing ID 计算</h3><p>SR-IOV Extended Capability 里的关键寄存器：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>NumVFs</code></td>
+<td>当前使能的 VF 数量</td>
+</tr>
+<tr>
+<td><code>First VF Offset</code></td>
+<td>第一个 VF 的 RID 相对 PF 的偏移（16 bit）</td>
+</tr>
+<tr>
+<td><code>VF Stride</code></td>
+<td>相邻两个 VF 之间的 RID 步长（16 bit）</td>
+</tr>
+</tbody></table>
+<p>VF 的 BDF 用公式算：</p>
+<figure class="highlight freedesktop"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs freedesktop"><span class="hljs-attr">PF_RID</span>     <span class="hljs-operator">=</span> (PF_Bus &lt;&lt; 8) | PF_Dev_Fn        // Non-ARI 解释<br>           = (PF_Bus &lt;&lt; 8) | PF_Fn            // ARI 解释<br><br><span class="hljs-attr">VF_RID[i]</span>  <span class="hljs-operator">=</span> PF_RID + First_VF_Offset + i × VF_Stride<br><br><span class="hljs-attr">VF_Bus[i]</span>  <span class="hljs-operator">=</span> VF_RID[i] &gt;&gt; 8                    // 高 8 bit<br><span class="hljs-attr">VF_low[i]</span>  <span class="hljs-operator">=</span> VF_RID[i] &amp; 0xFF                  // 低 8 bit（ARI 下就是 Function 号）<br></code></pre></td></tr></table></figure>
+
+<p>Routing ID 一路加下去，会自然溢出到下一条 Bus。</p>
+<hr>
+<h2 id="三、两种典型场景对照">0.3. 三、两种典型场景对照</h2><h3 id="场景-A：Non-ARI（如-Intel-82599）">0.3.1. 场景 A：Non-ARI（如 Intel 82599）</h3><p>VF 挤在同一条 bus 的高 Device 号上：</p>
+<figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs routeros">PF_RID = 0x0400<br>First VF Offset = 0x80<br>VF Stride = 2<br><br>VF 0:  0x0400 + 0x80 + 0×2 = 0x0480  →  04:10.0   (<span class="hljs-attribute">Dev</span>=0x10, <span class="hljs-attribute">Fn</span>=0)<br>VF 1:  0x0400 + 0x80 + 1×2 = 0x0482  →  04:10.2   (<span class="hljs-attribute">Dev</span>=0x10, <span class="hljs-attribute">Fn</span>=2)<br>VF 2:  0x0400 + 0x80 + 2×2 = 0x0484  →  04:10.4<br><span class="hljs-built_in">..</span>.<br>VF 7:  0x0400 + 0x80 + 7×2 = 0x048E  →  04:11.6<br></code></pre></td></tr></table></figure>
+
+<p>对应 <code>lspci</code> 输出示例（<strong>下方内容为 AI 生成的模拟输出，非实测数据，仅用于说明 BDF 排列规律</strong>）：</p>
+<figure class="highlight dart"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs dart"><span class="hljs-number">04</span>:<span class="hljs-number">00.0</span>  <span class="hljs-title class_">Ethernet</span> controller: <span class="hljs-title class_">Intel</span> 82599ES  ← <span class="hljs-title class_">PF0</span><br><span class="hljs-number">04</span>:<span class="hljs-number">00.1</span>  <span class="hljs-title class_">Ethernet</span> controller: <span class="hljs-title class_">Intel</span> 82599ES  ← <span class="hljs-title class_">PF1</span><br><span class="hljs-number">04</span>:<span class="hljs-number">10.0</span>  <span class="hljs-title class_">Ethernet</span> controller: <span class="hljs-title class_">Intel</span> <span class="hljs-number">82599</span> VF ← VF <span class="hljs-number">0</span> of <span class="hljs-title class_">PF0</span><br><span class="hljs-number">04</span>:<span class="hljs-number">10.2</span>  <span class="hljs-title class_">Ethernet</span> controller: <span class="hljs-title class_">Intel</span> <span class="hljs-number">82599</span> VF ← VF <span class="hljs-number">1</span> of <span class="hljs-title class_">PF0</span><br><span class="hljs-number">04</span>:<span class="hljs-number">10.4</span>  <span class="hljs-title class_">Ethernet</span> controller: <span class="hljs-title class_">Intel</span> <span class="hljs-number">82599</span> VF ← VF <span class="hljs-number">2</span> of <span class="hljs-title class_">PF0</span><br>...<br></code></pre></td></tr></table></figure>
+
+<h3 id="场景-B：ARI-使能（如-Mellanox-ConnectX）">0.3.2. 场景 B：ARI 使能（如 Mellanox ConnectX）</h3><p>VF 直接跨到下一条 bus，从 fn 0 起连续排列：</p>
+<figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs routeros">PF_RID = 0x0400<br>First VF Offset = 0x100   ← 直接跨一整条 bus<br>VF Stride = 1<br><br>VF 0:   0x0400 + 0x100 + 0   = 0x0500  →  05:00.0   (ARI: <span class="hljs-attribute">Bus</span>=05, <span class="hljs-attribute">Fn</span>=0x00)<br>VF 1:   0x0400 + 0x100 + 1   = 0x0501  →  05:00.1<br>VF 2:   0x0400 + 0x100 + 2   = 0x0502  →  05:00.2<br><span class="hljs-built_in">..</span>.<br>VF 127: 0x0400 + 0x100 + 127 = 0x057F  →  05:00.7f (ARI: <span class="hljs-attribute">Bus</span>=05, <span class="hljs-attribute">Fn</span>=0x7F)<br></code></pre></td></tr></table></figure>
+
+<p><strong>规则</strong>：VF BDF &#x3D; PF RID 加上 First VF Offset 再加上 <code>i × Stride</code>，然后按 ARI&#x2F;Non-ARI 拆成 Bus + Dev&#x2F;Fn，<strong>一步到位</strong>，不存在”先到 04:10.0 再跨到 05:00.0”这种中间态。</p>
+<hr>
+<h2 id="四、Linux-内核中的-ARI-处理">0.4. 四、Linux 内核中的 ARI 处理</h2><h3 id="4-1-扫描器分支：next-fn">0.4.1. 4.1 扫描器分支：next_fn</h3><p>位置：<code>drivers/pci/probe.c</code></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2819</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">next_fn</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> pci_bus *bus, <span class="hljs-keyword">struct</span> pci_dev *dev, <span class="hljs-type">int</span> fn)</span><br>2820 &#123;<br><span class="hljs-number">2821</span> 	<span class="hljs-keyword">if</span> (pci_ari_enabled(bus))<br><span class="hljs-number">2822</span> 		<span class="hljs-keyword">return</span> next_ari_fn(bus, dev, fn);   <span class="hljs-comment">// ← ARI 路径</span><br><span class="hljs-number">2823</span><br><span class="hljs-number">2824</span> 	<span class="hljs-keyword">if</span> (fn &gt;= <span class="hljs-number">7</span>)<br><span class="hljs-number">2825</span> 		<span class="hljs-keyword">return</span> -ENODEV;                     <span class="hljs-comment">// ← 传统 3 bit 到 7 就到头</span><br><span class="hljs-number">2826</span> 	<span class="hljs-comment">/* only multifunction devices may have more functions */</span><br><span class="hljs-number">2827</span> 	<span class="hljs-keyword">if</span> (dev &amp;&amp; !dev-&gt;multifunction)<br><span class="hljs-number">2828</span> 		<span class="hljs-keyword">return</span> -ENODEV;<br><span class="hljs-number">2829</span><br><span class="hljs-number">2830</span> 	<span class="hljs-keyword">return</span> fn + <span class="hljs-number">1</span>;<br><span class="hljs-number">2831</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<p><strong>三条路径</strong>：</p>
+<ol>
+<li><strong>ARI 使能</strong> → 走 <code>next_ari_fn</code>（利用 ARI Cap 的 Next Function Number 稀疏跳跃）；</li>
+<li><strong>Non-ARI，fn 0 是单 function 设备</strong> → <code>dev-&gt;multifunction == 0</code>，直接 <code>-ENODEV</code>；</li>
+<li><strong>Non-ARI，多 function 设备</strong> → <code>fn + 1</code>，直到 fn &#x3D; 7 停止。</li>
+</ol>
+<h3 id="4-2-ARI-的稀疏跳跃：next-ari-fn">0.4.2. 4.2 ARI 的稀疏跳跃：next_ari_fn</h3><p>位置：<code>drivers/pci/probe.c</code></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2798</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">next_ari_fn</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> pci_bus *bus, <span class="hljs-keyword">struct</span> pci_dev *dev, <span class="hljs-type">int</span> fn)</span><br>2799 &#123;<br><span class="hljs-number">2800</span> 	<span class="hljs-type">int</span> pos;<br><span class="hljs-number">2801</span> 	u16 cap = <span class="hljs-number">0</span>;<br><span class="hljs-number">2802</span> 	<span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> next_fn;<br><span class="hljs-number">2803</span><br><span class="hljs-number">2804</span> 	<span class="hljs-keyword">if</span> (!dev)<br><span class="hljs-number">2805</span> 		<span class="hljs-keyword">return</span> -ENODEV;<br><span class="hljs-number">2806</span><br><span class="hljs-number">2807</span> 	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ARI);<br><span class="hljs-number">2808</span> 	<span class="hljs-keyword">if</span> (!pos)<br><span class="hljs-number">2809</span> 		<span class="hljs-keyword">return</span> -ENODEV;<br><span class="hljs-number">2810</span><br><span class="hljs-number">2811</span> 	pci_read_config_word(dev, pos + PCI_ARI_CAP, &amp;cap);<br><span class="hljs-number">2812</span> 	next_fn = PCI_ARI_CAP_NFN(cap);        <span class="hljs-comment">// ← 读 ARI Cap 的 &quot;Next Function Number&quot;</span><br><span class="hljs-number">2813</span> 	<span class="hljs-keyword">if</span> (next_fn &lt;= fn)<br><span class="hljs-number">2814</span> 		<span class="hljs-keyword">return</span> -ENODEV;	<span class="hljs-comment">/* protect against malformed list */</span><br><span class="hljs-number">2815</span><br><span class="hljs-number">2816</span> 	<span class="hljs-keyword">return</span> next_fn;<br><span class="hljs-number">2817</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<p><strong>优势</strong>：ARI Cap 直接告诉内核”下一个存在的 function 号”，跳过所有空 function，避免挨个尝试 256 次配置读。这是 SR-IOV 大量 VF 场景下的<strong>关键性能优化</strong>。</p>
+<h3 id="4-3-上限对比">0.4.3. 4.3 上限对比</h3><table>
+<thead>
+<tr>
+<th>场景</th>
+<th>单 bus function 上限</th>
+<th>由谁决定</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Non-ARI</td>
+<td><strong>8</strong>（fn &#x3D; 0..7）</td>
+<td><code>if (fn &gt;= 7) return -ENODEV;</code></td>
+</tr>
+<tr>
+<td>ARI 使能</td>
+<td><strong>256</strong>（fn &#x3D; 0..255）</td>
+<td>ARI Cap 的 Next Function Number 字段</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="五、验证方法（可在真机上执行）">0.5. 五、验证方法（可在真机上执行）</h2><p><strong>说明</strong>：以下命令本身是通用的 Linux 验证套路，可以在支持 SR-IOV 的真机上直接执行。<strong>但下方所有 <code># 期望输出示例</code> 中展示的字段和数值均为 AI 生成的模拟输出，仅用于说明字段结构与 BDF 排列规律，不代表任何一台真实机器的实测数据。</strong></p>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><code class="hljs bash"><span class="hljs-comment"># ① 查看某 PF 是否报告 ARI Capability</span><br>lspci -vvv -s 04:00.0 | grep -i ari<br><span class="hljs-comment"># 期望输出示例（AI 模拟，非实测）：</span><br><span class="hljs-comment">#   Capabilities: [xxx v1] Alternative Routing-ID Interpretation (ARI)</span><br><span class="hljs-comment">#     ARICap: MFVC- ACS-, Next Function: 0</span><br><span class="hljs-comment">#     ARICtl: MFVC- ACS-, Function Group: 0</span><br><br><span class="hljs-comment"># ② 查看 SR-IOV Cap 的关键字段</span><br>lspci -vvv -s 04:00.0 | grep -A2 <span class="hljs-string">&quot;SR-IOV&quot;</span><br><span class="hljs-comment"># 期望输出示例（AI 模拟，非实测）：</span><br><span class="hljs-comment">#   Capabilities: [xxx v1] Single Root I/O Virtualization (SR-IOV)</span><br><span class="hljs-comment">#     IOVCap: Migration-, Interrupt Message Number: 000</span><br><span class="hljs-comment">#     IOVCtl: Enable+ Migration- Interrupt- MSE+ ARIHierarchy+   ← ARI 使能标志</span><br><span class="hljs-comment">#     IOVSta: Migration-</span><br><span class="hljs-comment">#     Initial VFs: 64, Total VFs: 64, Number of VFs: 8, Function Dependency Link: 00</span><br><span class="hljs-comment">#     VF offset: 128, stride: 1, Device ID: 10ed</span><br><span class="hljs-comment">#     Supported Page Size: 00000553, System Page Size: 00000001</span><br><br><span class="hljs-comment"># ③ 使能 VF 并观察 BDF 分布</span><br><span class="hljs-built_in">echo</span> 8 &gt; /sys/class/net/ens1f0/device/sriov_numvfs<br>lspci | grep <span class="hljs-string">&quot;Virtual Function&quot;</span><br><span class="hljs-comment"># 观察 VF BDF 是否符合 PF_RID + VF_offset + i × stride 的公式</span><br><br><span class="hljs-comment"># ④ 看拓扑树</span><br>lspci -tv<br></code></pre></td></tr></table></figure>
+
+<p><strong>对照关系</strong>：若 <code>lspci</code> 报告 <code>VF offset: 128</code>，对应 <code>First VF Offset = 0x80</code>；<code>stride: 1</code> 对应 <code>VF Stride = 1</code>。手动套公式算，应该与实机 <code>lspci</code> 输出一致。</p>
+<hr>
+<h2 id="六、总结对比表">0.6. 六、总结对比表</h2><table>
+<thead>
+<tr>
+<th>维度</th>
+<th>传统 PCI Function</th>
+<th>SR-IOV VF (ARI)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>本质</strong></td>
+<td>Function</td>
+<td>Function（就是 function）</td>
+</tr>
+<tr>
+<td><strong>Routing ID 结构</strong></td>
+<td><code>Bus:Dev(5):Fn(3)</code></td>
+<td><code>Bus:Fn(8)</code>，Dev 域消失</td>
+</tr>
+<tr>
+<td><strong>单 bus function 上限</strong></td>
+<td>8（3 bit）</td>
+<td>256（8 bit）</td>
+</tr>
+<tr>
+<td><strong>单 PF 下 VF 数上限</strong></td>
+<td>—</td>
+<td>由 SR-IOV Cap 的 TotalVFs 决定，规范最大 64K</td>
+</tr>
+<tr>
+<td><strong>配置空间</strong></td>
+<td>完整独立</td>
+<td>完整独立（Type 0，1 KB &#x2F; 4 KB）</td>
+</tr>
+<tr>
+<td><strong>BAR</strong></td>
+<td>自己有</td>
+<td>自己有（从 SR-IOV Cap 的 VF BAR 派生）</td>
+</tr>
+<tr>
+<td><strong>依赖能力</strong></td>
+<td>无</td>
+<td>需要 ARI Forwarding + SR-IOV Extended Cap</td>
+</tr>
+<tr>
+<td><strong>枚举方式</strong></td>
+<td><code>next_fn</code> 里 <code>fn+1</code></td>
+<td><code>next_ari_fn</code> 走 ARI Cap 的 Next Function Number</td>
+</tr>
+<tr>
+<td><strong>典型 BDF 示例</strong></td>
+<td><code>04:00.0..04:00.7</code></td>
+<td>PF <code>04:00.0</code>; VFs <code>05:00.0..05:00.7f</code>（128 VFs）</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="七、几个易错点澄清">0.7. 七、几个易错点澄清</h2><p><strong>7.1 “VF 是不是 function？”</strong> —— 是。VF 是<strong>标准的 PCI Function</strong>，只是通过 ARI 摆脱了 3-bit 编号限制。</p>
+<p><strong>7.2 “一个 D 下最多 8 个 function” 什么时候成立？</strong></p>
+<ul>
+<li>传统 PCI &#x2F; Non-ARI PCIe：✅ 成立（Function 字段就 3 bit）；</li>
+<li>ARI PCIe（含 SR-IOV）：❌ 不成立。<strong>“D 号” 概念在 ARI bus 上被抹掉了</strong>，整条 bus 就是一个 256-function 的扁平空间。</li>
+</ul>
+<p><strong>7.3 VF BDF 的中间态</strong> —— 不存在。VF 的 BDF <strong>一步算出</strong>（<code>PF_RID + offset + i × stride</code>，再按 ARI&#x2F;Non-ARI 拆 Bus&#x2F;Dev&#x2F;Fn），不要写成”先 04:10.0 再跨到 05:00.0”这种自相矛盾的中间态。</p>
+<hr>
+<h2 id="八、一句话结论">0.8. 八、一句话结论</h2><p><strong>ARI 通过把 BDF 中原本”5 bit Dev + 3 bit Fn”的划分改成”8 bit Fn”（Device 概念在该 bus 上消失），把单 bus function 数从 8 扩到 256；配合 SR-IOV Cap 的 First VF Offset &#x2F; Stride，VF 可以进一步溢出到新 Bus 号，从而支撑 128 甚至几千个 VF。</strong></p>
+<p>Linux 内核在 <code>next_fn</code> 里通过 <code>pci_ari_enabled(bus)</code> 分支进入 <code>next_ari_fn</code>，读取 ARI Cap 的 Next Function Number 做稀疏跳跃，避免枚举时挨个尝试 256 次配置读，是现代 SR-IOV 场景不可或缺的性能优化。</p>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/AI/" class="category-chain-item">AI</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/ai/" class="print-no-link">#ai</a>
+      
+        <a href="/tags/linux-kernel/" class="print-no-link">#linux-kernel</a>
+      
+        <a href="/tags/pcie/" class="print-no-link">#pcie</a>
+      
+        <a href="/tags/pci/" class="print-no-link">#pci</a>
+      
+        <a href="/tags/sr-iov/" class="print-no-link">#sr-iov</a>
+      
+        <a href="/tags/ari/" class="print-no-link">#ari</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>PCIe ARI（Alternative Routing-ID Interpretation）：为什么需要 &amp; 如何工作</div>
+      <div>https://martinbj2008.github.io/2026/07/09/2026-07-09-pcie-ari-why-and-how.ai/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>July 9, 2026</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2026/07/09/2026-07-09-pci-scan-slot.ai/" title="Linux 内核 PCI 枚举：pci_scan_slot 及其调用链梳理">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">Linux 内核 PCI 枚举：pci_scan_slot 及其调用链梳理</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2026/06/30/2026-06-30-sonic-port-mtu-flow.ai/" title="SONiC Port MTU 更新流程详解（以 Tofino 芯片为例）">
+                        <span class="hidden-mobile">SONiC Port MTU 更新流程详解（以 Tofino 芯片为例）</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

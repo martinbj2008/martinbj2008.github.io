@@ -1,0 +1,831 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. call trace1234567&gt; vmalloc&gt; &gt; __vmalloc_node_flags&gt; &gt; &gt; __vmalloc_node&gt; &gt; &gt; &gt; __vmalloc_node_range&gt; &gt; &gt; &gt; &gt; get_vm_area_node&gt; &gt; &gt; &gt; &gt; v">
+<meta property="og:type" content="article">
+<meta property="og:title" content="mmap in kernel">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/01/23/2013-01-23-mmap-in-kernel/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. call trace1234567&gt; vmalloc&gt; &gt; __vmalloc_node_flags&gt; &gt; &gt; __vmalloc_node&gt; &gt; &gt; &gt; __vmalloc_node_range&gt; &gt; &gt; &gt; &gt; get_vm_area_node&gt; &gt; &gt; &gt; &gt; v">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2013-01-22T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.747Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="memory">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>mmap in kernel - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="mmap in kernel"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2013-01-23 00:00" pubdate>
+          January 23, 2013 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          3.5k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          29 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">mmap in kernel</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="call-trace">0.1. call trace</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs c">&gt; vmalloc<br>&gt; &gt; __vmalloc_node_flags<br>&gt; &gt; &gt; __vmalloc_node<br>&gt; &gt; &gt; &gt; __vmalloc_node_range<br>&gt; &gt; &gt; &gt; &gt; get_vm_area_node<br>&gt; &gt; &gt; &gt; &gt; vmalloc_area_node<br>&gt; &gt; &gt; &gt; &gt; insert_vmalloc_vmlist<br></code></pre></td></tr></table></figure>
+<span id="more"></span>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1731</span> <span class="hljs-type">void</span> *<span class="hljs-title function_">vmalloc</span><span class="hljs-params">(<span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> size)</span><br>1732 &#123;<br><span class="hljs-number">1733</span>         <span class="hljs-keyword">return</span> __vmalloc_node_flags(size, <span class="hljs-number">-1</span>, GFP_KERNEL | __GFP_HIGHMEM);<br><span class="hljs-number">1734</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1715</span> <span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> <span class="hljs-type">void</span> *__vmalloc_node_flags(<span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> size,<br><span class="hljs-number">1716</span>                                         <span class="hljs-type">int</span> node, <span class="hljs-type">gfp_t</span> flags)<br><span class="hljs-number">1717</span> &#123;<br><span class="hljs-number">1718</span>         <span class="hljs-keyword">return</span> __vmalloc_node(size, <span class="hljs-number">1</span>, flags, PAGE_KERNEL,<br><span class="hljs-number">1719</span>                                         node, __builtin_return_address(<span class="hljs-number">0</span>));<br><span class="hljs-number">1720</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1700</span> <span class="hljs-type">static</span> <span class="hljs-type">void</span> *__vmalloc_node(<span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> size, <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> align,<br><span class="hljs-number">1701</span>                             <span class="hljs-type">gfp_t</span> gfp_mask, <span class="hljs-type">pgprot_t</span> prot,<br><span class="hljs-number">1702</span>                             <span class="hljs-type">int</span> node, <span class="hljs-type">void</span> *caller)<br><span class="hljs-number">1703</span> &#123;<br><span class="hljs-number">1704</span>         <span class="hljs-keyword">return</span> __vmalloc_node_range(size, align, VMALLOC_START, VMALLOC_END,<br><span class="hljs-number">1705</span>                                 gfp_mask, prot, node, caller);<br><span class="hljs-number">1706</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<p>相当于调用</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs c">__vmalloc_node_range(size, <span class="hljs-number">1</span>, VMALLOC_START, VMALLOC_END, GFP_KERNEL | __GFP_HIGHMEM,PAGE_KERNEL, <span class="hljs-number">-1</span>, __builtin_return_address(<span class="hljs-number">0</span>));<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1644</span> <span class="hljs-type">void</span> *__vmalloc_node_range(<span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> size, <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> align,<br><span class="hljs-number">1645</span>                         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> start, <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> end, <span class="hljs-type">gfp_t</span> gfp_mask,<br><span class="hljs-number">1646</span>                         <span class="hljs-type">pgprot_t</span> prot, <span class="hljs-type">int</span> node, <span class="hljs-type">void</span> *caller)<br><span class="hljs-number">1647</span> &#123;<br><span class="hljs-number">1648</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">vm_struct</span> *<span class="hljs-title">area</span>;</span><br><span class="hljs-number">1649</span>         <span class="hljs-type">void</span> *addr;<br><span class="hljs-number">1650</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> real_size = size;<br><span class="hljs-number">1651</span><br><span class="hljs-number">1652</span>         size = PAGE_ALIGN(size);<br><span class="hljs-number">1653</span>         <span class="hljs-keyword">if</span> (!size || (size &gt;&gt; PAGE_SHIFT) &gt; totalram_pages)<br><span class="hljs-number">1654</span>                 <span class="hljs-keyword">goto</span> fail;<br><span class="hljs-number">1655</span><br><span class="hljs-number">1656</span>         area = __get_vm_area_node(size, align, VM_ALLOC | VM_UNLIST,<br><span class="hljs-number">1657</span>                                   start, end, node, gfp_mask, caller);<br><span class="hljs-number">1658</span>         <span class="hljs-keyword">if</span> (!area)<br><span class="hljs-number">1659</span>                 <span class="hljs-keyword">goto</span> fail;<br><span class="hljs-number">1660</span><br><span class="hljs-number">1661</span>         addr = __vmalloc_area_node(area, gfp_mask, prot, node, caller);<br><span class="hljs-number">1662</span>         <span class="hljs-keyword">if</span> (!addr)<br><span class="hljs-number">1663</span>                 <span class="hljs-keyword">return</span> <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">1664</span><br><span class="hljs-number">1665</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment">1666          * In this function, newly allocated vm_struct is not added</span><br><span class="hljs-comment">1667          * to vmlist at __get_vm_area_node(). so, it is added here.</span><br><span class="hljs-comment">1668          */</span><br><span class="hljs-number">1669</span>         insert_vmalloc_vmlist(area);<br><span class="hljs-number">1670</span><br><span class="hljs-number">1671</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment">1672          * A ref_count = 3 is needed because the vm_struct and vmap_area</span><br><span class="hljs-comment">1673          * structures allocated in the __get_vm_area_node() function contain</span><br><span class="hljs-comment">1674          * references to the virtual address of the vmalloc&#x27;ed block.</span><br><span class="hljs-comment">1675          */</span><br><span class="hljs-number">1676</span>         kmemleak_alloc(addr, real_size, <span class="hljs-number">3</span>, gfp_mask);<br><span class="hljs-number">1677</span><br><span class="hljs-number">1678</span>         <span class="hljs-keyword">return</span> addr;<br><span class="hljs-number">1679</span><br><span class="hljs-number">1680</span> fail:<br><span class="hljs-number">1681</span>         warn_alloc_failed(gfp_mask, <span class="hljs-number">0</span>,<br><span class="hljs-number">1682</span>                           <span class="hljs-string">&quot;vmalloc: allocation failure: %lu bytes\n&quot;</span>,<br><span class="hljs-number">1683</span>                           real_size);<br><span class="hljs-number">1684</span>         <span class="hljs-keyword">return</span> <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">1685</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1315</span> <span class="hljs-type">static</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">vm_struct</span> *__<span class="hljs-title">get_vm_area_node</span>(<span class="hljs-title">unsigned</span> <span class="hljs-title">long</span> <span class="hljs-title">size</span>,</span><br><span class="hljs-class">1316                 <span class="hljs-title">unsigned</span> <span class="hljs-title">long</span> <span class="hljs-title">align</span>, <span class="hljs-title">unsigned</span> <span class="hljs-title">long</span> <span class="hljs-title">flags</span>, <span class="hljs-title">unsigned</span> <span class="hljs-title">long</span> <span class="hljs-title">start</span>,</span><br><span class="hljs-class">1317                 <span class="hljs-title">unsigned</span> <span class="hljs-title">long</span> <span class="hljs-title">end</span>, <span class="hljs-title">int</span> <span class="hljs-title">node</span>, <span class="hljs-title">gfp_t</span> <span class="hljs-title">gfp_mask</span>, <span class="hljs-title">void</span> *<span class="hljs-title">caller</span>)</span><br><span class="hljs-class">1318 &#123;</span><br><span class="hljs-number">1319</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">vmap_area</span> *<span class="hljs-title">va</span>;</span><br><span class="hljs-number">1320</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">vm_struct</span> *<span class="hljs-title">area</span>;</span><br><span class="hljs-number">1321</span><br><span class="hljs-number">1322</span>         BUG_ON(in_interrupt());<br><span class="hljs-number">1323</span>         <span class="hljs-keyword">if</span> (flags &amp; VM_IOREMAP) &#123;<br><span class="hljs-number">1324</span>                 <span class="hljs-type">int</span> bit = fls(size);<br><span class="hljs-number">1325</span><br><span class="hljs-number">1326</span>                 <span class="hljs-keyword">if</span> (bit &gt; IOREMAP_MAX_ORDER)<br><span class="hljs-number">1327</span>                         bit = IOREMAP_MAX_ORDER;<br><span class="hljs-number">1328</span>                 <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (bit &lt; PAGE_SHIFT)<br><span class="hljs-number">1329</span>                         bit = PAGE_SHIFT;<br><span class="hljs-number">1330</span><br><span class="hljs-number">1331</span>                 align = <span class="hljs-number">1ul</span> &lt;&lt; bit;<br><span class="hljs-number">1332</span>         &#125;<br><span class="hljs-number">1333</span><br><span class="hljs-number">1334</span>         size = PAGE_ALIGN(size);<br><span class="hljs-number">1335</span>         <span class="hljs-keyword">if</span> (unlikely(!size))<br><span class="hljs-number">1336</span>                 <span class="hljs-keyword">return</span> <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">1337</span><br><span class="hljs-number">1338</span>         area = kzalloc_node(<span class="hljs-keyword">sizeof</span>(*area), gfp_mask &amp; GFP_RECLAIM_MASK, node);<br><span class="hljs-number">1339</span>         <span class="hljs-keyword">if</span> (unlikely(!area))<br><span class="hljs-number">1340</span>                 <span class="hljs-keyword">return</span> <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">1341</span><br><span class="hljs-number">1342</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment">1343          * We always allocate a guard page.</span><br><span class="hljs-comment">1344          */</span><br><span class="hljs-number">1345</span>         size += PAGE_SIZE;<br><span class="hljs-number">1346</span><br><span class="hljs-number">1347</span>         va = alloc_vmap_area(size, align, start, end, node, gfp_mask);<br><span class="hljs-number">1348</span>         <span class="hljs-keyword">if</span> (IS_ERR(va)) &#123;<br><span class="hljs-number">1349</span>                 kfree(area);<br><span class="hljs-number">1350</span>                 <span class="hljs-keyword">return</span> <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">1351</span>         &#125;<br><span class="hljs-number">1352</span><br><span class="hljs-number">1353</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment">1354          * When this function is called from __vmalloc_node_range,</span><br><span class="hljs-comment">1355          * we do not add vm_struct to vmlist here to avoid</span><br><span class="hljs-comment">1356          * accessing uninitialized members of vm_struct such as</span><br><span class="hljs-comment">1357          * pages and nr_pages fields. They will be set later.</span><br><span class="hljs-comment">1358          * To distinguish it from others, we use a VM_UNLIST flag.</span><br><span class="hljs-comment">1359          */</span><br><span class="hljs-number">1360</span>         <span class="hljs-keyword">if</span> (flags &amp; VM_UNLIST)<br><span class="hljs-number">1361</span>                 setup_vmalloc_vm(area, va, flags, caller);<br><span class="hljs-number">1362</span>         <span class="hljs-keyword">else</span><br><span class="hljs-number">1363</span>                 insert_vmalloc_vm(area, va, flags, caller);<br><span class="hljs-number">1364</span><br><span class="hljs-number">1365</span>         <span class="hljs-keyword">return</span> area;<br><span class="hljs-number">1366</span> &#125;<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Memory/" class="category-chain-item">Memory</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/memory/" class="print-no-link">#memory</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>mmap in kernel</div>
+      <div>https://martinbj2008.github.io/2013/01/23/2013-01-23-mmap-in-kernel/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>January 23, 2013</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2013/02/12/2013-06-22-html2markdown-in-ubuntu/" title="Install html2markdown in Ubuntu(12.10)">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">Install html2markdown in Ubuntu(12.10)</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2012/11/10/2012-11-10-add-update-xfrm-polciy/" title="Add or Udpate Xfrm Policy">
+                        <span class="hidden-mobile">Add or Udpate Xfrm Policy</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

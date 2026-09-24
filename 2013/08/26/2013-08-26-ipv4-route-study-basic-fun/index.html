@@ -1,0 +1,856 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="In order to understand kernel route LC-Trie,summary the basic functions here.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="IPv4 route study part 1: basic fun">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/08/26/2013-08-26-ipv4-route-study-basic-fun/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="In order to understand kernel route LC-Trie,summary the basic functions here.">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/fib_trie/tkey_extract_bits.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/fib_trie/tkey_mismatch.png">
+<meta property="article:published_time" content="2013-08-26T03:05:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.749Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IPv4">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/fib_trie/tkey_extract_bits.png">
+  
+  
+  
+  <title>IPv4 route study part 1: basic fun - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="IPv4 route study part 1: basic fun"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2013-08-26 11:05" pubdate>
+          August 26, 2013 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          2.8k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          24 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">IPv4 route study part 1: basic fun</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <p>In order to understand kernel route LC-Trie,<br>summary the basic functions here.</p>
+<span id="more"></span>
+
+<h2 id="NODE-vs-LEAF">0.1. NODE vs LEAF</h2><p><code>node</code> and <code>leaf</code> have two same head elements</p>
+<ol>
+<li><code>unsigned long parent</code></li>
+<li><code>t_key key</code></li>
+</ol>
+<p>We can treat <code>leaf</code> as <code>node</code>+<code>leaf extention</code></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c">	<span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">leaf</span> &#123;</span><br>		<span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">node</span>;</span><br>	....<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="node">0.1.1. node</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">98</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">node</span> &#123;</span><br> <span class="hljs-number">99</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> parent;<br><span class="hljs-number">100</span>         t_key key;<br><span class="hljs-number">101</span> &#125;;<br></code></pre></td></tr></table></figure>
+<h3 id="leaf">0.1.2. leaf</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">103</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">leaf</span> &#123;</span><br><span class="hljs-number">104</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> parent;<br><span class="hljs-number">105</span>         t_key key;<br><span class="hljs-number">106</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">hlist_head</span> <span class="hljs-title">list</span>;</span><br><span class="hljs-number">107</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rcu_head</span> <span class="hljs-title">rcu</span>;</span><br><span class="hljs-number">108</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h2 id="PARENT">0.2. PARENT</h2><p>It is a common method, hide some bit flags into the low bits of a pointer.<br>because the low bits always is zero(becauase of CACHE).</p>
+<h3 id="the-lowest-1-bit-of-parent-is-used-to-different-node-or-leaf">0.2.1. the lowest 1 bit of parent is used to different node or leaf.</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">90</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> T_TNODE 0</span><br><span class="hljs-number">91</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> T_LEAF  1</span><br><span class="hljs-number">92</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NODE_TYPE_MASK  0x1UL</span><br><span class="hljs-number">93</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NODE_TYPE(node) ((node)-&gt;parent &amp; NODE_TYPE_MASK)</span><br><span class="hljs-number">94</span> <br><span class="hljs-number">95</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> IS_TNODE(n) (!(n-&gt;parent &amp; T_LEAF))</span><br><span class="hljs-number">96</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> IS_LEAF(n) (n-&gt;parent &amp; T_LEAF)</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">180</span> <span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> <span class="hljs-keyword">struct</span> tnode *<span class="hljs-title function_">node_parent</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> node *node)</span><br>181 &#123;<br><span class="hljs-number">182</span>         <span class="hljs-keyword">return</span> (<span class="hljs-keyword">struct</span> tnode *)(node-&gt;parent &amp; ~NODE_TYPE_MASK);<br><span class="hljs-number">183</span> &#125;<br><span class="hljs-number">184</span> <br><span class="hljs-number">185</span> <span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> <span class="hljs-keyword">struct</span> tnode *<span class="hljs-title function_">node_parent_rcu</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> node *node)</span><br>186 &#123;<br><span class="hljs-number">187</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">tnode</span> *<span class="hljs-title">ret</span> =</span> node_parent(node);<br><span class="hljs-number">188</span> <br><span class="hljs-number">189</span>          rcu_dereference_rtnl(ret);<br><span class="hljs-number">190</span> &#125;<br><span class="hljs-number">191</span> <br><span class="hljs-number">192</span> <span class="hljs-comment">/* Same as rcu_assign_pointer</span><br><span class="hljs-comment">193  * but that macro() assumes that value is a pointer.</span><br><span class="hljs-comment">194  */</span><br><span class="hljs-number">195</span> <span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> <span class="hljs-type">void</span> <span class="hljs-title function_">node_set_parent</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> node *node, <span class="hljs-keyword">struct</span> tnode *ptr)</span><br>196 &#123;<br><span class="hljs-number">197</span>         smp_wmb();<br><span class="hljs-number">198</span>         node-&gt;parent = (<span class="hljs-type">unsigned</span> <span class="hljs-type">long</span>)ptr | NODE_TYPE(node);<br><span class="hljs-number">199</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h2 id="BIT-OPS">0.3. BIT OPS</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">220</span> <span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> t_key <span class="hljs-title function_">mask_pfx</span><span class="hljs-params">(t_key k, <span class="hljs-type">unsigned</span> <span class="hljs-type">short</span> l)</span><br>221 &#123;<br><span class="hljs-number">222</span>         <span class="hljs-keyword">return</span> (l == <span class="hljs-number">0</span>) ? <span class="hljs-number">0</span> : k &gt;&gt; (KEYLENGTH-l) &lt;&lt; (KEYLENGTH-l);<br><span class="hljs-number">223</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="tkey-extract-bits">0.3.1. tkey_extract_bits</h3><p>Get value of key’s bits from the <code>offset</code> bit.<br>取 从第offset位开始的 bits位的值</p>
+<p><img src="/images/fib_trie/tkey_extract_bits.png" srcset="/img/loading.gif" lazyload alt="tkey_extract_bits"></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">225</span> <span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> t_key <span class="hljs-title function_">tkey_extract_bits</span><span class="hljs-params">(t_key a, <span class="hljs-type">int</span> offset, <span class="hljs-type">int</span> bits)</span><br>226 &#123;<br><span class="hljs-number">227</span>         <span class="hljs-keyword">if</span> (offset &lt; KEYLENGTH)<br><span class="hljs-number">228</span>                 <span class="hljs-keyword">return</span> ((t_key)(a &lt;&lt; offset)) &gt;&gt; (KEYLENGTH - bits);<br><span class="hljs-number">229</span>         <span class="hljs-keyword">else</span><br><span class="hljs-number">230</span>                 <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">231</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="tkey-equals">0.3.2. tkey_equals</h3><p><code>tkey a</code> is equal with <code>tkey b</code></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">233</span> <span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> <span class="hljs-type">int</span> <span class="hljs-title function_">tkey_equals</span><span class="hljs-params">(t_key a, t_key b)</span><br>234 &#123;<br><span class="hljs-number">235</span>         <span class="hljs-keyword">return</span> a == b;<br><span class="hljs-number">236</span> &#125;<br></code></pre></td></tr></table></figure>
+<h3 id="tkey-sub-equals">0.3.3. tkey_sub_equals</h3><p>simlar with <code>tkey_equals</code>, while it only compare the <code>bits</code> bits from the<br><code>offset</code>st bit.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">238</span> <span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> <span class="hljs-type">int</span> <span class="hljs-title function_">tkey_sub_equals</span><span class="hljs-params">(t_key a, <span class="hljs-type">int</span> offset, <span class="hljs-type">int</span> bits, t_key b)</span><br>239 &#123;<br><span class="hljs-number">240</span>         <span class="hljs-keyword">if</span> (bits == <span class="hljs-number">0</span> || offset &gt;= KEYLENGTH)<br><span class="hljs-number">241</span>                 <span class="hljs-keyword">return</span> <span class="hljs-number">1</span>;<br><span class="hljs-number">242</span>         bits = bits &gt; KEYLENGTH ? KEYLENGTH : bits;<br><span class="hljs-number">243</span>         <span class="hljs-keyword">return</span> ((a ^ b) &lt;&lt; offset) &gt;&gt; (KEYLENGTH - bits) == <span class="hljs-number">0</span>;<br><span class="hljs-number">244</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="tkey-mismatch">0.3.4. tkey_mismatch</h3><p>find out the first different bit after the <code>offset</code>st bit<br>between <code>tkey a</code> and <code>tkey b</code>.</p>
+<p>after the operation <code>a ^ b</code>, the first bit with &#96;1’ will<br>be the first different bit.</p>
+<p><img src="/images/fib_trie/tkey_mismatch.png" srcset="/img/loading.gif" lazyload alt="tkey_mismatch"></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">246</span> <span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> <span class="hljs-type">int</span> <span class="hljs-title function_">tkey_mismatch</span><span class="hljs-params">(t_key a, <span class="hljs-type">int</span> offset, t_key b)</span><br>247 &#123;<br><span class="hljs-number">248</span>         t_key diff = a ^ b;<br><span class="hljs-number">249</span>         <span class="hljs-type">int</span> i = offset;<br><span class="hljs-number">250</span> <br><span class="hljs-number">251</span>         <span class="hljs-keyword">if</span> (!diff)<br><span class="hljs-number">252</span>                 <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">253</span>         <span class="hljs-keyword">while</span> ((diff &lt;&lt; i) &gt;&gt; (KEYLENGTH<span class="hljs-number">-1</span>) == <span class="hljs-number">0</span>)<br><span class="hljs-number">254</span>                 i++;<br><span class="hljs-number">255</span>         <span class="hljs-keyword">return</span> i;<br><span class="hljs-number">256</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="mask-pfx">0.3.5. mask_pfx</h3><p>保留<code>key</code>的前<code>l</code>位，并将<code>l</code>位之后的所有位清零。<code>l</code>相当于掩码长度。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">238</span> <span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> t_key <span class="hljs-title function_">mask_pfx</span><span class="hljs-params">(t_key k, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> l)</span><br>239 &#123; <br><span class="hljs-number">240</span>         <span class="hljs-keyword">return</span> (l == <span class="hljs-number">0</span>) ? <span class="hljs-number">0</span> : k &gt;&gt; (KEYLENGTH-l) &lt;&lt; (KEYLENGTH-l); <br><span class="hljs-number">241</span> &#125; <br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Route/" class="category-chain-item">Route</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/IPv4/" class="print-no-link">#IPv4</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>IPv4 route study part 1: basic fun</div>
+      <div>https://martinbj2008.github.io/2013/08/26/2013-08-26-ipv4-route-study-basic-fun/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>August 26, 2013</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2013/08/26/2013-08-26-how-does-xfrm-km-work/" title="How does xfrm km work">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">How does xfrm km work</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2013/08/23/2013-08-23-debug-kernel-with-jprobe/" title="debug kernel with jprobe">
+                        <span class="hidden-mobile">debug kernel with jprobe</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

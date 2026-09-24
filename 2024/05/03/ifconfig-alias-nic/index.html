@@ -1,0 +1,888 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.0.1. 总结内核如何管理 网口上的IPv4 地址：  每个网口下面有多个IPv4地址，每个IP地址存放到一个struct in_ifaddr的结构体里。这个结构体里存放别名、ip地址和掩码信息。 每个网口下面有一个单链表，每个ifa 节点通过ifa_next指向下一个 ifa 节点。通过这个链表把多个 ifa 地址链接在一起。 每个 net_namespace下有多个网口，通过一个 hash">
+<meta property="og:type" content="article">
+<meta property="og:title" content="内核如何管理同网口下多个ip地址(网口别名）">
+<meta property="og:url" content="https://martinbj2008.github.io/2024/05/03/ifconfig-alias-nic/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.0.1. 总结内核如何管理 网口上的IPv4 地址：  每个网口下面有多个IPv4地址，每个IP地址存放到一个struct in_ifaddr的结构体里。这个结构体里存放别名、ip地址和掩码信息。 每个网口下面有一个单链表，每个ifa 节点通过ifa_next指向下一个 ifa 节点。通过这个链表把多个 ifa 地址链接在一起。 每个 net_namespace下有多个网口，通过一个 hash">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ifa.png">
+<meta property="article:published_time" content="2024-05-03T14:08:32.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.754Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="address">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/ifa.png">
+  
+  
+  
+  <title>内核如何管理同网口下多个ip地址(网口别名） - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="内核如何管理同网口下多个ip地址(网口别名）"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2024-05-03 22:08" pubdate>
+          May 3, 2024 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          5.6k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          47 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">内核如何管理同网口下多个ip地址(网口别名）</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h3 id="总结">0.0.1. 总结</h3><p>内核如何管理 网口上的IPv4 地址：</p>
+<ul>
+<li>每个网口下面有多个IPv4地址，每个IP地址存放到一个<code>struct in_ifaddr</code>的结构体里。这个结构体里存放别名、ip地址和掩码信息。</li>
+<li>每个网口下面有一个单链表，每个ifa 节点通过<code>ifa_next</code>指向下一个 ifa 节点。通过这个链表把多个 ifa 地址链接在一起。</li>
+<li>每个 net_namespace下有多个网口，通过一个 hash 数据链表(<code>net-&gt;ipv4.inet_addr_lst</code>)，把各个网口下的全部ifa节点，放到这个hash链里面。hash值相同的 ifa 节点，通过<code>addr_list</code> 挂在到一个hash 桶下。</li>
+<li>别名并不会创建一个独立的网口，只是在同一个网口下增加一个对应的 ifa结构体并挂载到上面的两个链表中。跟通过ip link 命令给一个网口增加一个地址相同，唯一不同在于这个地址起了一个别名或者叫label。</li>
+</ul>
+<p><img src="/images/ifa.png" srcset="/img/loading.gif" lazyload alt="内核如何管理多网口多 IP 地址"></p>
+<h3 id="命令行操作">0.0.2. 命令行操作</h3><p>有时候我们需要给一个网口配置的多个 IP 地址，这时候我们有两种配置方法：</p>
+<ul>
+<li>使用 ifconfig 配置到网口别名上。</li>
+<li>使用 ip addr 命令直接配置到网口上。</li>
+</ul>
+<p>两种方法最终在内核实现是一样的，存储位置也一样，并且可以相互读写配置结果。</p>
+<p>比如将<code>9.9.9.199/24</code>配置到 lo 口上，并起个别名<code>lo:9</code></p>
+<figure class="highlight autoit"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs autoit">[root<span class="hljs-symbol">@VM</span><span class="hljs-number">-0</span><span class="hljs-number">-12</span>-centos ~]<span class="hljs-meta"># ifconfig  lo:9 9.9.9.199/24</span><br>[root<span class="hljs-symbol">@VM</span><span class="hljs-number">-0</span><span class="hljs-number">-12</span>-centos ~]<span class="hljs-meta"># ifconfig  lo:9</span><br>lo:<span class="hljs-number">9</span>: flags=<span class="hljs-number">73</span>&lt;UP,LOOPBACK,RUNNING&gt;  mtu <span class="hljs-number">65536</span><br>        inet <span class="hljs-number">9.9</span><span class="hljs-number">.9</span><span class="hljs-number">.199</span>  netmask <span class="hljs-number">255.255</span><span class="hljs-number">.255</span><span class="hljs-number">.0</span><br>        loop  txqueuelen <span class="hljs-number">1000</span>  (<span class="hljs-keyword">Local</span> Loopback)<br>[root<span class="hljs-symbol">@VM</span><span class="hljs-number">-0</span><span class="hljs-number">-12</span>-centos ~]<span class="hljs-meta">#</span><br></code></pre></td></tr></table></figure>
+<p>ifconfig命令的配置结果，也可以通用<code>ip link</code>命令来查看</p>
+<figure class="highlight pf"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs pf">[root@VM-<span class="hljs-number">0</span>-<span class="hljs-number">12</span>-centos ~]<span class="hljs-comment"># ip a show dev lo</span><br><span class="hljs-number">1</span>: lo: <span class="hljs-variable">&lt;LOOPBACK,UP,LOWER_UP&gt;</span> mtu <span class="hljs-number">65536</span> qdisc noqueue <span class="hljs-keyword">state</span> UNKNOWN <span class="hljs-keyword">group</span> <span class="hljs-keyword">default</span> qlen <span class="hljs-number">1000</span><br>    link/loopback <span class="hljs-number">00</span>:<span class="hljs-number">00</span>:<span class="hljs-number">00</span>:<span class="hljs-number">00</span>:<span class="hljs-number">00</span>:<span class="hljs-number">00</span> brd <span class="hljs-number">00</span>:<span class="hljs-number">00</span>:<span class="hljs-number">00</span>:<span class="hljs-number">00</span>:<span class="hljs-number">00</span>:<span class="hljs-number">00</span><br>    <span class="hljs-keyword">inet</span> <span class="hljs-number">127.0</span>.<span class="hljs-number">0.1</span>/<span class="hljs-number">8</span> scope host lo<br>       valid_lft forever preferred_lft forever<br>    <span class="hljs-keyword">inet</span> <span class="hljs-number">9.9</span>.<span class="hljs-number">9.199</span>/<span class="hljs-number">24</span> scope <span class="hljs-keyword">global</span> lo:<span class="hljs-number">9</span><br>       valid_lft forever preferred_lft forever<br>    <span class="hljs-keyword">inet6</span> ::<span class="hljs-number">1</span>/<span class="hljs-number">128</span> scope host<br>       valid_lft forever preferred_lft forever<br></code></pre></td></tr></table></figure>
+<p>网口的别名在ip命令里被当做<code>label</code>输出,放在scope字段后面</p>
+<span id="more"></span> 
+
+<p>Q: ifconfig和ip命令在功能上有什么差别呢？<br>A: 从功能上没有什么不一样的地方，只是使用了内核的两套不同的接口，一般推荐使用ip命令来配置网口。</p>
+<ul>
+<li>ifconfig：使用<code>ioctl</code>接口配置&#x2F;读取网口上的IP地址</li>
+<li>ip addr：使用<code>netlink</code>消息接口配置&#x2F;读取网口上的IP地址<br>这里只要写<code>ifconfig</code>和<code>ioctl</code>相关的处理逻辑。<code>ip</code>命令如何实现对网口IP地址的配置，另外一篇文章总结。</li>
+</ul>
+<h3 id="ifcofig代码实现">0.0.3. ifcofig代码实现</h3><p>源代码: <code>https://github.com/giftnuss/net-tools/blob/master/ifconfig.c</code><br>ifconfig 首先创建一个<code>AF_INET</code>的socket，借助这个socket 通过，通过一个 ioctl 命令<code>SIOCSIFADDR</code>下发给内核。<br>配置IP 地址时候，参数被存放到<code>struct ifreq</code>结构体里，用来存放网口名字和 ip 地址. </p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs dns">int main<span class="hljs-punctuation">(</span>int argc, char **argv<span class="hljs-punctuation">)</span><br>&#123;...<br>	memcpy<span class="hljs-punctuation">(</span><span class="hljs-punctuation">(</span>char *<span class="hljs-punctuation">)</span> &amp;ifr.ifr_addr, <span class="hljs-punctuation">(</span>char *<span class="hljs-punctuation">)</span> &amp;sa, sizeof<span class="hljs-punctuation">(</span>struct sockaddr<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>...<br>		fd = get_socket_for_af<span class="hljs-punctuation">(</span>AF_INET<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>...<br>		r = ioctl<span class="hljs-punctuation">(</span>fd, SIOCSIFADDR, &amp;ifr<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+
+<h3 id="内核侧代码实现">0.0.4. 内核侧代码实现</h3><p>内核实现是围绕着一个<code>ifa</code>结构体<code>struct in_ifaddr</code>展开的。</p>
+<ul>
+<li>函数调用：内核的 ioctl系统调用函数，接收用户空间传回来的命令<code>SIOCSIFADDR</code>和对应的<code>struct ifreq</code>变量， 里面存放着别名及 IP 地址。</li>
+<li>ifa结构体<code>struct in_ifaddr</code>：ioctl通过几层抽象及 ops 的调用，最终在<code>devinet_ioctl</code>中， 创建一个<code>struct in_ifaddr</code>的结构体，存放别名(<code>ifa_label</code>)及IP 地址(<code>ifa_address</code>)。</li>
+<li>同一个网口下多个IP地址：只要地址不冲突，可以配置多个 IP 地址。 并通过 ifa 结构体下面的<code>ifa_next</code>组成一个单向链表。</li>
+<li>同一个 ns（netnamespace）下，ifa 按照 hash 分散到一个 hash 桶链表里。</li>
+</ul>
+<h4 id="数据结构">0.0.4.1. 数据结构</h4><h5 id="ifa结构体in-ifaddr">0.0.4.1.1. ifa结构体in_ifaddr</h5><figure class="highlight gauss"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs gauss"><span class="hljs-number">143</span> <span class="hljs-keyword">struct</span> <span class="hljs-type">in_ifaddr</span> &#123;<br><span class="hljs-number">144</span>         <span class="hljs-keyword">struct</span> <span class="hljs-type">hlist_node</span>       addr_lst;<br><span class="hljs-number">145</span>         <span class="hljs-keyword">struct</span> <span class="hljs-type">in_ifaddr</span>        __rcu *ifa_next;<br><span class="hljs-number">146</span>         <span class="hljs-keyword">struct</span> <span class="hljs-type">in_device</span>        *ifa_dev;<br>...<br><span class="hljs-number">157</span>         char                    ifa_label[IFNAMSIZ];<br>... &#125;;<br></code></pre></td></tr></table></figure>
+<h4 id="函数调用栈">0.0.4.2. 函数调用栈</h4><figure class="highlight excel"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs excel">SYSCALL_DEFINE3(ioctl, unsigned <span class="hljs-built_in">int</span>, fd, unsigned <span class="hljs-built_in">int</span>, cmd, unsigned long, arg)<br>=&gt; vfs_ioctl(fd_file(f), cmd, arg);<br>=&gt; =&gt; filp-&gt;f_op-&gt;unlocked_ioctl //相当于sock_ioctl<br>=&gt; =&gt; =&gt; sock_do_ioctl<br>=&gt; =&gt; =&gt; =&gt; ops-&gt;ioctl(sock, cmd, arg);// 等效与packet_ioctl<br>=&gt; =&gt; =&gt; =&gt; =&gt; packet_ioctl<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; inet_ioctl<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; devinet_ioctl<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; __inet_insert_ifa<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; ifa插入到in_dev-&gt;ifa_list<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; inet_hash_insert(dev_net(in_dev-&gt;dev), ifa);<br></code></pre></td></tr></table></figure>
+
+<h4 id="变量-packet-ops-spkt">0.0.4.3. 变量 packet_ops_spkt</h4><p>内核基于文件的 ioctl的实现，最终会调用到<code>packet_ioctl</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-number">4684</span> <span class="hljs-type">static</span> <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> <span class="hljs-title class_">proto_ops</span> packet_ops_spkt = &#123;<br>...<br><span class="hljs-number">4694</span>         .ioctl =        packet_ioctl,<br></code></pre></td></tr></table></figure>
+
+<h4 id="函数packet-ioctl">0.0.4.4. 函数packet_ioctl</h4><figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-number">4285</span> <span class="hljs-function"><span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title">packet_ioctl</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> socket *sock, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> cmd,</span></span><br><span class="hljs-params"><span class="hljs-function"><span class="hljs-number">4286</span>                         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> arg)</span></span><br><span class="hljs-function">4316         <span class="hljs-keyword">case</span> SIOCSIFADDR:</span><br><span class="hljs-function">...</span><br><span class="hljs-function"><span class="hljs-number">4324</span>                 return inet_dgram_ops.ioctl(sock, cmd, arg);</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight node-repl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs node-repl">1087 const struct proto_ops inet_dgram_ops = &#123;<br><span class="hljs-meta prompt_">...</span><br>1097         .ioctl             = inet_ioctl,<br><span class="hljs-meta prompt_">...</span><br></code></pre></td></tr></table></figure>
+
+<h4 id="函数inet-ioctl">0.0.4.5. 函数inet_ioctl</h4><figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs cpp"> <span class="hljs-number">957</span> <span class="hljs-function"><span class="hljs-type">int</span> <span class="hljs-title">inet_ioctl</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> socket *sock, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> cmd, <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> arg)</span></span><br><span class="hljs-function"> 958 </span>&#123;<br>...<br> <span class="hljs-number">993</span>         <span class="hljs-keyword">case</span> SIOCSIFADDR:<br>...<br> <span class="hljs-number">998</span>         <span class="hljs-keyword">case</span> SIOCSIFFLAGS:<br> <span class="hljs-number">999</span>                 <span class="hljs-keyword">if</span> (<span class="hljs-built_in">get_user_ifreq</span>(&amp;ifr, <span class="hljs-literal">NULL</span>, p))<br><span class="hljs-number">1000</span>                         <span class="hljs-keyword">return</span> -EFAULT;<br><span class="hljs-number">1001</span>                 err = <span class="hljs-built_in">devinet_ioctl</span>(net, cmd, &amp;ifr);<br></code></pre></td></tr></table></figure>
+
+<h4 id="函数-devinet-ioctl">0.0.4.6. 函数 devinet_ioctl</h4><p>别名（label）有<code>:</code>前后两部分， 前半部分是网口名字，后半部分是用户自定义的字符串。</p>
+<ul>
+<li>根据前半部分网口名字找到对应的网口 netdev。</li>
+<li>调用<code>inet_set_ifa</code>，把 ifa 加入到对应的网口 netdev 下。</li>
+</ul>
+<figure class="highlight xl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><code class="hljs xl"><span class="hljs-number">1071</span> int devinet_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr)<br><span class="hljs-number">1072</span> &#123;<br><span class="hljs-number">1073</span>         struct sockaddr_in sin_orig;<br><span class="hljs-number">1074</span>         <span class="hljs-function"><span class="hljs-title">struct</span> sockaddr_in *<span class="hljs-built_in">sin</span> = (struct sockaddr_in *)&amp;ifr-&gt;</span>ifr_addr;<br>...<br><span class="hljs-number">1088</span>         <span class="hljs-function"><span class="hljs-title">colon</span> = strchr(ifr-&gt;</span>ifr_name, <span class="hljs-string">&#x27;:&#x27;</span>);<br><span class="hljs-number">1089</span>         <span class="hljs-keyword">if</span> (colon)<br><span class="hljs-number">1090</span>                 *colon = <span class="hljs-number">0</span>;<br>...<br><span class="hljs-number">1132</span>         <span class="hljs-function"><span class="hljs-title">dev</span> = __dev_get_by_name(net, ifr-&gt;</span>ifr_name);<br><span class="hljs-number">1133</span>         <span class="hljs-keyword">if</span> (!dev)<br><span class="hljs-number">1134</span>                 goto done;<br><span class="hljs-number">1135</span><br><span class="hljs-number">1136</span>         <span class="hljs-keyword">if</span> (colon)<br><span class="hljs-number">1137</span>                 *colon = <span class="hljs-string">&#x27;:&#x27;</span>;<br>...<br><span class="hljs-number">1211</span>         case SIOCSIFADDR:       <span class="hljs-comment">/* Set interface address (and family) */</span><br>...<br><span class="hljs-number">1224</span>                         <span class="hljs-keyword">if</span> (colon)<br><span class="hljs-number">1225</span>                                 <span class="hljs-function"><span class="hljs-title">memcpy</span>(ifa-&gt;</span><span class="hljs-function"><span class="hljs-title">ifa_label</span>, ifr-&gt;</span>ifr_name, IFNAMSIZ);<br><span class="hljs-number">1226</span>                         <span class="hljs-keyword">else</span><br><span class="hljs-number">1227</span>                                 <span class="hljs-function"><span class="hljs-title">memcpy</span>(ifa-&gt;</span><span class="hljs-function"><span class="hljs-title">ifa_label</span>, dev-&gt;</span><span class="hljs-keyword">name</span>, IFNAMSIZ);<br>...<br><span class="hljs-number">1236</span><br><span class="hljs-number">1237</span>                 <span class="hljs-function"><span class="hljs-title">ifa</span>-&gt;</span><span class="hljs-function"><span class="hljs-title">ifa_address</span> = ifa-&gt;</span><span class="hljs-function"><span class="hljs-title">ifa_local</span> = <span class="hljs-built_in">sin</span>-&gt;</span>sin_addr.s_addr;<br>...<br><span class="hljs-number">1250</span>                 set_ifa_lifetime(ifa, INFINITY_LIFE_TIME, INFINITY_LIFE_TIME);<br><span class="hljs-number">1251</span>                 ret = inet_set_ifa(dev, ifa);<br><span class="hljs-number">1252</span>                 break;<br><span class="hljs-number">1253</span><br></code></pre></td></tr></table></figure>
+
+<p><code>inet_set_ifa</code>：主要函数功能是调用<code>inet_insert_ifa</code>，把 ifa 插入到两个链表里。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs cpp"> <span class="hljs-number">590</span> <span class="hljs-function"><span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title">inet_set_ifa</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net_device *dev, <span class="hljs-keyword">struct</span> in_ifaddr *ifa)</span></span><br><span class="hljs-function"> 591 </span>&#123;<br>...<br> <span class="hljs-number">599</span>         <span class="hljs-keyword">return</span> <span class="hljs-built_in">inet_insert_ifa</span>(ifa);<br> <span class="hljs-number">600</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h4 id="函数-inet-insert-ifa">0.0.4.7. 函数 inet_insert_ifa</h4><p>把<code>ifa</code>节点插入到两个list 里。</p>
+<ul>
+<li><code>ifa_list</code>单向链表: 同一个网口下的 IP 地址，插入到对应的<code>ifa_list</code>下的单向链表中。</li>
+<li>hash桶链表：同一个ns(netnamespace)下的所有ifa 分散到一个hash链表中。根据计算出的 hash，挂载到<code>net-&gt;ipv4.inet_addr_lst[hash]</code>这个桶下面。</li>
+</ul>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><code class="hljs dns"> <span class="hljs-number">499</span> static int __inet_insert_ifa<span class="hljs-punctuation">(</span>struct in_ifaddr *ifa, struct nlmsghdr *nlh,<br> <span class="hljs-number">500</span>                              u32 portid, struct netlink_ext_ack *extack<span class="hljs-punctuation">)</span><br> <span class="hljs-number">501</span> &#123;<br> ...<br> <span class="hljs-number">517</span>         ifap = &amp;in_dev-&gt;ifa_list<span class="hljs-comment">;</span><br> <span class="hljs-number">518</span>         ifa1 = rtnl_dereference<span class="hljs-punctuation">(</span>*ifap<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br> <span class="hljs-number">519</span><br> <span class="hljs-number">520</span>         while <span class="hljs-punctuation">(</span>ifa1<span class="hljs-punctuation">)</span> &#123;<br>...<br> <span class="hljs-number">538</span>                 ifap = &amp;ifa1-&gt;ifa_next<span class="hljs-comment">;</span><br> <span class="hljs-number">539</span>                 ifa1 = rtnl_dereference<span class="hljs-punctuation">(</span>*ifap<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br> <span class="hljs-number">540</span>         &#125;<br> ...<br> <span class="hljs-number">563</span>         rcu_assign_pointer<span class="hljs-punctuation">(</span>ifa-&gt;ifa_next, *ifap<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br> <span class="hljs-number">564</span>         rcu_assign_pointer<span class="hljs-punctuation">(</span>*ifap, ifa<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br> <span class="hljs-number">565</span><br> <span class="hljs-number">566</span>         inet_hash_insert<span class="hljs-punctuation">(</span>dev_net<span class="hljs-punctuation">(</span>in_dev-&gt;dev<span class="hljs-punctuation">)</span>, ifa<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">129 </span>static void inet_hash_insert(struct net *net, struct in_ifaddr *ifa)<br><span class="hljs-symbol">130 </span>&#123;<br><span class="hljs-symbol">131 </span>        u32 hash = inet_addr_hash(net, ifa-&gt;ifa_local);<br><span class="hljs-number">132</span><br><span class="hljs-symbol">133 </span>        ASSERT_RTNL();<br><span class="hljs-symbol">134 </span>        hlist_add_head_rcu(&amp;ifa-&gt;addr_lst, &amp;net-&gt;ipv4.inet_addr_lst[hash]);<br><span class="hljs-symbol">135 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<ul>
+<li>备注：2025更新到内核代码版本v6.14(v6.14-rc6-22-gb7f94fcf5546)</li>
+</ul>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Netdev/" class="category-chain-item">Netdev</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/address/" class="print-no-link">#address</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>内核如何管理同网口下多个ip地址(网口别名）</div>
+      <div>https://martinbj2008.github.io/2024/05/03/ifconfig-alias-nic/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>May 3, 2024</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2024/09/21/struct-group/" title="struct-group">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">struct-group</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2022/08/27/core-entry-function-of-bpf-run/" title="bfp 在内核运行的核心入口函数及其变形">
+                        <span class="hidden-mobile">bfp 在内核运行的核心入口函数及其变形</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

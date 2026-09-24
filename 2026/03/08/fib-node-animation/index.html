@@ -1,0 +1,859 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. 内核 FIB Trie 路由效果演示通过动画展示下内核路由树(FIB trie)插入路由时，对应节点的变化。👉 点击这里全屏查看动画">
+<meta property="og:type" content="article">
+<meta property="og:title" content="FIB Trie 路由动画演示">
+<meta property="og:url" content="https://martinbj2008.github.io/2026/03/08/fib-node-animation/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. 内核 FIB Trie 路由效果演示通过动画展示下内核路由树(FIB trie)插入路由时，对应节点的变化。👉 点击这里全屏查看动画">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/fib_trie_final.svg">
+<meta property="article:published_time" content="2026-03-08T07:58:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.754Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="fib">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/fib_trie_final.svg">
+  
+  
+  
+  <title>FIB Trie 路由动画演示 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="FIB Trie 路由动画演示"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2026-03-08 15:58" pubdate>
+          March 8, 2026 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          3.1k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          26 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">FIB Trie 路由动画演示</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="内核-FIB-Trie-路由效果演示">0.1. 内核 FIB Trie 路由效果演示</h2><p>通过动画展示下内核路由树(FIB trie)插入路由时，对应节点的变化。<br>👉 <a href="/html/fib_animation.html">点击这里全屏查看动画</a><br><img src="/images/fib_trie_final.svg" srcset="/img/loading.gif" lazyload alt="FIB Trie 路由树最终状态"></p>
+<span id="more"></span>
+
+<h2 id="FIB-trie-介绍">0.2. FIB trie 介绍</h2><p>linux内核里的fib路由树，</p>
+<h2 id="如何插入一个fib-路由">0.3. 如何插入一个fib 路由</h2><h3 id="查找插入点">0.3.1. 查找插入点</h3><p>一句话：遍历当前节点，如果前缀相同，根据index值，递归找孩子(子树).</p>
+<p>【关键点1】<code>get_cindex</code>计算index值</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs dns">index = get_cindex<span class="hljs-punctuation">(</span><span class="hljs-keyword">key</span>, n<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>// 展开: index = <span class="hljs-punctuation">(</span><span class="hljs-keyword">key</span> ^ n-&gt;<span class="hljs-keyword">key</span><span class="hljs-punctuation">)</span> &gt;&gt; n-&gt;pos<br></code></pre></td></tr></table></figure>
+<ul>
+<li>异或运算后，然后右移pos位。保留（前缀+bits位)<br><em><strong>包含前缀运算</strong></em></li>
+</ul>
+<p>【关键点2】前缀检查：一石二鸟的判断<br>当前节点n和key的前缀是否一致。</p>
+<p>n-&gt;bits表示该节点有2^bits个子节点，所以合法的index范围是[0, 2^bits)。如果index &gt;&#x3D; 2^bits，说明：<br>key和n-&gt;key在前缀部分就已经不同了（差异出现在pos+bits之上的高位）</p>
+<p>换句话说：key不属于这个子树，前缀不匹配<br>备注：因为fib trie的根节点一定不为空。所以第一次算index值一定为0，不会出现前缀不匹配的场景。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">930</span> <span class="hljs-type">static</span> <span class="hljs-keyword">struct</span> key_vector *<span class="hljs-title function_">fib_find_node</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> trie *t,</span><br><span class="hljs-params"><span class="hljs-number">931</span>                                         <span class="hljs-keyword">struct</span> key_vector **tp, u32 key)</span><br>932 &#123;<br><span class="hljs-number">933</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">key_vector</span> *<span class="hljs-title">pn</span>, *<span class="hljs-title">n</span> =</span> t-&gt;kv;<br><span class="hljs-number">934</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> index = <span class="hljs-number">0</span>;<br><span class="hljs-number">935</span><br><span class="hljs-number">936</span>         <span class="hljs-keyword">do</span> &#123;<br><span class="hljs-number">937</span>                 pn = n;                          <span class="hljs-comment">// 当前节点保存为父节点</span><br><span class="hljs-number">938</span>                 n = get_child_rcu(n, index);     <span class="hljs-comment">// 根据index值，找孩子</span><br><span class="hljs-number">939</span><br><span class="hljs-number">940</span>                 <span class="hljs-keyword">if</span> (!n)                          <span class="hljs-comment">// 孩子为空. 找到了 ==&gt; case1：空的孩子节点（前缀相同的tnode，孩子节点为空）</span><br><span class="hljs-number">941</span>                         <span class="hljs-keyword">break</span>;<br><span class="hljs-number">942</span>                                                  <span class="hljs-comment">// 孩子非空, 深度+1</span><br><span class="hljs-number">943</span>                 index = get_cindex(key, n);      <span class="hljs-comment">// 根据key和当前节点计算index值</span><br><span class="hljs-number">944</span><br>...<br><span class="hljs-number">959</span>                 <span class="hljs-keyword">if</span> (index &gt;= (<span class="hljs-number">1ul</span> &lt;&lt; n-&gt;bits)) &#123; <span class="hljs-comment">// index越界：前缀不相同 ==&gt; case2: 前缀不同的tnode节点</span><br><span class="hljs-number">960</span>                         n = <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">961</span>                         <span class="hljs-keyword">break</span>;<br><span class="hljs-number">962</span>                 &#125;<br><span class="hljs-number">963</span>                                                  <span class="hljs-comment">// index合理，继续下次循环</span><br><span class="hljs-number">965</span>         &#125; <span class="hljs-keyword">while</span> (IS_TNODE(n));                   <span class="hljs-comment">//当前节点是叶子时候。 case3: 前缀相同的叶子。</span><br><span class="hljs-number">966</span><br><span class="hljs-number">967</span>         *tp = pn;<br><span class="hljs-number">968</span><br><span class="hljs-number">969</span>         <span class="hljs-keyword">return</span> n;<br><span class="hljs-number">970</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h4 id="场景1：当前一个节点的叶子">0.3.1.1. 场景1：当前一个节点的叶子</h4><p>匹配条件：</p>
+<ul>
+<li>前缀相同。</li>
+<li>index值对应的孩子节点指针为空<br>处理方式：</li>
+<li>创建叶子节点，挂到当前节点的第index个孩子。<br>例子：key: 9.9.0.0&#x2F;16</li>
+</ul>
+<h4 id="场景2：前缀不同">0.3.1.2. 场景2：前缀不同</h4><p>匹配条件：</p>
+<ul>
+<li>前缀不相同。</li>
+<li>index &gt;&#x3D; 2^bits：index值大于或者等于2的bits次方。</li>
+</ul>
+<p>处理方式：</p>
+<ul>
+<li>创建一个新的中间节点<ul>
+<li>bit位置是根据前缀里不相同的位里，最高的一位。</li>
+<li>当前节点挂到中间节点，当孩子。</li>
+</ul>
+</li>
+<li>创建一个叶子节点<ul>
+<li>新叶子节点挂到中间节点，当孩子。</li>
+</ul>
+</li>
+<li>中间节点，挂到父节点当孩子。<br>例如：增加路由9.24.0.0&#x2F;24</li>
+</ul>
+<h4 id="场景3：前缀相同的叶子节点">0.3.1.3. 场景3：前缀相同的叶子节点</h4><p>相同前缀，不同掩码长度的。<br>在叶子节点里，向FA list里增加fib_alias节点。<br>例如：9.9.8.0&#x2F;30 dev veth0</p>
+<h3 id="执行插入操作">0.3.2. 执行插入操作</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br></pre></td><td class="code"><pre><code class="hljs c">     <span class="hljs-comment">/* fib_insert_alias - 将新的 fib_alias 插入到叶子节点的链表中</span><br><span class="hljs-comment">      *</span><br><span class="hljs-comment">      * @t:   trie 根</span><br><span class="hljs-comment">      * @tp:  父节点 (tnode)</span><br><span class="hljs-comment">      * @l:   叶子节点 (fib_find_node 找到的)，为 NULL 表示叶子不存在</span><br><span class="hljs-comment">      * @new: 待插入的 fib_alias</span><br><span class="hljs-comment">      * @fa:  精确匹配到的已有 fib_alias（同 slen + 同 tb_id + 同 tos + 同 priority），可为 NULL</span><br><span class="hljs-comment">      * @key: 路由前缀 key</span><br><span class="hljs-comment">      */</span><br><span class="hljs-number">1154</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">fib_insert_alias</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> trie *t, <span class="hljs-keyword">struct</span> key_vector *tp,</span><br><span class="hljs-params"><span class="hljs-number">1155</span>                             <span class="hljs-keyword">struct</span> key_vector *l, <span class="hljs-keyword">struct</span> fib_alias *new,</span><br><span class="hljs-params"><span class="hljs-number">1156</span>                             <span class="hljs-keyword">struct</span> fib_alias *fa, t_key key)</span><br>1157 &#123;<br><span class="hljs-number">1158</span>         <span class="hljs-keyword">if</span> (!l)<br><span class="hljs-number">1159</span>                 <span class="hljs-keyword">return</span> fib_insert_node(t, tp, new, key);  <span class="hljs-comment">/* 场景1 &amp; 场景2：叶子节点不存在，*/</span><br><span class="hljs-number">1160</span><br>             <span class="hljs-comment">/* === 以下是场景3：叶子节点已存在，往叶子的 fa_list 链表中插入 === */</span><br><span class="hljs-number">1161</span>         <span class="hljs-keyword">if</span> (fa) &#123; <span class="hljs-comment">/* 精确匹配到已有 fa（替换/追加场景）：插到它前面*/</span><br><span class="hljs-number">1162</span>                 hlist_add_before_rcu(&amp;new-&gt;fa_list, &amp;fa-&gt;fa_list);<br><span class="hljs-number">1163</span>         &#125; <span class="hljs-keyword">else</span> &#123;<br>                     <span class="hljs-comment">/* 没有精确匹配，需要按排序规则找到合适的插入位置</span><br><span class="hljs-comment">                      * 排序规则：</span><br><span class="hljs-comment">                      *   1) fa_slen 升序 (slen = 32 - prefixlen，slen 越小 = 掩码越长 = 越精确)</span><br><span class="hljs-comment">                      *   2) slen 相同时，tb_id 降序 (local 表 id=255 排在 main 表 id=254 前面) */</span><br><span class="hljs-number">1164</span>                 <span class="hljs-keyword">struct</span> fib_alias *last;<br><span class="hljs-number">1165</span><br><span class="hljs-number">1166</span>                 hlist_for_each_entry(last, &amp;l-&gt;leaf, fa_list) &#123;<br><span class="hljs-number">1167</span>                         <span class="hljs-keyword">if</span> (new-&gt;fa_slen &lt; last-&gt;fa_slen)<br><span class="hljs-number">1168</span>                                 <span class="hljs-keyword">break</span>;<br><span class="hljs-number">1169</span>                         <span class="hljs-keyword">if</span> ((new-&gt;fa_slen == last-&gt;fa_slen) &amp;&amp;<br><span class="hljs-number">1170</span>                             (new-&gt;tb_id &gt; last-&gt;tb_id))<br><span class="hljs-number">1171</span>                                 <span class="hljs-keyword">break</span>;           <span class="hljs-comment">// 掩码相同，但 tb_id 更大，插到前面</span><br><span class="hljs-number">1172</span>                         fa = last;               <span class="hljs-comment">// 继续往后找，fa 记录&quot;插入点的前一个节点&quot;</span><br><span class="hljs-number">1173</span>                 &#125;<br><span class="hljs-number">1174</span><br><span class="hljs-number">1175</span>                 <span class="hljs-keyword">if</span> (fa)<br><span class="hljs-number">1176</span>                         hlist_add_behind_rcu(&amp;new-&gt;fa_list, &amp;fa-&gt;fa_list);  <span class="hljs-comment">// 插到 fa 后面</span><br><span class="hljs-number">1177</span>                 <span class="hljs-keyword">else</span><br><span class="hljs-number">1178</span>                         hlist_add_head_rcu(&amp;new-&gt;fa_list, &amp;l-&gt;leaf);        <span class="hljs-comment">// 链表为空或应插到最前面</span><br><span class="hljs-number">1179</span>         &#125;<br><span class="hljs-number">1180</span><br><span class="hljs-number">1181</span>         <span class="hljs-keyword">if</span> (l-&gt;slen &lt; new-&gt;fa_slen) &#123;  <span class="hljs-comment">/* 如果新插入的 fa_slen 比叶子当前记录的 slen 更大（掩码更短），需要更新叶子的 slen，并向上传播 suffix 长度*/</span><br><span class="hljs-number">1182</span>                 l-&gt;slen = new-&gt;fa_slen;<br><span class="hljs-number">1183</span>                 node_push_suffix(tp, new-&gt;fa_slen);<br><span class="hljs-number">1184</span>         &#125;<br><span class="hljs-number">1185</span><br><span class="hljs-number">1186</span>         <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">1187</span> &#125;<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/FIB/" class="category-chain-item">FIB</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/fib/" class="print-no-link">#fib</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>FIB Trie 路由动画演示</div>
+      <div>https://martinbj2008.github.io/2026/03/08/fib-node-animation/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>March 8, 2026</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2026/03/08/2026-03-08-fib-ecmp-hash-select-multipath/" title="ECMP选路: fib_select_multipath Hash 机制深度解析">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">ECMP选路: fib_select_multipath Hash 机制深度解析</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2026/03/01/fib-data-struct/" title="fib data struct">
+                        <span class="hidden-mobile">fib data struct</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

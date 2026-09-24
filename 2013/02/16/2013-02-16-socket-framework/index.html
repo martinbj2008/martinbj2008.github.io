@@ -1,0 +1,879 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. socket typesocket is a widely used in kernel&#x2F;net. There are many kind of sockets with different ‘family&#x2F;proto’. They can be divided by family, and under each family, there are many kind">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Socket Basic Framework">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/02/16/2013-02-16-socket-framework/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. socket typesocket is a widely used in kernel&#x2F;net. There are many kind of sockets with different ‘family&#x2F;proto’. They can be divided by family, and under each family, there are many kind">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2013-02-15T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.747Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="Socket">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>Socket Basic Framework - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="Socket Basic Framework"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2013-02-16 00:00" pubdate>
+          February 16, 2013 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          13k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          107 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">Socket Basic Framework</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="socket-type">0.1. socket type</h2><p>socket is a widely used in kernel&#x2F;net. There are many kind of sockets with different ‘family&#x2F;proto’. They can be divided by family, and under each family, there are many kinds of proto. such as inet(ipv4)&#x2F;stream, netlink&#x2F;(xfrm, rt).</p>
+<span id="more"></span>
+
+<h2 id="Data-struct-method">0.2. Data struct &amp;&amp; method</h2><h3 id="net-proto-family">0.2.1. net_proto_family</h3><p>The net_proto_family is used to register a socket family.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">216</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net_proto_family</span> &#123;</span><br><span class="hljs-number">217</span>         <span class="hljs-type">int</span>             family;<br><span class="hljs-number">218</span>         <span class="hljs-type">int</span>             (*create)(<span class="hljs-keyword">struct</span> net *net, <span class="hljs-keyword">struct</span> socket *sock,<br><span class="hljs-number">219</span>                                   <span class="hljs-type">int</span> protocol, <span class="hljs-type">int</span> kern);<br><span class="hljs-number">220</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">module</span>   *<span class="hljs-title">owner</span>;</span><br><span class="hljs-number">221</span> &#125;;<br></code></pre></td></tr></table></figure>
+<p>such as inet(ipv4), netlink, unix_socket, pf_packet(tcpdump socket) …<br>EX: netlink family</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2082</span> <span class="hljs-type">static</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net_proto_family</span> <span class="hljs-title">netlink_family_ops</span> =</span> &#123;<br><span class="hljs-number">2083</span>         .family = PF_NETLINK,<br><span class="hljs-number">2084</span>         .create = netlink_create,<br><span class="hljs-number">2085</span>         .owner  = THIS_MODULE,  <span class="hljs-comment">/* for consistency 8) */</span><br><span class="hljs-number">2086</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<p>All the socket families are registered to net_families by int sock_register(const struct net_proto_family *ops)</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">158</span> <span class="hljs-type">static</span> <span class="hljs-title function_">DEFINE_SPINLOCK</span><span class="hljs-params">(net_family_lock)</span>;<br><span class="hljs-number">159</span> <span class="hljs-type">static</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net_proto_family</span> __<span class="hljs-title">rcu</span> *<span class="hljs-title">net_families</span>[<span class="hljs-title">NPROTO</span>] __<span class="hljs-title">read_mostly</span>;</span><br></code></pre></td></tr></table></figure>
+
+<p>See later section for detail.</p>
+<h3 id="struct-proto-ops">0.2.2. struct proto_ops</h3><p>proto_ops is used to define the detail operation, such as bind&#x2F;connect&#x2F;accept and so on. every socket has a specificed proto_ops.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">162</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">proto_ops</span> &#123;</span><br><span class="hljs-number">163</span>         <span class="hljs-type">int</span>             family;<br><span class="hljs-number">164</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">module</span>   *<span class="hljs-title">owner</span>;</span><br><span class="hljs-number">165</span>         <span class="hljs-type">int</span>             (*release)   (<span class="hljs-keyword">struct</span> socket *sock);<br><span class="hljs-number">166</span>         <span class="hljs-type">int</span>             (*bind)      (<span class="hljs-keyword">struct</span> socket *sock,<br><span class="hljs-number">167</span>                                       <span class="hljs-keyword">struct</span> sockaddr *myaddr,<br><span class="hljs-number">168</span>                                       <span class="hljs-type">int</span> sockaddr_len);<br><span class="hljs-number">169</span>         <span class="hljs-type">int</span>             (*connect)   (<span class="hljs-keyword">struct</span> socket *sock,<br><span class="hljs-number">170</span>                                       <span class="hljs-keyword">struct</span> sockaddr *vaddr,<br><span class="hljs-number">171</span>                                       <span class="hljs-type">int</span> sockaddr_len, <span class="hljs-type">int</span> flags);<br><span class="hljs-number">172</span>         <span class="hljs-type">int</span>             (*socketpair)(<span class="hljs-keyword">struct</span> socket *sock1,<br><span class="hljs-number">173</span>                                       <span class="hljs-keyword">struct</span> socket *sock2);<br><span class="hljs-number">174</span>         <span class="hljs-type">int</span>             (*accept)    (<span class="hljs-keyword">struct</span> socket *sock,<br><span class="hljs-number">175</span>                                       <span class="hljs-keyword">struct</span> socket *newsock, <span class="hljs-type">int</span> flags);<br><span class="hljs-number">176</span>         <span class="hljs-type">int</span>             (*getname)   (<span class="hljs-keyword">struct</span> socket *sock,<br><span class="hljs-number">177</span>                                       <span class="hljs-keyword">struct</span> sockaddr *addr,<br>...<br><span class="hljs-number">199</span>         <span class="hljs-type">int</span>             (*sendmsg)   (<span class="hljs-keyword">struct</span> kiocb *iocb, <span class="hljs-keyword">struct</span> socket *sock,<br><span class="hljs-number">200</span>                                       <span class="hljs-keyword">struct</span> msghdr *m, <span class="hljs-type">size_t</span> total_len);<br><span class="hljs-number">201</span>         <span class="hljs-type">int</span>             (*recvmsg)   (<span class="hljs-keyword">struct</span> kiocb *iocb, <span class="hljs-keyword">struct</span> socket *sock,<br><span class="hljs-number">202</span>                                       <span class="hljs-keyword">struct</span> msghdr *m, <span class="hljs-type">size_t</span> total_len,<br><span class="hljs-number">203</span>                                       <span class="hljs-type">int</span> flags);<br>...<br></code></pre></td></tr></table></figure>
+<h3 id="struct-proto">0.2.3. struct proto</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">800</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">proto</span> &#123;</span><br> ...<br> <span class="hljs-number">812</span>         <span class="hljs-type">int</span>                     (*init)(<span class="hljs-keyword">struct</span> sock *sk);<br> <span class="hljs-number">813</span>         <span class="hljs-type">void</span>                    (*destroy)(<span class="hljs-keyword">struct</span> sock *sk);<br> <span class="hljs-number">814</span>         <span class="hljs-type">void</span>                    (*shutdown)(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-type">int</span> how);<br> ..<br> <span class="hljs-number">847</span>         <span class="hljs-comment">/* Keeping track of sk&#x27;s, looking them up, and port selection methods. */</span><br> <span class="hljs-number">848</span>         <span class="hljs-type">void</span>                    (*hash)(<span class="hljs-keyword">struct</span> sock *sk);<br> <span class="hljs-number">849</span>         <span class="hljs-type">void</span>                    (*unhash)(<span class="hljs-keyword">struct</span> sock *sk);<br> ...<br> <span class="hljs-number">876</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">kmem_cache</span>       *<span class="hljs-title">slab</span>;</span><br> <span class="hljs-number">877</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span>            obj_size;<br> <span class="hljs-number">878</span>         <span class="hljs-type">int</span>                     slab_flags;<br>...<br> <span class="hljs-number">911</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<p>Currently, I only found the obj_size&#x2F;slab is useful. </p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">876</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">kmem_cache</span> *<span class="hljs-title">slab</span>;</span> <br><span class="hljs-number">877</span> <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> obj_size;<br></code></pre></td></tr></table></figure>
+
+<p>When create a socket in socket_create, we alloc a struct sock, in fact, we alloc a memory whose size is obj_size from the slab.</p>
+<p>ex:netlink_sock, its first element is struct sock sk;, thus we can use nlk_sk to get a struct netlink_sock from a struct sock.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">67</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">netlink_sock</span> &#123;</span><br><span class="hljs-number">68</span>         <span class="hljs-comment">/* struct sock has to be the first member of netlink_sock */</span><br><span class="hljs-number">69</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sock</span>             <span class="hljs-title">sk</span>;</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">96</span> <span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> <span class="hljs-keyword">struct</span> netlink_sock *<span class="hljs-title function_">nlk_sk</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sock *sk)</span><br>97 &#123;<br><span class="hljs-number">98</span>         <span class="hljs-keyword">return</span> container_of(sk, <span class="hljs-keyword">struct</span> netlink_sock, sk);<br><span class="hljs-number">99</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<p>sometimes struct proto_ops will call the struct proto<br>ex: .getsockopt (todo)</p>
+<h3 id="socket-vs-sock">0.2.4. socket vs sock</h3><p>What is sock used for? sock is the internel representation “network layer representation of sockets” Which is used in kernel internel.</p>
+<p>What is socket used for? “struct socket – general BSD socket” It is a very high layer abtractation, has very little and common information, such as: state, file(socket is a file for user space), flag, ops(proto ops). each of them has a pointer in its struct which points to peer.</p>
+<p>PIC for sock and socket</p>
+<h3 id="socket-sk">0.2.5. socket-&gt;sk</h3><p>struct socket - general BSD socket</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">139</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">socket</span> &#123;</span><br><span class="hljs-number">140</span>         socket_state            state;<br><span class="hljs-number">141</span><br><span class="hljs-number">142</span>         kmemcheck_bitfield_begin(type);<br><span class="hljs-number">143</span>         <span class="hljs-type">short</span>                   type;<br><span class="hljs-number">144</span>         kmemcheck_bitfield_end(type);<br><span class="hljs-number">145</span><br><span class="hljs-number">146</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span>           flags;<br><span class="hljs-number">147</span><br><span class="hljs-number">148</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">socket_wq</span> __<span class="hljs-title">rcu</span>  *<span class="hljs-title">wq</span>;</span><br><span class="hljs-number">149</span><br><span class="hljs-number">150</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">file</span>             *<span class="hljs-title">file</span>;</span><br><span class="hljs-number">151</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sock</span>             *<span class="hljs-title">sk</span>;</span><br><span class="hljs-number">152</span>         <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">proto_ops</span>  *<span class="hljs-title">ops</span>;</span><br><span class="hljs-number">153</span> &#125;;<br>```c<br><br>### `sock-&gt;sk_socket`<br><br>```c<br><span class="hljs-number">264</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sock</span> &#123;</span><br>...<br> <span class="hljs-number">269</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sock_common</span>      __<span class="hljs-title">sk_common</span>;</span><br>...<br> <span class="hljs-number">285</span>         <span class="hljs-type">socket_lock_t</span>           sk_lock;<br> <span class="hljs-number">286</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sk_buff_head</span>     <span class="hljs-title">sk_receive_queue</span>;</span><br>...<br> <span class="hljs-number">295</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> &#123;</span><br> <span class="hljs-number">296</span>                 <span class="hljs-type">atomic_t</span>        rmem_alloc;<br> <span class="hljs-number">297</span>                 <span class="hljs-type">int</span>             len;<br> <span class="hljs-number">298</span>                 <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sk_buff</span>  *<span class="hljs-title">head</span>;</span><br> <span class="hljs-number">299</span>                 <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sk_buff</span>  *<span class="hljs-title">tail</span>;</span><br> <span class="hljs-number">300</span>         &#125; sk_backlog;<br>...<br> <span class="hljs-number">360</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">socket</span>           *<span class="hljs-title">sk_socket</span>;</span><br> <span class="hljs-number">380</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h3 id="void-sock-init-data-struct-socket-sock-struct-sock-sk">0.2.6. void sock_init_data(struct socket *sock, struct sock *sk)</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2077</span> <span class="hljs-type">void</span> <span class="hljs-title function_">sock_init_data</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> socket *sock, <span class="hljs-keyword">struct</span> sock *sk)</span><br>2078 &#123;<br><span class="hljs-number">2079</span>         skb_queue_head_init(&amp;sk-&gt;sk_receive_queue);<br><span class="hljs-number">2080</span>         skb_queue_head_init(&amp;sk-&gt;sk_write_queue);<br><span class="hljs-number">2081</span>         skb_queue_head_init(&amp;sk-&gt;sk_error_queue);<br><span class="hljs-number">2082</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_NET_DMA</span><br><span class="hljs-number">2083</span>         skb_queue_head_init(&amp;sk-&gt;sk_async_wait_queue);<br><span class="hljs-number">2084</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">2085</span><br><span class="hljs-number">2086</span>         sk-&gt;sk_send_head        =       <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">2087</span><br><span class="hljs-number">2088</span>         init_timer(&amp;sk-&gt;sk_timer);<br><span class="hljs-number">2089</span><br><span class="hljs-number">2090</span>         sk-&gt;sk_allocation       =       GFP_KERNEL;<br><span class="hljs-number">2091</span>         sk-&gt;sk_rcvbuf           =       sysctl_rmem_default;<br><span class="hljs-number">2092</span>         sk-&gt;sk_sndbuf           =       sysctl_wmem_default;<br><span class="hljs-number">2093</span>         sk-&gt;sk_state            =       TCP_CLOSE;<br><span class="hljs-number">2094</span>         sk_set_socket(sk, sock);<br><span class="hljs-number">2095</span><br><span class="hljs-number">2096</span>         sock_set_flag(sk, SOCK_ZAPPED);<br><span class="hljs-number">2097</span><br><span class="hljs-number">2098</span>         <span class="hljs-keyword">if</span> (sock) &#123;<br><span class="hljs-number">2099</span>                 sk-&gt;sk_type     =       sock-&gt;type;<br><span class="hljs-number">2100</span>                 sk-&gt;sk_wq       =       sock-&gt;wq;<br><span class="hljs-number">2101</span>                 sock-&gt;sk        =       sk;<br><span class="hljs-number">2102</span>         &#125; <span class="hljs-keyword">else</span><br><span class="hljs-number">2103</span>                 sk-&gt;sk_wq       =       <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">2104</span><br><span class="hljs-number">2105</span>         spin_lock_init(&amp;sk-&gt;sk_dst_lock);<br><span class="hljs-number">2106</span>         rwlock_init(&amp;sk-&gt;sk_callback_lock);<br><span class="hljs-number">2107</span>         lockdep_set_class_and_name(&amp;sk-&gt;sk_callback_lock,<br><span class="hljs-number">2108</span>                         af_callback_keys + sk-&gt;sk_family,<br><span class="hljs-number">2109</span>                         af_family_clock_key_strings[sk-&gt;sk_family]);<br><span class="hljs-number">2110</span><br><span class="hljs-number">2111</span>         sk-&gt;sk_state_change     =       sock_def_wakeup;<br><span class="hljs-number">2112</span>         sk-&gt;sk_data_ready       =       sock_def_readable;<br><span class="hljs-number">2113</span>         sk-&gt;sk_write_space      =       sock_def_write_space;<br><span class="hljs-number">2114</span>         sk-&gt;sk_error_report     =       sock_def_error_report;<br><span class="hljs-number">2115</span>         sk-&gt;sk_destruct         =       sock_def_destruct;<br><span class="hljs-number">2116</span><br><span class="hljs-number">2117</span>         sk-&gt;sk_sndmsg_page      =       <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">2118</span>         sk-&gt;sk_sndmsg_off       =       <span class="hljs-number">0</span>;<br><span class="hljs-number">2119</span>         sk-&gt;sk_peek_off         =       <span class="hljs-number">-1</span>;<br><span class="hljs-number">2120</span><br><span class="hljs-number">2121</span>         sk-&gt;sk_peer_pid         =       <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">2122</span>         sk-&gt;sk_peer_cred        =       <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">2123</span>         sk-&gt;sk_write_pending    =       <span class="hljs-number">0</span>;<br><span class="hljs-number">2124</span>         sk-&gt;sk_rcvlowat         =       <span class="hljs-number">1</span>;<br><span class="hljs-number">2125</span>         sk-&gt;sk_rcvtimeo         =       MAX_SCHEDULE_TIMEOUT;<br><span class="hljs-number">2126</span>         sk-&gt;sk_sndtimeo         =       MAX_SCHEDULE_TIMEOUT;<br><span class="hljs-number">2127</span><br><span class="hljs-number">2128</span>         sk-&gt;sk_stamp = ktime_set(<span class="hljs-number">-1L</span>, <span class="hljs-number">0</span>);<br><span class="hljs-number">2129</span><br><span class="hljs-number">2130</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment">2131          * Before updating sk_refcnt, we must commit prior changes to memory</span><br><span class="hljs-comment">2132          * (Documentation/RCU/rculist_nulls.txt for details)</span><br><span class="hljs-comment">2133          */</span><br><span class="hljs-number">2134</span>         smp_wmb();<br><span class="hljs-number">2135</span>         atomic_set(&amp;sk-&gt;sk_refcnt, <span class="hljs-number">1</span>);<br><span class="hljs-number">2136</span>         atomic_set(&amp;sk-&gt;sk_drops, <span class="hljs-number">0</span>);<br><span class="hljs-number">2137</span> &#125;<br><span class="hljs-number">2138</span> EXPORT_SYMBOL(sock_init_data);<br></code></pre></td></tr></table></figure>
+
+<h2 id="Socket-Related-Initialization">0.3. Socket Related Initialization</h2><h3 id="net-families-and-socket-register">0.3.1. net_families and socket_register</h3><p>each of the socket family initialization, sock_register is called to register a handler.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><code class="hljs c">[junwei@junwei]$ grep sock_register net/ -Rwn<br>net/caif/caif_socket.c:<span class="hljs-number">1100</span>:   <span class="hljs-type">int</span> err = sock_register(&amp;caif_family_ops);<br>net/econet/af_econet.c:<span class="hljs-number">1156</span>:   sock_register(&amp;econet_family_ops);<br>net/can/af_can.c:<span class="hljs-number">846</span>:  sock_register(&amp;can_family_ops);<br>net/unix/af_unix.c:<span class="hljs-number">2422</span>:   sock_register(&amp;unix_family_ops);<br>net/tipc/socket.c:<span class="hljs-number">1874</span>:    res = sock_register(&amp;tipc_family_ops);<br>net/bluetooth/af_bluetooth.c:<span class="hljs-number">561</span>:  err = sock_register(&amp;bt_sock_family_ops);<br>net/key/af_key.c:<span class="hljs-number">3797</span>: err = sock_register(&amp;pfkey_family_ops);<br>net/ipv4/af_inet.c:<span class="hljs-number">1668</span>:   (<span class="hljs-type">void</span>)sock_register(&amp;inet_family_ops);<br>net/rose/af_rose.c:<span class="hljs-number">1565</span>:   sock_register(&amp;rose_family_ops);<br>net/netrom/af_netrom.c:<span class="hljs-number">1439</span>:   <span class="hljs-keyword">if</span> (sock_register(&amp;nr_family_ops))<br>net/rxrpc/af_rxrpc.c:<span class="hljs-number">823</span>:  ret = sock_register(&amp;rxrpc_family_ops);<br>net/atm/svc.c:<span class="hljs-number">686</span>: <span class="hljs-keyword">return</span> sock_register(&amp;svc_family_ops);<br>net/atm/pvc.c:<span class="hljs-number">156</span>: <span class="hljs-keyword">return</span> sock_register(&amp;pvc_family_ops);<br>net/packet/af_packet.c:<span class="hljs-number">3961</span>:   sock_register(&amp;packet_family_ops);<br>net/decnet/af_decnet.c:<span class="hljs-number">2381</span>:   sock_register(&amp;dn_family_ops);<br>net/iucv/af_iucv.c:<span class="hljs-number">2423</span>:   err = sock_register(&amp;iucv_sock_family_ops);<br>net/x25/af_x25.c:<span class="hljs-number">1806</span>: rc = sock_register(&amp;x25_family_ops);<br>net/netlink/af_netlink.c:<span class="hljs-number">2174</span>: sock_register(&amp;netlink_family_ops);<br>net/ax25/af_ax25.c:<span class="hljs-number">1990</span>:   sock_register(&amp;ax25_family_ops);<br>net/nfc/af_nfc.c:<span class="hljs-number">93</span>:   <span class="hljs-keyword">return</span> sock_register(&amp;nfc_sock_family_ops);<br>net/phonet/af_phonet.c:<span class="hljs-number">511</span>:    err = sock_register(&amp;phonet_proto_family);<br>net/socket.c:<span class="hljs-number">2467</span>: *  sock_register - add a socket protocol handler<br>net/socket.c:<span class="hljs-number">2475</span>:<span class="hljs-type">int</span> <span class="hljs-title function_">sock_register</span><span class="hljs-params">(<span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> net_proto_family *ops)</span><br>net/socket.c:2498:<span class="hljs-title function_">EXPORT_SYMBOL</span><span class="hljs-params">(sock_register)</span>;<br>net/appletalk/ddp.c:<span class="hljs-number">1931</span>:  (<span class="hljs-type">void</span>)sock_register(&amp;atalk_family_ops);<br>net/ipx/af_ipx.c:<span class="hljs-number">2025</span>: sock_register(&amp;ipx_family_ops);<br>net/irda/af_irda.c:<span class="hljs-number">2731</span>:       rc = sock_register(&amp;irda_family_ops);<br>net/llc/af_llc.c:<span class="hljs-number">1217</span>: rc = sock_register(&amp;llc_ui_family_ops);<br>net/rds/af_rds.c:<span class="hljs-number">565</span>:  ret = sock_register(&amp;rds_family_ops);<br>net/ipv6/af_inet6.c:<span class="hljs-number">1110</span>:  err = sock_register(&amp;inet6_family_ops);<br>net/ieee802154/af_ieee802154.c:<span class="hljs-number">346</span>:    rc = sock_register(&amp;ieee802154_family_ops);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2466</span> <span class="hljs-comment">/**</span><br><span class="hljs-comment">2467  *      sock_register - add a socket protocol handler</span><br><span class="hljs-comment">2468  *      @ops: description of protocol</span><br><span class="hljs-comment">2469  *</span><br><span class="hljs-comment">2470  *      This function is called by a protocol handler that wants to</span><br><span class="hljs-comment">2471  *      advertise its address family, and have it linked into the</span><br><span class="hljs-comment">2472  *      socket interface. The value ops-&gt;family coresponds to the</span><br><span class="hljs-comment">2473  *      socket system call protocol family.</span><br><span class="hljs-comment">2474  */</span><br><span class="hljs-number">2475</span> <span class="hljs-type">int</span> <span class="hljs-title function_">sock_register</span><span class="hljs-params">(<span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> net_proto_family *ops)</span><br>...<br>2485         <span class="hljs-title function_">spin_lock</span><span class="hljs-params">(&amp;net_family_lock)</span>;<br><span class="hljs-number">2486</span>         <span class="hljs-keyword">if</span> (rcu_dereference_protected(net_families[ops-&gt;family],<br><span class="hljs-number">2487</span>                                       lockdep_is_held(&amp;net_family_lock)))<br><span class="hljs-number">2488</span>                 err = -EEXIST;<br><span class="hljs-number">2489</span>         <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-number">2490</span>                 rcu_assign_pointer(net_families[ops-&gt;family], ops);<br><span class="hljs-number">2491</span>                 err = <span class="hljs-number">0</span>;<br><span class="hljs-number">2492</span>         &#125;<br><span class="hljs-number">2493</span>         spin_unlock(&amp;net_family_lock);<br>...<br></code></pre></td></tr></table></figure>
+<h2 id="socket-related-system-call">0.4. socket related system call</h2><h3 id="syscall">0.4.1. syscall</h3><p>In kennel(ver 3.4), the syscall are defined in net&#x2F;socket.c</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><code class="hljs c">[junwei@junwei linux<span class="hljs-number">-3.4</span>]$ grep SYSCALL_DEFINE net/socket.c -n<br><span class="hljs-number">1325</span>:SYSCALL_DEFINE3(socket, <span class="hljs-type">int</span>, family, <span class="hljs-type">int</span>, type, <span class="hljs-type">int</span>, protocol)<br><span class="hljs-number">1366</span>:SYSCALL_DEFINE4(socketpair, <span class="hljs-type">int</span>, family, <span class="hljs-type">int</span>, type, <span class="hljs-type">int</span>, protocol,<br><span class="hljs-number">1447</span>:SYSCALL_DEFINE3(bind, <span class="hljs-type">int</span>, fd, <span class="hljs-keyword">struct</span> sockaddr __user *, umyaddr, <span class="hljs-type">int</span>, addrlen)<br><span class="hljs-number">1476</span>:SYSCALL_DEFINE2(listen, <span class="hljs-type">int</span>, fd, <span class="hljs-type">int</span>, backlog)<br><span class="hljs-number">1509</span>:SYSCALL_DEFINE4(accept4, <span class="hljs-type">int</span>, fd, <span class="hljs-keyword">struct</span> sockaddr __user *, upeer_sockaddr,<br><span class="hljs-number">1583</span>:SYSCALL_DEFINE3(accept, <span class="hljs-type">int</span>, fd, <span class="hljs-keyword">struct</span> sockaddr __user *, upeer_sockaddr,<br><span class="hljs-number">1601</span>:SYSCALL_DEFINE3(connect, <span class="hljs-type">int</span>, fd, <span class="hljs-keyword">struct</span> sockaddr __user *, uservaddr,<br><span class="hljs-number">1633</span>:SYSCALL_DEFINE3(getsockname, <span class="hljs-type">int</span>, fd, <span class="hljs-keyword">struct</span> sockaddr __user *, usockaddr,<br><span class="hljs-number">1664</span>:SYSCALL_DEFINE3(getpeername, <span class="hljs-type">int</span>, fd, <span class="hljs-keyword">struct</span> sockaddr __user *, usockaddr,<br><span class="hljs-number">1696</span>:SYSCALL_DEFINE6(sendto, <span class="hljs-type">int</span>, fd, <span class="hljs-type">void</span> __user *, buff, <span class="hljs-type">size_t</span>, len,<br><span class="hljs-number">1743</span>:SYSCALL_DEFINE4(send, <span class="hljs-type">int</span>, fd, <span class="hljs-type">void</span> __user *, buff, <span class="hljs-type">size_t</span>, len,<br><span class="hljs-number">1755</span>:SYSCALL_DEFINE6(recvfrom, <span class="hljs-type">int</span>, fd, <span class="hljs-type">void</span> __user *, ubuf, <span class="hljs-type">size_t</span>, size,<br><span class="hljs-number">1811</span>:SYSCALL_DEFINE5(setsockopt, <span class="hljs-type">int</span>, fd, <span class="hljs-type">int</span>, level, <span class="hljs-type">int</span>, optname,<br><span class="hljs-number">1845</span>:SYSCALL_DEFINE5(getsockopt, <span class="hljs-type">int</span>, fd, <span class="hljs-type">int</span>, level, <span class="hljs-type">int</span>, optname,<br><span class="hljs-number">1875</span>:SYSCALL_DEFINE2(shutdown, <span class="hljs-type">int</span>, fd, <span class="hljs-type">int</span>, how)<br><span class="hljs-number">2020</span>:SYSCALL_DEFINE3(sendmsg, <span class="hljs-type">int</span>, fd, <span class="hljs-keyword">struct</span> msghdr __user *, msg, <span class="hljs-type">unsigned</span>, flags)<br><span class="hljs-number">2095</span>:SYSCALL_DEFINE4(sendmmsg, <span class="hljs-type">int</span>, fd, <span class="hljs-keyword">struct</span> mmsghdr __user *, mmsg,<br><span class="hljs-number">2195</span>:SYSCALL_DEFINE3(recvmsg, <span class="hljs-type">int</span>, fd, <span class="hljs-keyword">struct</span> msghdr __user *, msg,<br><span class="hljs-number">2319</span>:SYSCALL_DEFINE5(recvmmsg, <span class="hljs-type">int</span>, fd, <span class="hljs-keyword">struct</span> mmsghdr __user *, mmsg,<br><span class="hljs-number">2361</span>:SYSCALL_DEFINE2(socketcall, <span class="hljs-type">int</span>, call, <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> __user *, args)<br><br></code></pre></td></tr></table></figure>
+<p>ex: netlink socket register.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2129</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> __init <span class="hljs-title function_">netlink_proto_init</span><span class="hljs-params">(<span class="hljs-type">void</span>)</span><br>...<br>2174         <span class="hljs-title function_">sock_register</span><span class="hljs-params">(&amp;netlink_family_ops)</span>;<br><span class="hljs-number">2175</span>         register_pernet_subsys(&amp;netlink_net_ops);<br></code></pre></td></tr></table></figure>
+<h3 id="socket-system-call-socket">0.4.2. socket system call socket</h3><p><code>sock_create</code> is a very basic and important method.</p>
+<p>When create a socket, we dedicate the its family&#x2F;proto, The create method of the corresponding net_proto_family is called, and set the socket-&gt;ops with corresponding struct proto_ops.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">139</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">socket</span></span><br><span class="hljs-class">...</span><br><span class="hljs-class">152         <span class="hljs-title">const</span> <span class="hljs-keyword">struct</span> <span class="hljs-title">proto_ops</span>  *<span class="hljs-title">ops</span>;</span><br></code></pre></td></tr></table></figure>
+
+<p>See detail:</p>
+<h3 id="SYSCALL-DEFINE3-socket">0.4.3. SYSCALL_DEFINE3(socket</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1325</span> SYSCALL_DEFINE3(socket, <span class="hljs-type">int</span>, family, <span class="hljs-type">int</span>, type, <span class="hljs-type">int</span>, protocol)<br>...<br><span class="hljs-number">1337</span>         flags = type &amp; ~SOCK_TYPE_MASK;<br><span class="hljs-number">1338</span>         <span class="hljs-keyword">if</span> (flags &amp; ~(SOCK_CLOEXEC | SOCK_NONBLOCK))<br><span class="hljs-number">1339</span>                 <span class="hljs-keyword">return</span> -EINVAL;<br><span class="hljs-number">1340</span>         type &amp;= SOCK_TYPE_MASK;<br><span class="hljs-number">1341</span><br><span class="hljs-number">1342</span>         <span class="hljs-keyword">if</span> (SOCK_NONBLOCK != O_NONBLOCK &amp;&amp; (flags &amp; SOCK_NONBLOCK))<br><span class="hljs-number">1343</span>                 flags = (flags &amp; ~SOCK_NONBLOCK) | O_NONBLOCK;<br><span class="hljs-number">1344</span><br><span class="hljs-number">1345</span>         retval = sock_create(family, type, protocol, &amp;sock);<br><span class="hljs-number">1346</span>         <span class="hljs-keyword">if</span> (retval &lt; <span class="hljs-number">0</span>)<br><span class="hljs-number">1347</span>                 <span class="hljs-keyword">goto</span> out;<br><span class="hljs-number">1348</span><br><span class="hljs-number">1349</span>         retval = sock_map_fd(sock, flags &amp; (O_CLOEXEC | O_NONBLOCK));<br>...<br><span class="hljs-number">1359</span>         <span class="hljs-keyword">return</span> retval;<br></code></pre></td></tr></table></figure>
+
+<h4 id="int-sock-create">0.4.3.1. int sock_create(...)</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1313</span> <span class="hljs-type">int</span> <span class="hljs-title function_">sock_create</span><span class="hljs-params">(<span class="hljs-type">int</span> family, <span class="hljs-type">int</span> type, <span class="hljs-type">int</span> protocol, <span class="hljs-keyword">struct</span> socket **res)</span><br>1314 &#123;<br><span class="hljs-number">1315</span>         <span class="hljs-keyword">return</span> __sock_create(current-&gt;nsproxy-&gt;net_ns, family, type, protocol, res, <span class="hljs-number">0</span>);<br><span class="hljs-number">1316</span> &#125;<br></code></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1199</span> <span class="hljs-type">int</span> __sock_create(<span class="hljs-keyword">struct</span> net *net, <span class="hljs-type">int</span> family, <span class="hljs-type">int</span> type, <span class="hljs-type">int</span> protocol,<br>...<br><span class="hljs-number">1259</span>         rcu_read_lock();<br><span class="hljs-number">1260</span>         pf = rcu_dereference(net_families[family]);<br>...<br><span class="hljs-number">1272</span>         <span class="hljs-comment">/* Now protected by module ref count */</span><br><span class="hljs-number">1273</span>         rcu_read_unlock();<br>...<br><span class="hljs-number">1275</span>         err = pf-&gt;create(net, sock, protocol, kern);<br><span class="hljs-number">1276</span>         <span class="hljs-keyword">if</span> (err &lt; <span class="hljs-number">0</span>)<br><span class="hljs-number">1277</span>                 <span class="hljs-keyword">goto</span> out_module_put;<br></code></pre></td></tr></table></figure>
+<p>NOTE:</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1260 </span>pf = rcu_dereference(net_families[family]); <br><span class="hljs-symbol">1275 </span><span class="hljs-keyword">err</span> = pf-&gt;create(net, sock, protocol, kern);<br></code></pre></td></tr></table></figure>
+
+<p>What is pf-&gt;create(…)?<br>For netlink socket, pf-&gt;create is netlink_create.</p>
+<h3 id="socket-system-call-listen">0.4.4. socket system call listen</h3><p>Most of them are simple, and just call respond function by ops-&gt;xxx.<br>ex: listen</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1476</span> SYSCALL_DEFINE2(listen, <span class="hljs-type">int</span>, fd, <span class="hljs-type">int</span>, backlog)<br>...<br><span class="hljs-number">1482</span>         sock = sockfd_lookup_light(fd, &amp;err, &amp;fput_needed);<br><span class="hljs-number">1483</span>         <span class="hljs-keyword">if</span> (sock) &#123;<br><span class="hljs-number">1484</span>                 somaxconn = sock_net(sock-&gt;sk)-&gt;core.sysctl_somaxconn;<br><span class="hljs-number">1485</span>                 <span class="hljs-keyword">if</span> ((<span class="hljs-type">unsigned</span>)backlog &gt; somaxconn)<br><span class="hljs-number">1486</span>                         backlog = somaxconn;<br><span class="hljs-number">1487</span><br><span class="hljs-number">1488</span>                 err = security_socket_listen(sock, backlog);<br><span class="hljs-number">1489</span>                 <span class="hljs-keyword">if</span> (!err)<br><span class="hljs-number">1490</span>                         err = sock-&gt;ops-&gt;listen(sock, backlog);<br><span class="hljs-number">1491</span><br><span class="hljs-number">1492</span>                 fput_light(sock-&gt;file, fput_needed);<br><span class="hljs-number">1493</span>         &#125;<br><span class="hljs-number">1494</span>         <span class="hljs-keyword">return</span> err;<br></code></pre></td></tr></table></figure>
+<p>The import ops is inited in function sock_create</p>
+<p>ex: the ops in netlink socket.</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs csharp"><span class="hljs-number">430</span> <span class="hljs-function"><span class="hljs-keyword">static</span> <span class="hljs-built_in">int</span> <span class="hljs-title">netlink_create</span>(<span class="hljs-params"><span class="hljs-keyword">struct</span> net *net, <span class="hljs-keyword">struct</span> socket *sock, <span class="hljs-built_in">int</span> protocol,</span></span><br><span class="hljs-params"><span class="hljs-function">...</span></span><br><span class="hljs-params"><span class="hljs-function"><span class="hljs-number">465</span>         err = __netlink_create(net, sock, cb_mutex, protocol</span>)</span>;<br>...<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">402</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> __netlink_create(<span class="hljs-keyword">struct</span> net *net, <span class="hljs-keyword">struct</span> socket *sock,<br> <span class="hljs-number">403</span>                             <span class="hljs-keyword">struct</span> mutex *cb_mutex, <span class="hljs-type">int</span> protocol)<br>...<br> <span class="hljs-number">408</span>         sock-&gt;ops = &amp;netlink_ops;<br></code></pre></td></tr></table></figure>
+<h3 id="other-socket-system-call">0.4.5. other socket system call</h3><p>the socket related sytem call has similar source, just like sock-&gt;ops-&gt;listen(…)</p>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Socket/" class="category-chain-item">Socket</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/Socket/" class="print-no-link">#Socket</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>Socket Basic Framework</div>
+      <div>https://martinbj2008.github.io/2013/02/16/2013-02-16-socket-framework/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>February 16, 2013</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2013/02/16/2013-02-16-netlink-in-kernel/" title="Netlink in kernel">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">Netlink in kernel</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2013/02/12/2013-06-22-html2markdown-in-ubuntu/" title="Install html2markdown in Ubuntu(12.10)">
+                        <span class="hidden-mobile">Install html2markdown in Ubuntu(12.10)</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

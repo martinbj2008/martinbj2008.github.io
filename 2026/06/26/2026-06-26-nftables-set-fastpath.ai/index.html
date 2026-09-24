@@ -1,0 +1,1096 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="一句话核心：nftables 把”原本要逐条匹配的规则”抽象成”集合 (set) 元素”，数据面只需对集合做一次哈希&#x2F;树查找就能拿到结果，从根本上消除了 iptables 时代”规则数 &#x3D; 服务数 × k”带来的 O(N) 线性遍历瓶颈。   0.1. 一、问题起源：iptables 为何慢在 iptables 时代，K8s 5000 个 Service 会被翻译成几万条规则">
+<meta property="og:type" content="article">
+<meta property="og:title" content="nftables Set：用 O(1) 哈希查找替代 O(N) 链表遍历">
+<meta property="og:url" content="https://martinbj2008.github.io/2026/06/26/2026-06-26-nftables-set-fastpath.ai/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="一句话核心：nftables 把”原本要逐条匹配的规则”抽象成”集合 (set) 元素”，数据面只需对集合做一次哈希&#x2F;树查找就能拿到结果，从根本上消除了 iptables 时代”规则数 &#x3D; 服务数 × k”带来的 O(N) 线性遍历瓶颈。   0.1. 一、问题起源：iptables 为何慢在 iptables 时代，K8s 5000 个 Service 会被翻译成几万条规则">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-06-26T08:51:52.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.753Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="ai">
+<meta property="article:tag" content="nftables">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>nftables Set：用 O(1) 哈希查找替代 O(N) 链表遍历 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="nftables Set：用 O(1) 哈希查找替代 O(N) 链表遍历"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2026-06-26 16:51" pubdate>
+          June 26, 2026 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          6.8k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          57 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">nftables Set：用 O(1) 哈希查找替代 O(N) 链表遍历</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <blockquote>
+<p>一句话核心：nftables 把”原本要逐条匹配的规则”抽象成”集合 (set) 元素”，数据面只需对集合做<strong>一次哈希&#x2F;树查找</strong>就能拿到结果，从根本上消除了 iptables 时代”规则数 &#x3D; 服务数 × k”带来的 O(N) 线性遍历瓶颈。</p>
+</blockquote>
+<hr>
+<h2 id="一、问题起源：iptables-为何慢">0.1. 一、问题起源：iptables 为何慢</h2><p>在 iptables 时代，K8s 5000 个 Service 会被翻译成几万条规则。数据面处理一个包，必须按链表顺序<strong>逐条匹配</strong>：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs text">KUBE-SERVICES 链<br>├── -d 10.0.0.1 -p tcp --dport 80   -j KUBE-SVC-A<br>├── -d 10.0.0.2 -p tcp --dport 80   -j KUBE-SVC-B<br>├── -d 10.0.0.3 -p tcp --dport 443  -j KUBE-SVC-C<br>├── ... (5000 条)<br>└── -d 10.0.0.N -p tcp --dport ...  -j KUBE-SVC-N<br></code></pre></td></tr></table></figure>
+
+<p>每多 1 个 Service，<strong>所有数据包的平均匹配延迟都增加一点</strong>——典型 O(N) 扩展性灾难。</p>
+<hr>
+<h2 id="二、nftables-Set：把”规则”重塑成”数据”">0.2. 二、nftables Set：把”规则”重塑成”数据”</h2><p>nftables 引入了<strong>一等公民的集合 (set &#x2F; map &#x2F; vmap)</strong> 概念。同样 5000 个 Service，数据面只剩 1 条规则：</p>
+<span id="more"></span>
+
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs bash"><span class="hljs-comment"># 1. 创建一张哈希表（key = ip + 协议 + 端口，value = 跳转动作）</span><br>nft add map ip filter service_ips &#123;<br>    <span class="hljs-built_in">type</span> ipv4_addr . inet_proto . inet_service : verdict \;<br>&#125;<br><br><span class="hljs-comment"># 2. 动态加入元素（每加 1 个 Service 只做这一步）</span><br>nft add element ip filter service_ips &#123;<br>    10.0.0.1 . tcp . 80  : goto svc_a,<br>    10.0.0.2 . tcp . 80  : goto svc_b,<br>    10.0.0.3 . tcp . 443 : goto svc_c<br>&#125;<br><br><span class="hljs-comment"># 3. 唯一一条数据面规则</span><br>nft add rule ip filter services \<br>    ip daddr . meta l4proto . th dport vmap @service_ips<br></code></pre></td></tr></table></figure>
+
+<p>数据面执行的事情变成：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs text">取 (daddr, l4proto, dport) → jhash → 查 service_ips 哈希表 → 拿到 verdict → goto<br></code></pre></td></tr></table></figure>
+
+<p><strong>与 N 完全无关，O(1)</strong>。</p>
+<hr>
+<h2 id="三、为什么会快？源码视角拆解">0.3. 三、为什么会快？源码视角拆解</h2><h3 id="3-1-数据结构：从单链表-→-rhashtable">0.3.1. 3.1 数据结构：从单链表 → rhashtable</h3><table>
+<thead>
+<tr>
+<th>项</th>
+<th>iptables</th>
+<th>nftables (rhash 后端)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>数据结构</td>
+<td><code>struct ipt_entry</code> 单链表</td>
+<td><code>struct rhashtable</code> (可调整大小哈希表)</td>
+</tr>
+<tr>
+<td>单次查找</td>
+<td>逐条 match callback</td>
+<td>1 次 jhash + 1~2 次 memcmp</td>
+</tr>
+<tr>
+<td>元素增删</td>
+<td>重写整张 table</td>
+<td>单元素 <code>rhashtable_insert_fast</code> (O(1) 平均)</td>
+</tr>
+<tr>
+<td>时间复杂度</td>
+<td><strong>O(N)</strong></td>
+<td><strong>O(1)</strong></td>
+</tr>
+</tbody></table>
+<h3 id="3-2-数据面入口：nft-lookup-eval">0.3.2. 3.2 数据面入口：nft_lookup_eval</h3><blockquote>
+<p>文件: <code>net/netfilter/nft_lookup.c</code> | 行号: 95-122 | 函数: <code>nft_lookup_eval</code></p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-type">void</span> <span class="hljs-title function_">nft_lookup_eval</span><span class="hljs-params">(<span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> nft_expr *expr,</span><br><span class="hljs-params">                     <span class="hljs-keyword">struct</span> nft_regs *regs,</span><br><span class="hljs-params">                     <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> nft_pktinfo *pkt)</span><br>&#123;<br>    <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nft_lookup</span> *<span class="hljs-title">priv</span> =</span> nft_expr_priv(expr);<br>    <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nft_set</span> *<span class="hljs-title">set</span> =</span> priv-&gt;<span class="hljs-built_in">set</span>;<br>    <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nft_set_ext</span> *<span class="hljs-title">ext</span>;</span><br><br>    <span class="hljs-comment">/* 用寄存器里已经拼好的 key 去 set 查找 */</span><br>    ext = nft_set_do_lookup(net, <span class="hljs-built_in">set</span>, &amp;regs-&gt;data[priv-&gt;sreg]);<br>    ...<br>    <span class="hljs-keyword">if</span> (ext) &#123;<br>        <span class="hljs-comment">/* vmap：把命中元素附带的 verdict (如 goto svc_chain) 写回寄存器 */</span><br>        nft_set_elem_update_expr(ext, regs, pkt);<br>    &#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="3-3-哈希后端实现：nft-rhash-lookup">0.3.3. 3.3 哈希后端实现：nft_rhash_lookup</h3><blockquote>
+<p>文件: <code>net/netfilter/nft_set_hash.c</code> | 行号: 86-104 | 函数: <code>nft_rhash_lookup</code></p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> nft_set_ext *<br><span class="hljs-title function_">nft_rhash_lookup</span><span class="hljs-params">(<span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> net *net, <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> nft_set *<span class="hljs-built_in">set</span>,</span><br><span class="hljs-params">                 <span class="hljs-type">const</span> u32 *key)</span><br>&#123;<br>    <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nft_rhash</span> *<span class="hljs-title">priv</span> =</span> nft_set_priv(<span class="hljs-built_in">set</span>);<br>    <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nft_rhash_elem</span> *<span class="hljs-title">he</span>;</span><br>    <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nft_rhash_cmp_arg</span> <span class="hljs-title">arg</span> =</span> &#123;<br>        .genmask = nft_genmask_cur(net),<br>        .<span class="hljs-built_in">set</span>     = <span class="hljs-built_in">set</span>,<br>        .key     = key,<br>        .tstamp  = get_jiffies_64(),<br>    &#125;;<br><br>    he = rhashtable_lookup(&amp;priv-&gt;ht, &amp;arg, nft_rhash_params);<br>    <span class="hljs-keyword">if</span> (he != <span class="hljs-literal">NULL</span>)<br>        <span class="hljs-keyword">return</span> &amp;he-&gt;ext;<br>    <span class="hljs-keyword">return</span> <span class="hljs-literal">NULL</span>;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>哈希函数和比较函数：</p>
+<blockquote>
+<p>文件: <code>net/netfilter/nft_set_hash.c</code> | 行号: 46-83 | 函数: <code>nft_rhash_key</code> &#x2F; <code>nft_rhash_cmp</code></p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> u32 <span class="hljs-title function_">nft_rhash_key</span><span class="hljs-params">(<span class="hljs-type">const</span> <span class="hljs-type">void</span> *data, u32 len, u32 seed)</span><br>&#123;<br>    <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nft_rhash_cmp_arg</span> *<span class="hljs-title">arg</span> =</span> data;<br>    <span class="hljs-keyword">return</span> jhash(arg-&gt;key, len, seed);     <span class="hljs-comment">/* Jenkins Hash */</span><br>&#125;<br><br><span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> <span class="hljs-type">int</span> <span class="hljs-title function_">nft_rhash_cmp</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> rhashtable_compare_arg *arg,</span><br><span class="hljs-params">                                <span class="hljs-type">const</span> <span class="hljs-type">void</span> *ptr)</span><br>&#123;<br>    <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nft_rhash_cmp_arg</span> *<span class="hljs-title">x</span>  =</span> arg-&gt;key;<br>    <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nft_rhash_elem</span>  *<span class="hljs-title">he</span>   =</span> ptr;<br>    <span class="hljs-keyword">if</span> (<span class="hljs-built_in">memcmp</span>(nft_set_ext_key(&amp;he-&gt;ext), x-&gt;key, x-&gt;<span class="hljs-built_in">set</span>-&gt;klen))<br>        <span class="hljs-keyword">return</span> <span class="hljs-number">1</span>;<br>    ...<br>    <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;   <span class="hljs-comment">/* 命中 */</span><br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>朴素固定桶后端更直观地展示了三步操作：</p>
+<blockquote>
+<p>文件: <code>net/netfilter/nft_set_hash.c</code> | 行号: 600-616 | 函数: <code>nft_hash_lookup</code></p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> nft_set_ext *<br><span class="hljs-title function_">nft_hash_lookup</span><span class="hljs-params">(<span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> net *net, <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> nft_set *<span class="hljs-built_in">set</span>,</span><br><span class="hljs-params">                <span class="hljs-type">const</span> u32 *key)</span><br>&#123;<br>    ...<br>    hash = jhash(key, <span class="hljs-built_in">set</span>-&gt;klen, priv-&gt;seed);          <span class="hljs-comment">/* ① 算 hash */</span><br>    hash = reciprocal_scale(hash, priv-&gt;buckets);      <span class="hljs-comment">/* ② 桶定位 */</span><br>    hlist_for_each_entry_rcu(he, &amp;priv-&gt;table[hash], node) &#123;<br>        <span class="hljs-keyword">if</span> (!<span class="hljs-built_in">memcmp</span>(nft_set_ext_key(&amp;he-&gt;ext), key, <span class="hljs-built_in">set</span>-&gt;klen) &amp;&amp;<br>            nft_set_elem_active(&amp;he-&gt;ext, genmask))<br>            <span class="hljs-keyword">return</span> &amp;he-&gt;ext;                           <span class="hljs-comment">/* ③ 桶内 memcmp */</span><br>    &#125;<br>    <span class="hljs-keyword">return</span> <span class="hljs-literal">NULL</span>;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p><strong>三步：算哈希 → 桶定位 → 桶内 memcmp。</strong> 与集合元素总数无关。</p>
+<h3 id="3-4-多种后端按场景自动选择">0.3.4. 3.4 多种后端按场景自动选择</h3><p><code>__nft_set_do_lookup</code> 在用户态创建 set 时根据 key 类型&#x2F;标志自动挑选最优后端：</p>
+<blockquote>
+<p>文件: <code>net/netfilter/nft_lookup.c</code> | 行号: 28-57 | 函数: <code>__nft_set_do_lookup</code></p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>后端</th>
+<th>数据结构</th>
+<th>复杂度</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>nft_set_rhash</code></td>
+<td>rhashtable</td>
+<td>O(1)</td>
+<td><strong>K8s Service 默认</strong>，动态增删多</td>
+</tr>
+<tr>
+<td><code>nft_set_hash</code></td>
+<td>固定桶 hash + hlist</td>
+<td>O(1)</td>
+<td>元素数量基本固定</td>
+</tr>
+<tr>
+<td><code>nft_set_hash_fast</code></td>
+<td>同上但 key ≤ 4B</td>
+<td>O(1)</td>
+<td>单字段精确匹配</td>
+</tr>
+<tr>
+<td><code>nft_set_bitmap</code></td>
+<td>位图</td>
+<td>O(1)</td>
+<td>key ≤ 16 bit 的小区间</td>
+</tr>
+<tr>
+<td><code>nft_set_rbtree</code></td>
+<td>红黑树</td>
+<td>O(log N)</td>
+<td><strong>范围匹配</strong>（如 <code>10.0.0.0/8</code>）</td>
+</tr>
+<tr>
+<td><code>nft_set_pipapo</code></td>
+<td>“pile-of-piles”</td>
+<td>O(1)~O(field)</td>
+<td><strong>多字段 + 范围</strong>（NetworkPolicy）</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="四、复合-key-是怎么来的：寄存器拼接">0.4. 四、复合 key 是怎么来的：寄存器拼接</h2><p><code>vmap @service_ips</code> 的 key 是 <code>ipv4_addr . inet_proto . inet_service</code> 三个字段拼起来的。<strong>拼接发生在用户态编译期</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>谁做</th>
+<th>做什么</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>编译期</td>
+<td>用户态 <code>nft</code> &#x2F; <code>libnftnl</code></td>
+<td>把规则拆成多条表达式，给每条<strong>分配相邻寄存器槽位</strong></td>
+</tr>
+<tr>
+<td>加载期</td>
+<td>内核 <code>*_init</code> 钩子</td>
+<td>把 dreg&#x2F;sreg&#x2F;offset&#x2F;len 读进 priv，并校验范围</td>
+</tr>
+<tr>
+<td>运行期</td>
+<td><code>nft_do_chain</code> 主循环</td>
+<td>各表达式按顺序写 <code>regs.data[]</code>，最后 lookup 读连续 12B 当 key</td>
+</tr>
+</tbody></table>
+<p>举例 <code>ip daddr . meta l4proto . th dport vmap @service_ips</code> 编译后：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs text">表达式①  nft_payload_eval  → regs.data[8]  = 172.30.0.41   (4B)<br>表达式②  nft_meta_get_eval → regs.data[9]  = TCP (0x06)    (1B + 3B pad)<br>表达式③  nft_payload_eval  → regs.data[10] = 80            (2B + 2B pad)<br>表达式④  nft_lookup_eval   → 读 &amp;regs.data[8] 共 12B 当 key<br><br>regs.data 内存视图（连续 12 字节）：<br>  AC 1E 00 29 | 06 00 00 00 | 00 50 00 00<br>  └── daddr ──┘└── proto ──┘└── port ──┘<br></code></pre></td></tr></table></figure>
+
+<p><strong>寄存器是栈上分配，per-CPU、零拷贝、无锁、SMP-safe</strong>：</p>
+<blockquote>
+<p>文件: <code>include/net/netfilter/nf_tables.h</code> | 行号: 118-124 | 结构: <code>struct nft_regs</code></p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nft_regs</span> &#123;</span><br>    <span class="hljs-class"><span class="hljs-keyword">union</span> &#123;</span><br>        u32              data[NFT_REG32_NUM];   <span class="hljs-comment">/* 20 个 u32 */</span><br>        <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nft_verdict</span> <span class="hljs-title">verdict</span>;</span><br>    &#125;;<br>&#125;;<br></code></pre></td></tr></table></figure>
+
+<blockquote>
+<p>文件: <code>net/netfilter/nf_tables_core.c</code> | 行号: 254-266 | 函数: <code>nft_do_chain</code></p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> <span class="hljs-title function_">nft_do_chain</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> nft_pktinfo *pkt, <span class="hljs-type">void</span> *priv)</span><br>&#123;<br>    ...<br>    <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nft_regs</span> <span class="hljs-title">regs</span>;</span>          <span class="hljs-comment">/* 栈上分配，本次包专用 */</span><br>    ...<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="五、性能优化的几个关键设计">0.5. 五、性能优化的几个关键设计</h2><table>
+<thead>
+<tr>
+<th>优化点</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Set 名称早绑定</strong></td>
+<td>用户态 <code>@service_ips</code> 在 <code>nft_lookup_init</code> 时已解析为 <code>struct nft_set *</code> 指针，运行时无需字符串查找</td>
+</tr>
+<tr>
+<td><strong>Retpoline 旁路</strong></td>
+<td><code>expr_call_ops_eval</code> 把热点 eval 函数硬编码进 if 链，避开间接调用代价</td>
+</tr>
+<tr>
+<td><strong>静态 generation + RCU</strong></td>
+<td><code>rhashtable_lookup</code> 全程无锁，仅 <code>rcu_dereference</code></td>
+</tr>
+<tr>
+<td><strong><code>reciprocal_scale</code> 替代取模</strong></td>
+<td>用乘法做 <code>[0, buckets)</code> 映射，去掉数据面除法</td>
+</tr>
+<tr>
+<td><strong>automatic shrinking</strong></td>
+<td>元素增多时 rhashtable 自动 rehash 扩容，保持桶链平均长度 ≈ 1</td>
+</tr>
+<tr>
+<td><strong>per-CPU 栈寄存器</strong></td>
+<td><code>struct nft_regs</code> 栈上分配，无锁、无竞争、SMP-safe</td>
+</tr>
+<tr>
+<td><strong>零拷贝拼接</strong></td>
+<td>复合 key 通过相邻寄存器槽位<strong>自然形成</strong>，没有任何 memcpy</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="六、控制面同样受益：Set-元素增删-≠-重写规则">0.6. 六、控制面同样受益：Set 元素增删 ≠ 重写规则</h2><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs bash"><span class="hljs-comment"># 加 1 个 Service：只往哈希表插一条，规则、chain 完全不动</span><br>nft add element ip filter service_ips &#123;<br>    10.0.0.99 . tcp . 8080 : goto svc_x<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<blockquote>
+<p>文件: <code>net/netfilter/nf_tables_api.c</code> | 行号: 6944-6958 | 函数: <code>nft_setelem_insert</code></p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">nft_setelem_insert</span><span class="hljs-params">(<span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> net *net,</span><br><span class="hljs-params">                              <span class="hljs-keyword">struct</span> nft_set *<span class="hljs-built_in">set</span>,</span><br><span class="hljs-params">                              <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> nft_set_elem *elem,</span><br><span class="hljs-params">                              <span class="hljs-keyword">struct</span> nft_elem_priv **elem_priv,</span><br><span class="hljs-params">                              <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> flags)</span><br>&#123;<br>    <span class="hljs-type">int</span> ret;<br>    <span class="hljs-keyword">if</span> (flags &amp; NFT_SET_ELEM_CATCHALL)<br>        ret = nft_setelem_catchall_insert(net, <span class="hljs-built_in">set</span>, elem, elem_priv);<br>    <span class="hljs-keyword">else</span><br>        ret = <span class="hljs-built_in">set</span>-&gt;ops-&gt;insert(net, <span class="hljs-built_in">set</span>, elem, elem_priv);  <span class="hljs-comment">/* 仅插这个 set */</span><br>    <span class="hljs-keyword">return</span> ret;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p><strong>O(1) 平均时间，规则、chain、其它 set 不受影响</strong>——这与 iptables 必须重写整张 table 形成鲜明对比。</p>
+<hr>
+<h2 id="七、整体调用链路一图收束">0.7. 七、整体调用链路一图收束</h2><pre><code class=" mermaid">flowchart LR
+    subgraph 控制面[&quot;控制面 (nft 命令)&quot;]
+        U1[nft add element&lt;br&gt;service_ips ...]
+        U1 --&gt; NL[netlink: NEWELEM&lt;br&gt;O 1 哈希插入]
+    end
+
+    subgraph 数据面[&quot;数据面 (每包一次)&quot;]
+        Pkt[数据包到达] --&gt; DC[nft_do_chain&lt;br&gt;VM 主循环]
+        DC --&gt; P1[nft_payload_eval&lt;br&gt;regs 8 = daddr]
+        P1 --&gt; M[nft_meta_get_eval&lt;br&gt;regs 9 = l4proto]
+        M --&gt; P2[nft_payload_eval&lt;br&gt;regs 10 = dport]
+        P2 --&gt; L[nft_lookup_eval&lt;br&gt;读 12B key]
+        L --&gt; SDL[nft_set_do_lookup]
+        SDL --&gt; RH[nft_rhash_lookup]
+        RH --&gt; J[jhash + memcmp]
+        J --&gt; V[regs.verdict&lt;br&gt;= goto svc_chain]
+        V --&gt; DC
+    end
+
+    NL -.set 元素.-&gt; RH
+
+    style 数据面 fill:#dfd
+    style 控制面 fill:#fef
+</code></pre>
+
+<hr>
+<h2 id="八、对比总结">0.8. 八、对比总结</h2><table>
+<thead>
+<tr>
+<th>维度</th>
+<th>iptables 链表规则</th>
+<th>nftables vmap + set</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>数据结构</strong></td>
+<td><code>struct ipt_entry</code> 单链表</td>
+<td>rhashtable &#x2F; rbtree &#x2F; pipapo</td>
+</tr>
+<tr>
+<td><strong>单包查找成本</strong></td>
+<td>平均 N&#x2F;2 次 match callback</td>
+<td>1 次 jhash + 1~2 次 memcmp</td>
+</tr>
+<tr>
+<td><strong>加 1 个 Service</strong></td>
+<td>重写整张 table</td>
+<td>1 次 <code>add element</code>，规则 0 改动</td>
+</tr>
+<tr>
+<td><strong>控制面 sync 延迟</strong> (5000 svc)</td>
+<td>数百 ms ~ 数秒</td>
+<td>&lt; 1 ms</td>
+</tr>
+<tr>
+<td><strong>数据面延迟</strong></td>
+<td>与 N 成正比</td>
+<td>与 N 几乎无关</td>
+</tr>
+<tr>
+<td><strong>失败回滚</strong></td>
+<td>半残</td>
+<td>完整事务，可 abort</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="九、一句话总结">0.9. 九、一句话总结</h2><blockquote>
+<p>nftables 的 Set&#x2F;Map&#x2F;vmap 把”原本是规则、需要逐条比对”的元素抽象成”哈希表里的数据”。<br>数据面只需 <strong>1 条 vmap 规则 + 1 次 <code>jhash</code> + 1~2 次 <code>memcmp</code></strong> 就能从几万元素中拿到命中结果；控制面增删元素也只是 <strong>1 次 O(1) 哈希插入</strong>——既消除了 iptables 数据面的 O(N) 线性遍历，也消除了控制面”加 1 条规则要重写整张表”的扩展性灾难。这正是 K8s 大规模 Service 场景下 kube-proxy 的 nftables 后端能把延迟从秒级降到毫秒级的根本原因。</p>
+</blockquote>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/AI/" class="category-chain-item">AI</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/ai/" class="print-no-link">#ai</a>
+      
+        <a href="/tags/nftables/" class="print-no-link">#nftables</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>nftables Set：用 O(1) 哈希查找替代 O(N) 链表遍历</div>
+      <div>https://martinbj2008.github.io/2026/06/26/2026-06-26-nftables-set-fastpath.ai/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>June 26, 2026</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2026/06/30/2026-06-30-sonic-port-mtu-flow.ai/" title="SONiC Port MTU 更新流程详解（以 Tofino 芯片为例）">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">SONiC Port MTU 更新流程详解（以 Tofino 芯片为例）</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2026/06/26/2026-06-26-as100-ibgp-ospf-notes.ai/" title="EBGP：跨AZ的路由学习心得">
+                        <span class="hidden-mobile">EBGP：跨AZ的路由学习心得</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

@@ -1,0 +1,857 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="OVS里最重要的几个元素：vport，flow，datapath。其中datapth是vport和flow的桥梁。  0.1. VPORT内核包含多个datapath（brige），上面包含一个或者多个vport。其中一个VPORT表示一个端口，一个vport只能归于一个特定的datapath。每个vport有自己的type,  对应不同的vport ops.每个内核网口被注册为vport的时候">
+<meta property="og:type" content="article">
+<meta property="og:title" content="内核OVS的学习总结">
+<meta property="og:url" content="https://martinbj2008.github.io/2020/03/25/2020-03-25-kern-ovs-data-struct/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="OVS里最重要的几个元素：vport，flow，datapath。其中datapth是vport和flow的桥梁。  0.1. VPORT内核包含多个datapath（brige），上面包含一个或者多个vport。其中一个VPORT表示一个端口，一个vport只能归于一个特定的datapath。每个vport有自己的type,  对应不同的vport ops.每个内核网口被注册为vport的时候">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ovs_kernl_full.png">
+<meta property="article:published_time" content="2020-03-24T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.752Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="ovs">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/ovs_kernl_full.png">
+  
+  
+  
+  <title>内核OVS的学习总结 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="内核OVS的学习总结"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2020-03-25 00:00" pubdate>
+          March 25, 2020 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          4.4k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          37 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">内核OVS的学习总结</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <hr>
+<p>OVS里最重要的几个元素：vport，flow，datapath。<br>其中datapth是vport和flow的桥梁。</p>
+<p><img src="/images/ovs_kernl_full.png" srcset="/img/loading.gif" lazyload alt="kernel ovs 核心结构体及其关联"></p>
+<h2 id="VPORT">0.1. VPORT</h2><p>内核包含多个datapath（brige），上面包含一个或者多个vport。<br>其中一个VPORT表示一个端口，一个vport只能归于一个特定的datapath。<br>每个vport有自己的<code>type</code>,  对应不同的<code>vport ops</code>.<br>每个内核网口被注册为vport的时候。</p>
+<span id="more"></span>
+<h3 id="VPORT结构体">0.1.1. VPORT结构体</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">58 </span>/**<br><span class="hljs-symbol">59 </span> * struct vport - one port within a datapath<br><span class="hljs-symbol">60 </span> * @dev: Pointer <span class="hljs-keyword">to</span> net_device.<br><span class="hljs-symbol">61 </span> * @dp: Datapath <span class="hljs-keyword">to</span> which this port belongs.<br><span class="hljs-symbol">62 </span> * @upcall_portids: RCU protected <span class="hljs-comment">&#x27;struct vport_portids&#x27;.</span><br><span class="hljs-symbol">63 </span> * @port_no: Index into @dp<span class="hljs-comment">&#x27;s @ports array.</span><br><span class="hljs-symbol">64 </span> * @hash_node: Element in @dev_table hash table in vport.c.<br><span class="hljs-symbol">65 </span> * @dp_hash_node: Element in @datapath-&gt;ports hash table in datapath.c.<br><span class="hljs-symbol">66 </span> * @ops: Class structure.<br><span class="hljs-symbol">67 </span> * @detach_list: <span class="hljs-keyword">list</span> used <span class="hljs-keyword">for</span> detaching vport in net-exit <span class="hljs-keyword">call</span>.<br><span class="hljs-symbol">68 </span> * @rcu: RCU callback head <span class="hljs-keyword">for</span> deferred destruction.<br><span class="hljs-symbol">69 </span> */<br><span class="hljs-symbol">70 </span>struct vport &#123;<br><span class="hljs-symbol">71 </span>        struct net_device *dev;<br><span class="hljs-symbol">72 </span>        struct datapath *dp;<br><span class="hljs-symbol">73 </span>        struct vport_portids __rcu *upcall_portids;<br><span class="hljs-symbol">74 </span>        u16 port_no;<br><span class="hljs-number">75</span><br><span class="hljs-symbol">76 </span>        struct hlist_node hash_node;<br><span class="hljs-symbol">77 </span>        struct hlist_node dp_hash_node;<br><span class="hljs-symbol">78 </span>        const struct vport_ops *ops;<br><span class="hljs-number">79</span><br><span class="hljs-symbol">80 </span>        struct list_head detach_list;<br><span class="hljs-symbol">81 </span>        struct rcu_head rcu;<br><span class="hljs-symbol">82 </span>&#125;;<br></code></pre></td></tr></table></figure>
+
+<h3 id="vport-netdevice：">0.1.2. vport &amp; netdevice：</h3><ul>
+<li>dev: 当一个网口<code>struct net_device</code>被加入到datapath的时候，会创建一个对应的vport，并通过vport-&gt;dev指向这个网口。</li>
+<li>对应的网口的<code>rx_handler</code>被设置为<code>netdev_frame_hook</code>, <code>rx_handler_data</code>设置为vport本身。</li>
+</ul>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">102 </span>        <span class="hljs-keyword">err</span> = netdev_rx_handler_register(vport-&gt;dev, netdev_frame_hook,<br><span class="hljs-symbol">103 </span>                                         vport);<br></code></pre></td></tr></table></figure>
+<h3 id="vport-datapath">0.1.3. vport &amp; datapath</h3><ul>
+<li>一个datapath相当于一个bridge（OVS用户空间实现里，把多个用户空间的网桥整合到一个datapath里了）。</li>
+<li>一个datapath下可以有多个vport，但一个vport只能归属于一个datapath。</li>
+<li>同一个datapath下的所有vport通过vport下的<code>dp_hash_node</code>, 根据<code>vport-&gt;port_no</code>组成一个hash桶.  这个hash桶的链表头放在了datapath下的<code>struct hlist_head *ports</code>。详细过程见函数<code>static struct vport *new_vport(const struct vport_parms *parms)</code></li>
+<li>内核ovs下所有的vport还会有一个全局的hash链表。根据vport的名字做关键字计算hash，放到一个全局的hash链表<code>static struct hlist_head *dev_table</code>。注：(vport跟其对应的netdevice名字一致), </li>
+<li></li>
+</ul>
+<h3 id="vport-struct-vport-ops">0.1.4. vport &amp; struct vport_ops</h3><p>每个vport在创建时候都需要指定其对应的port 类型，每个port类型都有其独有的port ops。通过<code>vport-&gt;ops</code>指向其对应的<code> struct vport_ops</code><br>内核里有多种类型的vport，不同类型vport对应的port ops组成一个单链表<code>vport_ops_list</code>。</p>
+<h2 id="flow">0.2. flow</h2><p>ovs 里的flow通过match-action的形式定义了报文的处理路径。<br>flow的match部分是通过一个key+mask的形式进行匹配的。<br>key有很多元素，比如vni，src ip，mac，tunnel等信息。<br>mask跟key差不多的，只是多了一个range，用于指明mask里的key具体那个范围的值有效。即key从start到end部分是有效信息。<br>ovs收到报文后会解析每个报文的key，然后根据报文的key和每个flow的相与，得到的掩过的key跟flow里的key进行比较，确定是不是满足flow的match条件。</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">161 </span>struct sw_flow_key_range &#123;<br><span class="hljs-symbol">162 </span>        unsigned short <span class="hljs-keyword">int</span> start;<br><span class="hljs-symbol">163 </span>        unsigned short <span class="hljs-keyword">int</span> <span class="hljs-keyword">end</span>;<br><span class="hljs-symbol">164 </span>&#125;;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">166 </span>struct sw_flow_mask &#123;<br><span class="hljs-symbol">167 </span>        <span class="hljs-keyword">int</span> ref_count;<br><span class="hljs-symbol">168 </span>        struct rcu_head rcu;<br><span class="hljs-symbol">169 </span>        struct list_head <span class="hljs-keyword">list</span>;<br><span class="hljs-symbol">170 </span>        struct sw_flow_key_range range;<br><span class="hljs-symbol">171 </span>        struct sw_flow_key <span class="hljs-keyword">key</span>;<br><span class="hljs-symbol">172 </span>&#125;;<br></code></pre></td></tr></table></figure>
+
+<h3 id="flow的管理">0.2.1. flow的管理</h3><ul>
+<li>每个datapath下有一个flow table。</li>
+<li>一个flow table相当于一个flow group，下面有多条flow<br>每个flow table下有个hash链，每个flow根据其key的hash，存放到对应的hash桶下的链表里。</li>
+</ul>
+<p>内核版ovs跟dpdk ovs的一个区别是，table下的所有的flow放到一个hash链表里，没有根据mask再做区分。所有flow的mask类型被放到一个单独的链表里。<br>当报文来查找规则的时候，会根据mask list里的mask逐个做<code>mask</code>操作，<br>根据掩后的key，做hash去hash链里查找对应的flow。<br>重复<code>mask list</code>直到mask耗尽，或者找到匹配的flow。</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">205 </span>struct sw_flow &#123;<br><span class="hljs-symbol">206 </span>        struct rcu_head rcu;<br><span class="hljs-symbol">207 </span>        struct &#123;<br><span class="hljs-symbol">208 </span>                struct hlist_node node[<span class="hljs-number">2</span>];<br><span class="hljs-symbol">209 </span>                u32 hash;<br><span class="hljs-symbol">210 </span>        &#125; flow_table, ufid_table;<br><span class="hljs-symbol">211 </span>        <span class="hljs-keyword">int</span> stats_last_writer;          /* CPU id of the last writer <span class="hljs-keyword">on</span><br><span class="hljs-symbol">212 </span>                                         * <span class="hljs-comment">&#x27;stats[0]&#x27;.</span><br><span class="hljs-symbol">213 </span>                                         */<br><span class="hljs-symbol">214 </span>        struct sw_flow_key <span class="hljs-keyword">key</span>;<br><span class="hljs-symbol">215 </span>        struct sw_flow_id id;<br><span class="hljs-symbol">216 </span>        struct cpumask cpu_used_mask;<br><span class="hljs-symbol">217 </span>        struct sw_flow_mask *mask;<br><span class="hljs-symbol">218 </span>        struct sw_flow_actions __rcu *sf_acts;<br><span class="hljs-symbol">219 </span>        struct sw_flow_stats __rcu *stats[]; /* One <span class="hljs-keyword">for</span> each CPU.  First one<br><span class="hljs-symbol">220 </span>                                           * is allocated at flow creation time,<br><span class="hljs-symbol">221 </span>                                           * the rest are allocated <span class="hljs-keyword">on</span> demand<br><span class="hljs-symbol">222 </span>                                           * <span class="hljs-keyword">while</span> holding the <span class="hljs-comment">&#x27;stats[0].lock&#x27;.</span><br><span class="hljs-symbol">223 </span>                                           */<br><span class="hljs-symbol">224 </span>&#125;;<br></code></pre></td></tr></table></figure>
+
+<h2 id="datapath">0.3. datapath</h2><p>datapath从管理上看类似传统的网桥，是ovs里用来链接vport和flow的一个汇聚点。<br>所有的vport和flow都会归属到某一个特定的网桥上。<br>如之前所述，</p>
+<ul>
+<li><code>struct list_head list_node</code>：内核里所有的DP通过一个双向链接串接起来。</li>
+<li><code>struct hlist_head *ports</code>：通过一个hash链表管理当前dp下所有的vport。</li>
+<li><code>struct flow_table table</code>: 管理当前dp下的所有flow流。</li>
+</ul>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">49 </span>/**<br><span class="hljs-symbol">50 </span> * struct datapath - datapath <span class="hljs-keyword">for</span> flow-based packet switching<br><span class="hljs-symbol">51 </span> * @rcu: RCU callback head <span class="hljs-keyword">for</span> deferred destruction.<br><span class="hljs-symbol">52 </span> * @list_node: Element in global <span class="hljs-comment">&#x27;dps&#x27; list.</span><br><span class="hljs-symbol">53 </span> * @table: flow table.<br><span class="hljs-symbol">54 </span> * @ports: Hash table <span class="hljs-keyword">for</span> ports.  %OVSP_LOCAL port always exists.  Protected by<br><span class="hljs-symbol">55 </span> * ovs_mutex <span class="hljs-keyword">and</span> RCU.<br><span class="hljs-symbol">56 </span> * @stats_percpu: Per-CPU datapath statistics.<br><span class="hljs-symbol">57 </span> * @net: Reference <span class="hljs-keyword">to</span> net namespace.<br><span class="hljs-symbol">58 </span> * @max_headroom: the maximum headroom of all vports in this datapath; it will<br><span class="hljs-symbol">59 </span> * be used by all the internal vports in this dp.<br><span class="hljs-symbol">60 </span> *<br><span class="hljs-symbol">61 </span> * Context: See the comment <span class="hljs-keyword">on</span> locking at the top of datapath.c <span class="hljs-keyword">for</span> additional<br><span class="hljs-symbol">62 </span> * locking information.<br><span class="hljs-symbol">63 </span> */<br><span class="hljs-symbol">64 </span>struct datapath &#123;<br><span class="hljs-symbol">65 </span>        struct rcu_head rcu;<br><span class="hljs-symbol">66 </span>        struct list_head list_node;<br><span class="hljs-number">67</span><br><span class="hljs-symbol">68 </span>        /* Flow table. */<br><span class="hljs-symbol">69 </span>        struct flow_table table;<br><span class="hljs-number">70</span><br><span class="hljs-symbol">71 </span>        /* Switch ports. */<br><span class="hljs-symbol">72 </span>        struct hlist_head *ports;<br><span class="hljs-number">73</span><br><span class="hljs-symbol">74 </span>        /* Stats. */<br><span class="hljs-symbol">75 </span>        struct dp_stats_percpu __percpu *stats_percpu;<br><span class="hljs-number">76</span><br><span class="hljs-symbol">77 </span>        /* Network namespace ref. */<br><span class="hljs-symbol">78 </span>        possible_net_t net;<br><span class="hljs-number">79</span><br><span class="hljs-symbol">80 </span>        u32 user_features;<br><span class="hljs-number">81</span><br><span class="hljs-symbol">82 </span>        u32 max_headroom;<br><span class="hljs-number">83</span><br><span class="hljs-symbol">84 </span>        /* Switch meters. */<br><span class="hljs-symbol">85 </span>        struct hlist_head *meters;<br><span class="hljs-symbol">86 </span>&#125;;<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Netdev/" class="category-chain-item">Netdev</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/ovs/" class="print-no-link">#ovs</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>内核OVS的学习总结</div>
+      <div>https://martinbj2008.github.io/2020/03/25/2020-03-25-kern-ovs-data-struct/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>March 25, 2020</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2020/10/03/ipv6-how-to-support-ipv6-ext-header/" title="IPv6: how to support IPv6 ext header">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">IPv6: how to support IPv6 ext header</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2020/03/15/2020-03-15-net-rx-drop-1/" title="net rx drop(续)">
+                        <span class="hidden-mobile">net rx drop(续)</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

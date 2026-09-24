@@ -1,0 +1,857 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.0.0.1. redhat 7 full support itHow redhat 7 said 123456785.5.1. Bridge Zero Copy TransmitZero copy transmit mode is effective on large packet sizes. It typically reduces the host CPU overhead by up">
+<meta property="og:type" content="article">
+<meta property="og:title" content="bridge zero copy transmit">
+<meta property="og:url" content="https://martinbj2008.github.io/2015/06/26/2015-08-06-bridge-zero-copy-transmit/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.0.0.1. redhat 7 full support itHow redhat 7 said 123456785.5.1. Bridge Zero Copy TransmitZero copy transmit mode is effective on large packet sizes. It typically reduces the host CPU overhead by up">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2015-06-26T08:42:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.751Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="netdev">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>bridge zero copy transmit - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="bridge zero copy transmit"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2015-06-26 16:42" pubdate>
+          June 26, 2015 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          5.5k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          46 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">bridge zero copy transmit</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h4 id="redhat-7-full-support-it">0.0.0.1. redhat 7 full support it</h4><p><a target="_blank" rel="noopener" href="https://access.redhat.com/documentation/en-US/Red_Hat_Enterprise_Linux/7/html/Virtualization_Tuning_and_Optimization_Guide/sect-Virtualization_Tuning_Optimization_Guide-Networking-Techniques.html">How redhat 7 said</a></p>
+<figure class="highlight pgsql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs pgsql"><span class="hljs-number">5.5</span><span class="hljs-number">.1</span>. Bridge Zero <span class="hljs-keyword">Copy</span> Transmit<br><br>Zero <span class="hljs-keyword">copy</span> transmit mode <span class="hljs-keyword">is</span> effective <span class="hljs-keyword">on</span> <span class="hljs-keyword">large</span> packet sizes. It typically reduces the host CPU overhead <span class="hljs-keyword">by</span> up <span class="hljs-keyword">to</span> <span class="hljs-number">15</span>% <span class="hljs-keyword">when</span> transmitting <span class="hljs-keyword">large</span> packets <span class="hljs-keyword">between</span> a guest network <span class="hljs-keyword">and</span> an <span class="hljs-keyword">external</span> network, <span class="hljs-keyword">without</span> affecting throughput.<br>It does <span class="hljs-keyword">not</span> affect performance <span class="hljs-keyword">for</span> guest-<span class="hljs-keyword">to</span>-guest, guest-<span class="hljs-keyword">to</span>-host, <span class="hljs-keyword">or</span> small packet workloads.<br>Bridge zero <span class="hljs-keyword">copy</span> transmit <span class="hljs-keyword">is</span> fully supported <span class="hljs-keyword">on</span> Red Hat Enterprise Linux <span class="hljs-number">7</span> virtual machines, but disabled <span class="hljs-keyword">by</span> <span class="hljs-keyword">default</span>. <span class="hljs-keyword">To</span> <span class="hljs-keyword">enable</span> zero <span class="hljs-keyword">copy</span> transmit mode, <span class="hljs-keyword">set</span> the experimental_zcopytx kernel module parameter <span class="hljs-keyword">for</span> the vhost_net module <span class="hljs-keyword">to</span> <span class="hljs-number">1.</span><br>NOTE<br>An additional data <span class="hljs-keyword">copy</span> <span class="hljs-keyword">is</span> normally created during transmit <span class="hljs-keyword">as</span> a threat mitigation technique against denial <span class="hljs-keyword">of</span> service <span class="hljs-keyword">and</span> information leak attacks. Enabling zero <span class="hljs-keyword">copy</span> transmit disables this threat mitigation technique.<br><span class="hljs-keyword">If</span> performance regression <span class="hljs-keyword">is</span> observed, <span class="hljs-keyword">or</span> <span class="hljs-keyword">if</span> host CPU utilization <span class="hljs-keyword">is</span> <span class="hljs-keyword">not</span> a concern, zero <span class="hljs-keyword">copy</span> transmit mode can be disabled <span class="hljs-keyword">by</span> setting experimental_zcopytx <span class="hljs-keyword">to</span> <span class="hljs-number">0.</span><br></code></pre></td></tr></table></figure>
+
+<span id="more"></span>
+
+<h3 id="related-source">0.0.1. related source</h3><p>set flags</p>
+<figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs routeros">handle_tx<br>  tun_sendmsg<br>    tun_get_user ** <span class="hljs-built_in">set</span> destructor_arg as <span class="hljs-string">&quot;struct ubuf_info *ubuf;&quot;</span>, <span class="hljs-keyword">and</span> <span class="hljs-built_in">set</span> SKBTX_DEV_ZEROCOPY<br></code></pre></td></tr></table></figure>
+
+<h3 id="related-source-1">0.0.2. related source</h3><p>set flags<br>callback</p>
+<figure class="highlight xl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs xl">__kfree_skb<br>  skb_release_all<br>    skb_release_data<br>      <span class="hljs-function"><span class="hljs-title">shinfo</span>-&gt;</span><span class="hljs-function"><span class="hljs-title">destructor_arg</span> ** &quot;struct ubuf_info *ubuf;&quot; <span class="hljs-built_in">and</span> ubuf-&gt;</span>callback <span class="hljs-keyword">is</span> called.<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight xl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><code class="hljs xl"> <span class="hljs-number">291</span> <span class="hljs-comment">/* Expects to be always run from workqueue - which acts as</span><br><span class="hljs-comment"> 292  * read-size critical section for our kind of RCU. */</span><br> <span class="hljs-number">293</span> static void handle_tx(struct vhost_net *net)<br> <span class="hljs-number">294</span> &#123;<br> <span class="hljs-number">295</span>         <span class="hljs-function"><span class="hljs-title">struct</span> vhost_net_virtqueue *nvq = &amp;net-&gt;</span>vqs[VHOST_NET_VQ_TX];<br> <span class="hljs-number">296</span>         <span class="hljs-function"><span class="hljs-title">struct</span> vhost_virtqueue *vq = &amp;nvq-&gt;</span>vq;<br>....<br> <span class="hljs-number">373</span>                 <span class="hljs-comment">/* use msg_control to pass vhost zerocopy ubuf info to skb */</span><br> <span class="hljs-number">374</span>                 <span class="hljs-keyword">if</span> (zcopy_used) &#123;<br> <span class="hljs-number">375</span>                         struct ubuf_info *ubuf;<br> <span class="hljs-number">376</span>                         <span class="hljs-function"><span class="hljs-title">ubuf</span> = nvq-&gt;</span><span class="hljs-function"><span class="hljs-title">ubuf_info</span> + nvq-&gt;</span>upend_idx;<br> <span class="hljs-number">377</span><br> <span class="hljs-number">378</span>                         <span class="hljs-function"><span class="hljs-title">vq</span>-&gt;</span><span class="hljs-function"><span class="hljs-title">heads</span>[nvq-&gt;</span>upend_idx].id = cpu_to_vhost32(vq, head);<br> <span class="hljs-number">379</span>                         <span class="hljs-function"><span class="hljs-title">vq</span>-&gt;</span><span class="hljs-function"><span class="hljs-title">heads</span>[nvq-&gt;</span>upend_idx].len = VHOST_DMA_IN_PROGRESS;<br> <span class="hljs-number">380</span>                         <span class="hljs-function"><span class="hljs-title">ubuf</span>-&gt;</span>callback = vhost_zerocopy_callback;<br> <span class="hljs-number">381</span>                         <span class="hljs-function"><span class="hljs-title">ubuf</span>-&gt;</span><span class="hljs-function"><span class="hljs-title">ctx</span> = nvq-&gt;</span>ubufs;<br> <span class="hljs-number">382</span>                         <span class="hljs-function"><span class="hljs-title">ubuf</span>-&gt;</span><span class="hljs-function"><span class="hljs-title">desc</span> = nvq-&gt;</span>upend_idx;<br> <span class="hljs-number">383</span>                         msg.msg_control = ubuf;<br> <span class="hljs-number">384</span>                         msg.msg_controllen = sizeof(ubuf);<br> <span class="hljs-number">385</span>                         <span class="hljs-function"><span class="hljs-title">ubufs</span> = nvq-&gt;</span>ubufs;<br> <span class="hljs-number">386</span>                         <span class="hljs-function"><span class="hljs-title">atomic_inc</span>(&amp;ubufs-&gt;</span>refcount);<br> <span class="hljs-number">387</span>                         <span class="hljs-function"><span class="hljs-title">nvq</span>-&gt;</span><span class="hljs-function"><span class="hljs-title">upend_idx</span> = (nvq-&gt;</span>upend_idx + <span class="hljs-number">1</span>) % UIO_MAXIOV;<br> <span class="hljs-number">388</span>                 &#125; <span class="hljs-keyword">else</span> &#123;<br> <span class="hljs-number">389</span>                         msg.msg_control = NULL;<br> <span class="hljs-number">390</span>                         ubufs = NULL;<br> <span class="hljs-number">391</span>                 &#125;<br> <span class="hljs-number">392</span>                 <span class="hljs-comment">/* <span class="hljs-doctag">TODO:</span> Check specific error and bomb out unless ENOBUFS? */</span><br> <span class="hljs-number">393</span>                 <span class="hljs-function"><span class="hljs-title">err</span> = sock-&gt;</span><span class="hljs-function"><span class="hljs-title">ops</span>-&gt;</span>sendmsg(sock, &amp;msg, len);<br>....<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1502 </span>static <span class="hljs-keyword">int</span> tun_sendmsg(struct socket *sock, struct msghdr *m, size_t total_len)<br><span class="hljs-symbol">1503 </span>&#123;<br><span class="hljs-symbol">1504 </span>        <span class="hljs-keyword">int</span> ret;<br><span class="hljs-symbol">1505 </span>        struct tun_file *tfile = container_of(sock, struct tun_file, socket);<br><span class="hljs-symbol">1506 </span>        struct tun_struct *tun = __tun_get(tfile);<br><span class="hljs-number">1507</span><br><span class="hljs-symbol">1508 </span>        <span class="hljs-keyword">if</span> (!tun)<br><span class="hljs-symbol">1509 </span>                <span class="hljs-keyword">return</span> -EBADFD;<br><span class="hljs-number">1510</span><br><span class="hljs-symbol">1511 </span>        ret = tun_get_user(tun, tfile, m-&gt;msg_control, &amp;m-&gt;msg_iter,<br><span class="hljs-symbol">1512 </span>                           m-&gt;msg_flags &amp; MSG_DONTWAIT);<br><span class="hljs-symbol">1513 </span>        tun_put(tun);<br><span class="hljs-symbol">1514 </span>        <span class="hljs-keyword">return</span> ret;<br><span class="hljs-symbol">1515 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight livescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs livescript"><span class="hljs-number">1080</span> /* Get packet <span class="hljs-keyword">from</span> user space buffer */<br><span class="hljs-number">1081</span> <span class="hljs-keyword">static</span> ssize_t tun_get_user(struct tun_struct *tun, struct tun_file *tfile,<br><span class="hljs-number">1082</span>                             <span class="hljs-literal">void</span> *msg_control, struct iov_iter *<span class="hljs-keyword">from</span>,<br><span class="hljs-number">1083</span>                             int noblock)<br><span class="hljs-number">1084</span> &#123;<br>...<br><span class="hljs-number">1249</span>         /* copy skb_ubuf_info <span class="hljs-keyword">for</span> callback <span class="hljs-keyword">when</span> skb has <span class="hljs-literal">no</span> error */<br><span class="hljs-number">1250</span>         <span class="hljs-keyword">if</span> (zerocopy) &#123;<br><span class="hljs-number">1251</span>                 skb_shinfo<span class="hljs-function"><span class="hljs-params">(skb)</span>-&gt;</span>destructor_arg = msg_control;<br><span class="hljs-number">1252</span>                 skb_shinfo<span class="hljs-function"><span class="hljs-params">(skb)</span>-&gt;</span>tx_flags |= SKBTX_DEV_ZEROCOPY;<br><span class="hljs-number">1253</span>                 skb_shinfo<span class="hljs-function"><span class="hljs-params">(skb)</span>-&gt;</span>tx_flags |= SKBTX_SHARED_FRAG;<br><span class="hljs-number">1254</span>         &#125;<br>...<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">671 </span>void __kfree_skb(struct sk_buff *skb)<br><span class="hljs-symbol">672 </span>&#123;<br><span class="hljs-symbol">673 </span>        skb_release_all(skb);<br><span class="hljs-symbol">674 </span>        kfree_skbmem(skb);<br><span class="hljs-symbol">675 </span>&#125;<br><span class="hljs-symbol">676 </span>EXPORT_SYMBOL(__kfree_skb);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">654 </span>/* Free everything but the sk_buff <span class="hljs-keyword">shell</span>. */<br><span class="hljs-symbol">655 </span>static void skb_release_all(struct sk_buff *skb)<br><span class="hljs-symbol">656 </span>&#123;<br><span class="hljs-symbol">657 </span>        skb_release_head_state(skb);<br><span class="hljs-symbol">658 </span>        <span class="hljs-keyword">if</span> (likely(skb-&gt;head))<br><span class="hljs-symbol">659 </span>                skb_release_data(skb);<br><span class="hljs-symbol">660 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+
+<figure class="highlight xl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs xl"> <span class="hljs-number">572</span> static void skb_release_data(struct sk_buff *skb)<br> <span class="hljs-number">573</span> &#123;<br> <span class="hljs-number">585</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment"> 586          * If skb buf is from userspace, we need to notify the caller</span><br><span class="hljs-comment"> 587          * the lower device DMA has done;</span><br><span class="hljs-comment"> 588          */</span><br> <span class="hljs-number">589</span>         <span class="hljs-function"><span class="hljs-title">if</span> (shinfo-&gt;</span>tx_flags &amp; SKBTX_DEV_ZEROCOPY) &#123;<br> <span class="hljs-number">590</span>                 struct ubuf_info *uarg;<br> <span class="hljs-number">591</span><br> <span class="hljs-number">592</span>                 <span class="hljs-function"><span class="hljs-title">uarg</span> = shinfo-&gt;</span>destructor_arg;<br> <span class="hljs-number">593</span>                 <span class="hljs-function"><span class="hljs-title">if</span> (uarg-&gt;</span>callback)<br> <span class="hljs-number">594</span>                         <span class="hljs-function"><span class="hljs-title">uarg</span>-&gt;</span>callback(uarg, <span class="hljs-literal">true</span>);<br> <span class="hljs-number">595</span>         &#125;<br> ...<br><span class="hljs-number">601</span> &#125;<br></code></pre></td></tr></table></figure>
+
+
+
+
+
+
+<h3 id="why-it-only-affect-performance-for-guest-to-nic-why-guest-to-guest-host-not">0.0.3. why it only affect performance for guest-to-nic? why guest-to-guest(host) not?</h3><p><font color="red"><code>skb_orphan_frags</code></font></p>
+<h4 id="The-reason-is-network-stack-entry-function-will-force-clear-SKBTX-DEV-ZEROCOPY">0.0.3.1. The reason is network stack entry function will force clear SKBTX_DEV_ZEROCOPY</h4><p>clear the flag and copy data from userspace.</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">2119 </span>static inline <span class="hljs-keyword">int</span> skb_orphan_frags(struct sk_buff *skb, gfp_t gfp_mask)<br><span class="hljs-symbol">2120 </span>&#123;<br><span class="hljs-symbol">2121 </span>        <span class="hljs-keyword">if</span> (likely(!(skb_shinfo(skb)-&gt;tx_flags &amp; SKBTX_DEV_ZEROCOPY)))<br><span class="hljs-symbol">2122 </span>                <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-symbol">2123 </span>        <span class="hljs-keyword">return</span> skb_copy_ubufs(skb, gfp_mask);<br><span class="hljs-symbol">2124 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<h4 id="where-skb-orphan-frags-is-used">0.0.3.2. where skb_orphan_frags is used?</h4><h5 id="call-trace">0.0.3.2.1. call trace</h5><figure class="highlight asciidoc"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs asciidoc"><span class="hljs-emphasis">__netif_receive_skb_core</span><br><span class="hljs-emphasis">  deliver_ptype_list_skb</span><br><span class="hljs-emphasis">    deliver_skb</span><br><span class="hljs-emphasis">      skb_orphan_</span>frags<br></code></pre></td></tr></table></figure>
+
+<p>As it is known:  <code>__netif_receive_skb_core</code> is the entry of network stack.</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">3755</span> static int __netif_receive_skb_core<span class="hljs-punctuation">(</span>struct sk_buff *skb, bool pfmemalloc<span class="hljs-punctuation">)</span><br><span class="hljs-number">3756</span> &#123;<br>...<br><span class="hljs-number">3871</span>         type = skb-&gt;protocol<span class="hljs-comment">;</span><br><span class="hljs-number">3872</span><br><span class="hljs-number">3873</span>         /* deliver only exact match when indicated */<br><span class="hljs-number">3874</span>         if <span class="hljs-punctuation">(</span>likely<span class="hljs-punctuation">(</span>!deliver_exact<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> &#123;<br><span class="hljs-number">3875</span>                 deliver_ptype_list_skb<span class="hljs-punctuation">(</span>skb, &amp;pt_prev, orig_dev, type,<br><span class="hljs-number">3876</span>                                        &amp;ptype_base[ntohs<span class="hljs-punctuation">(</span>type<span class="hljs-punctuation">)</span> &amp;<br><span class="hljs-number">3877</span>                                                    PTYPE_HASH_MASK]<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">3878</span>         &#125;<br>....<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1772 </span>static inline void deliver_ptype_list_skb(struct sk_buff *skb,<br><span class="hljs-symbol">1773 </span>                                          struct packet_type **pt,<br><span class="hljs-symbol">1774 </span>                                          struct net_device *orig_dev,<br><span class="hljs-symbol">1775 </span>                                          __be16 type,<br><span class="hljs-symbol">1776 </span>                                          struct list_head *ptype_list)<br><span class="hljs-symbol">1777 </span>&#123;<br><span class="hljs-symbol">1778 </span>        struct packet_type *ptype, *pt_prev = *pt;<br><span class="hljs-number">1779</span><br><span class="hljs-symbol">1780 </span>        list_for_each_entry_rcu(ptype, ptype_list, <span class="hljs-keyword">list</span>) &#123;<br><span class="hljs-symbol">1781 </span>                <span class="hljs-keyword">if</span> (ptype-&gt;type != type)<br><span class="hljs-symbol">1782 </span>                        continue;<br><span class="hljs-symbol">1783 </span>                <span class="hljs-keyword">if</span> (pt_prev)<br><span class="hljs-symbol">1784 </span>                        deliver_skb(skb, pt_prev, orig_dev);<br><span class="hljs-symbol">1785 </span>                pt_prev = ptype;<br><span class="hljs-symbol">1786 </span>        &#125;<br><span class="hljs-symbol">1787 </span>        *pt = pt_prev;<br><span class="hljs-symbol">1788 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1762 </span>static inline <span class="hljs-keyword">int</span> deliver_skb(struct sk_buff *skb,<br><span class="hljs-symbol">1763 </span>                              struct packet_type *pt_prev,<br><span class="hljs-symbol">1764 </span>                              struct net_device *orig_dev)<br><span class="hljs-symbol">1765 </span>&#123;<br><span class="hljs-symbol">1766 </span>        <span class="hljs-keyword">if</span> (unlikely(skb_orphan_frags(skb, GFP_ATOMIC)))<br><span class="hljs-symbol">1767 </span>                <span class="hljs-keyword">return</span> -ENOMEM;<br><span class="hljs-symbol">1768 </span>        atomic_inc(&amp;skb-&gt;users);<br><span class="hljs-symbol">1769 </span>        <span class="hljs-keyword">return</span> pt_prev-&gt;func(skb, skb-&gt;dev, pt_prev, orig_dev);<br><span class="hljs-symbol">1770 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Netdev/" class="category-chain-item">Netdev</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/netdev/" class="print-no-link">#netdev</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>bridge zero copy transmit</div>
+      <div>https://martinbj2008.github.io/2015/06/26/2015-08-06-bridge-zero-copy-transmit/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>June 26, 2015</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2015/06/26/2015-06-26-xen-tcp-checksum-for-back-and-front-net-driver/" title="xen tcp checksum for back and front net driver">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">xen tcp checksum for back and front net driver</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2015/05/22/2015-05-22-how-tcpdown-direction-filter-work/" title="how tcpdown direction filter work">
+                        <span class="hidden-mobile">how tcpdown direction filter work</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

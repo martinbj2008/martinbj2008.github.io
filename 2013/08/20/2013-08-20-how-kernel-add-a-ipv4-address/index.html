@@ -1,0 +1,861 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. SUMMARYThere is a struct in_device __rcu  *ip_ptr under every net_device.which stores all the IPv4 related information for this device. Each IPv4 address is stored a struct in_ifaddr,all the IPv4">
+<meta property="og:type" content="article">
+<meta property="og:title" content="how kernel add a IPv4 address">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/08/20/2013-08-20-how-kernel-add-a-ipv4-address/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. SUMMARYThere is a struct in_device __rcu  *ip_ptr under every net_device.which stores all the IPv4 related information for this device. Each IPv4 address is stored a struct in_ifaddr,all the IPv4">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ifa.png">
+<meta property="article:published_time" content="2013-08-20T08:31:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.748Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IPv4">
+<meta property="article:tag" content="address">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/ifa.png">
+  
+  
+  
+  <title>how kernel add a IPv4 address - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="how kernel add a IPv4 address"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2013-08-20 16:31" pubdate>
+          August 20, 2013 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          7k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          59 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">how kernel add a IPv4 address</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="SUMMARY">0.1. SUMMARY</h2><p>There is a <code>struct in_device __rcu  *ip_ptr</code> under every <code>net_device</code>.<br>which stores all the IPv4 related information for this device.</p>
+<p>Each IPv4 address is stored a <code>struct in_ifaddr</code>,<br>all the IPv4 address of a net device are stored into a list(netdev-&gt;ip_ptr-&gt;ifa_list). </p>
+<p><img src="/images/ifa.png" srcset="/img/loading.gif" lazyload alt="内核如何管理ifa"></p>
+<span id="more"></span>
+
+
+<h3 id="相关结构体">0.1.1. 相关结构体</h3><h4 id="net-device-和in-device">0.1.1.1. net_device 和in_device</h4><figure class="highlight gauss"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs gauss"><span class="hljs-number">1075</span> <span class="hljs-keyword">struct</span> <span class="hljs-type">net_device</span> &#123;<br>...<br><span class="hljs-number">1208</span>         <span class="hljs-keyword">struct</span> <span class="hljs-type">in_device</span> __rcu  *ip_ptr;        <span class="hljs-comment">/* IPv4 specific data   */</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight gauss"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs gauss"><span class="hljs-number">55</span> <span class="hljs-keyword">struct</span> <span class="hljs-type">in_device</span> &#123;<br><span class="hljs-number">56</span>         <span class="hljs-keyword">struct</span> <span class="hljs-type">net_device</span>       *dev;<br><span class="hljs-number">57</span>         atomic_t                refcnt;<br><span class="hljs-number">58</span>         int                     dead;<br><span class="hljs-number">59</span>         <span class="hljs-keyword">struct</span> <span class="hljs-type">in_ifaddr</span>        *ifa_list;      <span class="hljs-comment">/* IP ifaddr chain              */</span><br>...<br></code></pre></td></tr></table></figure>
+
+<h4 id="ifa结构体struct-in-ifaddr">0.1.1.2. ifa结构体struct in_ifaddr</h4><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">161 </span>struct in_ifaddr &#123;<br><span class="hljs-symbol">162 </span>        struct hlist_node       hash;<br><span class="hljs-symbol">163 </span>        struct in_ifaddr        *ifa_next;<br><span class="hljs-symbol">164 </span>        struct in_device        *ifa_dev;<br><span class="hljs-symbol">165 </span>        struct rcu_head         rcu_head;<br><span class="hljs-symbol">166 </span>        __be32                  ifa_local;<br><span class="hljs-symbol">167 </span>        __be32                  ifa_address;<br><span class="hljs-symbol">168 </span>        __be32                  ifa_mask;<br><span class="hljs-symbol">169 </span>        __be32                  ifa_broadcast;<br><span class="hljs-symbol">170 </span>        unsigned char           ifa_scope;<br><span class="hljs-symbol">171 </span>        unsigned char           ifa_flags;<br><span class="hljs-symbol">172 </span>        unsigned char           ifa_prefixlen;<br><span class="hljs-symbol">173 </span>        char                    ifa_label[IFNAMSIZ];<br><span class="hljs-symbol">174 </span><br><span class="hljs-symbol">175 </span>        /* In seconds, relative <span class="hljs-keyword">to</span> tstamp. Expiry is at tstamp + HZ * lft. */<br><span class="hljs-symbol">176 </span>        __u32                   ifa_valid_lft;<br><span class="hljs-symbol">177 </span>        __u32                   ifa_preferred_lft;<br><span class="hljs-symbol">178 </span>        unsigned long           ifa_cstamp; /* created timestamp */<br><span class="hljs-symbol">179 </span>        unsigned long           ifa_tstamp; /* updated timestamp */<br><span class="hljs-symbol">180 </span>&#125;;<br></code></pre></td></tr></table></figure>
+
+
+<h4 id="注册处理增删IP地址命令的入口函数">0.1.1.3. 注册处理增删IP地址命令的入口函数</h4><figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs yaml"><span class="hljs-number">2284 </span><span class="hljs-string">void</span> <span class="hljs-string">__init</span> <span class="hljs-string">devinet_init(void)</span><br><span class="hljs-number">2285</span> &#123; <br><span class="hljs-string">...</span><br><span class="hljs-number">2300         </span><span class="hljs-string">rtnl_register(PF_INET</span>, <span class="hljs-string">RTM_NEWADDR</span>, <span class="hljs-string">inet_rtm_newaddr</span>, <span class="hljs-literal">NULL</span>, <span class="hljs-literal">NULL</span><span class="hljs-string">);</span><br><span class="hljs-number">2301         </span><span class="hljs-string">rtnl_register(PF_INET</span>, <span class="hljs-string">RTM_DELADDR</span>, <span class="hljs-string">inet_rtm_deladdr</span>, <span class="hljs-literal">NULL</span>, <span class="hljs-literal">NULL</span><span class="hljs-string">);</span><br></code></pre></td></tr></table></figure>
+
+<h2 id="内核如何处理增加ip地址">0.2. 内核如何处理增加ip地址</h2><h3 id="calltrace">0.2.1. calltrace</h3><figure class="highlight node-repl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs node-repl"><span class="hljs-meta prompt_">&gt;</span> <span class="language-javascript">inet_rtm_newaddr</span><br><span class="hljs-meta prompt_">&gt;</span> <span class="language-javascript">&gt; rtm_to_ifaddr</span><br><span class="hljs-meta prompt_">&gt;</span> <span class="language-javascript">&gt; find_matching_ifa</span><br><span class="hljs-meta prompt_">&gt;</span> <span class="language-javascript">&gt; __inet_insert_ifa</span><br><span class="hljs-meta prompt_">&gt;</span> <span class="language-javascript">&gt; &gt; insert ifa to ifa_list <span class="hljs-keyword">with</span> right postion.</span><br><span class="hljs-meta prompt_">&gt;</span> <span class="language-javascript">&gt; &gt; <span class="hljs-title function_">inet_hash_insert</span>(<span class="hljs-title function_">dev_net</span>(in_dev-&gt;dev), ifa);</span><br><span class="hljs-meta prompt_">&gt;</span> <span class="language-javascript">&gt; &gt; <span class="hljs-title function_">rtmsg_ifa</span>(<span class="hljs-variable constant_">RTM_NEWADDR</span>, ifa, nlh, portid);</span><br><span class="hljs-meta prompt_">&gt;</span> <span class="language-javascript">&gt; &gt; <span class="hljs-title function_">blocking_notifier_call_chain</span>(&amp;inetaddr_chain, <span class="hljs-variable constant_">NETDEV_UP</span>, ifa);</span><br></code></pre></td></tr></table></figure>
+
+<h4 id="NOTE">0.2.1.1. NOTE:</h4><p><code>inetaddr_chain</code> will be shown in next blog.</p>
+<h3 id="处理增加IP地址命令的入口函数">0.2.2. 处理增加IP地址命令的入口函数</h3><h4 id="inet-rtm-newaddr">0.2.2.1. inet_rtm_newaddr</h4><ul>
+<li>创建：函数<code>rtm_to_ifaddr</code>根据netlink 消息，生成一个 ifa实例</li>
+<li>查找：使用函数<code>find_matching_ifa</code>查找是否有相同的ifa</li>
+<li>插入：如果没有找到， 则通过&#96;&#96;__inet_insert_ifa&#96;添加ifa到内核里。</li>
+</ul>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">807 </span>static <span class="hljs-keyword">int</span> inet_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh)<br><span class="hljs-symbol">808 </span>&#123;<br><span class="hljs-symbol">809 </span>        struct net *net = sock_net(skb-&gt;sk);<br><span class="hljs-symbol">810 </span>        struct in_ifaddr *ifa;<br><span class="hljs-symbol">811 </span>        struct in_ifaddr *ifa_existing;<br><span class="hljs-symbol">812 </span>        __u32 valid_lft = INFINITY_LIFE_TIME;<br><span class="hljs-symbol">813 </span>        __u32 prefered_lft = INFINITY_LIFE_TIME;<br><span class="hljs-symbol">814 </span><br><span class="hljs-symbol">815 </span>        ASSERT_RTNL();<br><span class="hljs-symbol">816 </span><br><span class="hljs-symbol">817 </span>        ifa = rtm_to_ifaddr(net, nlh, &amp;valid_lft, &amp;prefered_lft);<br><span class="hljs-symbol">818 </span>        <span class="hljs-keyword">if</span> (IS_ERR(ifa))<br><span class="hljs-symbol">819 </span>                <span class="hljs-keyword">return</span> PTR_ERR(ifa);<br><span class="hljs-symbol">820 </span><br><span class="hljs-symbol">821 </span>        ifa_existing = find_matching_ifa(ifa);<br><span class="hljs-symbol">822 </span>        <span class="hljs-keyword">if</span> (!ifa_existing) &#123;<br><span class="hljs-symbol">823 </span>                /* It would be best <span class="hljs-keyword">to</span> check <span class="hljs-keyword">for</span> !NLM_F_CREATE here but<br><span class="hljs-symbol">824 </span>                 * userspace alreay relies <span class="hljs-keyword">on</span> <span class="hljs-keyword">not</span> having <span class="hljs-keyword">to</span> provide this.<br><span class="hljs-symbol">825 </span>                 */<br><span class="hljs-symbol">826 </span>                set_ifa_lifetime(ifa, valid_lft, prefered_lft);<br><span class="hljs-symbol">827 </span>                <span class="hljs-keyword">return</span> __inet_insert_ifa(ifa, nlh, NETLINK_CB(skb).portid);<br><span class="hljs-symbol">828 </span>        &#125; <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-symbol">829 </span>                inet_free_ifa(ifa);<br><span class="hljs-symbol">830 </span><br><span class="hljs-symbol">831 </span>                <span class="hljs-keyword">if</span> (nlh-&gt;nlmsg_flags &amp; NLM_F_EXCL ||<br><span class="hljs-symbol">832 </span>                    !(nlh-&gt;nlmsg_flags &amp; NLM_F_REPLACE))<br><span class="hljs-symbol">833 </span>                        <span class="hljs-keyword">return</span> -EEXIST;<br><span class="hljs-symbol">834 </span>                ifa = ifa_existing;<br><span class="hljs-symbol">835 </span>                set_ifa_lifetime(ifa, valid_lft, prefered_lft);<br><span class="hljs-symbol">836 </span>                cancel_delayed_work(&amp;check_lifetime_work);<br><span class="hljs-symbol">837 </span>                schedule_delayed_work(&amp;check_lifetime_work, <span class="hljs-number">0</span>);<br><span class="hljs-symbol">838 </span>                rtmsg_ifa(RTM_NEWADDR, ifa, nlh, NETLINK_CB(skb).portid);<br><span class="hljs-symbol">839 </span>                blocking_notifier_call_chain(&amp;inetaddr_chain, NETDEV_UP, ifa);<br><span class="hljs-symbol">840 </span>        &#125;<br><span class="hljs-symbol">841 </span>        <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-symbol">842 </span>&#125;<br></code></pre></td></tr></table></figure>
+<h5 id="rtm-to-ifaddr">0.2.2.1.1. rtm_to_ifaddr</h5><p>根据netlink消息生成 ifa</p>
+<ul>
+<li>查找并确认netdev 网口名字: 查找 <em><strong>ip命令指定的网口</strong></em>下，是否有这个IP地址，而不是在<em><strong>整个ns下查</strong></em></li>
+<li>分配一个ifa实例</li>
+<li>根据 netlink 消息内容初始化 ifa</li>
+</ul>
+<p>Q: 同一个IP地址(掩码也相同)可以配置的多个网口上吗？或者说多个网口可以配置相同的ip地址（ip 和掩码都相同）?<br>A: <em><strong>可以</strong></em></p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">708 </span>static struct in_ifaddr *rtm_to_ifaddr(struct net *net, struct nlmsghdr *nlh,<br><span class="hljs-symbol">709 </span>                                       __u32 *pvalid_lft, __u32 *pprefered_lft)<br><span class="hljs-symbol">710 </span>&#123;<br><span class="hljs-symbol">711 </span>        struct nlattr *tb[IFA_MAX+<span class="hljs-number">1</span>];<br><span class="hljs-symbol">712 </span>        struct in_ifaddr *ifa;<br><span class="hljs-symbol">713 </span>        struct ifaddrmsg *ifm;<br><span class="hljs-symbol">714 </span>        struct net_device *dev;<br><span class="hljs-symbol">715 </span>        struct in_device *in_dev;<br><span class="hljs-symbol">716 </span>        <span class="hljs-keyword">int</span> <span class="hljs-keyword">err</span>;<br><span class="hljs-symbol">717 </span><br><span class="hljs-symbol">718 </span>        <span class="hljs-keyword">err</span> = nlmsg_parse(nlh, sizeof(*ifm), tb, IFA_MAX, ifa_ipv4_policy);<br><span class="hljs-symbol">719 </span>        <span class="hljs-keyword">if</span> (<span class="hljs-keyword">err</span> &lt; <span class="hljs-number">0</span>)<br><span class="hljs-symbol">720 </span>                <span class="hljs-keyword">goto</span> errout;<br><span class="hljs-symbol">721 </span><br><span class="hljs-symbol">722 </span>        ifm = nlmsg_data(nlh);<br><span class="hljs-symbol">723 </span>        <span class="hljs-keyword">err</span> = -EINVAL;<br><span class="hljs-symbol">724 </span>        <span class="hljs-keyword">if</span> (ifm-&gt;ifa_prefixlen &gt; <span class="hljs-number">32</span> || tb[IFA_LOCAL] == NULL)<br><span class="hljs-symbol">725 </span>                <span class="hljs-keyword">goto</span> errout;<br><span class="hljs-symbol">726 </span><br><span class="hljs-symbol">727 </span>        dev = __dev_get_by_index(net, ifm-&gt;ifa_index);<br><span class="hljs-symbol">728 </span>        <span class="hljs-keyword">err</span> = -ENODEV;<br><span class="hljs-symbol">729 </span>        <span class="hljs-keyword">if</span> (dev == NULL)<br><span class="hljs-symbol">730 </span>                <span class="hljs-keyword">goto</span> errout;<br><span class="hljs-symbol">731 </span><br><span class="hljs-symbol">732 </span>        in_dev = __in_dev_get_rtnl(dev);<br><span class="hljs-symbol">733 </span>        <span class="hljs-keyword">err</span> = -ENOBUFS;<br><span class="hljs-symbol">734 </span>        <span class="hljs-keyword">if</span> (in_dev == NULL)<br><span class="hljs-symbol">735 </span>                <span class="hljs-keyword">goto</span> errout;<br><span class="hljs-symbol">736 </span><br><span class="hljs-symbol">737 </span>        ifa = inet_alloc_ifa();<br><span class="hljs-symbol">738 </span>        <span class="hljs-keyword">if</span> (ifa == NULL)<br><span class="hljs-symbol">739 </span>                /*<br><span class="hljs-symbol">740 </span>                 * A potential indev allocation can be left alive, it stays<br><span class="hljs-symbol">741 </span>                 * assigned <span class="hljs-keyword">to</span> its device <span class="hljs-keyword">and</span> is destroy with it.<br><span class="hljs-symbol">742 </span>                 */<br><span class="hljs-symbol">743 </span>                <span class="hljs-keyword">goto</span> errout;<br><span class="hljs-symbol">744 </span><br><span class="hljs-symbol">745 </span>        ipv4_devconf_setall(in_dev);<br><span class="hljs-symbol">746 </span>        in_dev_hold(in_dev);<br><span class="hljs-symbol">747 </span><br><span class="hljs-symbol">748 </span>        <span class="hljs-keyword">if</span> (tb[IFA_ADDRESS] == NULL)<br><span class="hljs-symbol">749 </span>                tb[IFA_ADDRESS] = tb[IFA_LOCAL];<br><span class="hljs-symbol">750 </span><br><span class="hljs-symbol">751 </span>        INIT_HLIST_NODE(&amp;ifa-&gt;hash);<br><span class="hljs-symbol">752 </span>        ifa-&gt;ifa_prefixlen = ifm-&gt;ifa_prefixlen;<br><span class="hljs-symbol">753 </span>        ifa-&gt;ifa_mask = inet_make_mask(ifm-&gt;ifa_prefixlen);<br><span class="hljs-symbol">754 </span>        ifa-&gt;ifa_flags = ifm-&gt;ifa_flags;<br><span class="hljs-symbol">755 </span>        ifa-&gt;ifa_scope = ifm-&gt;ifa_scope;<br><span class="hljs-symbol">756 </span>        ifa-&gt;ifa_dev = in_dev;<br><span class="hljs-symbol">757 </span><br><span class="hljs-symbol">758 </span>        ifa-&gt;ifa_local = nla_get_be32(tb[IFA_LOCAL]);<br><span class="hljs-symbol">759 </span>        ifa-&gt;ifa_address = nla_get_be32(tb[IFA_ADDRESS]);<br><span class="hljs-symbol">760 </span><br><span class="hljs-symbol">761 </span>        <span class="hljs-keyword">if</span> (tb[IFA_BROADCAST])<br><span class="hljs-symbol">762 </span>                ifa-&gt;ifa_broadcast = nla_get_be32(tb[IFA_BROADCAST]);<br><span class="hljs-symbol">763 </span><br><span class="hljs-symbol">764 </span>        <span class="hljs-keyword">if</span> (tb[IFA_LABEL])<br><span class="hljs-symbol">765 </span>                nla_strlcpy(ifa-&gt;ifa_label, tb[IFA_LABEL], IFNAMSIZ);<br><span class="hljs-symbol">766 </span>        <span class="hljs-keyword">else</span><br><span class="hljs-symbol">767 </span>                memcpy(ifa-&gt;ifa_label, dev-&gt;<span class="hljs-keyword">name</span>, IFNAMSIZ);<br><span class="hljs-symbol">768 </span><br><span class="hljs-symbol">769 </span>        <span class="hljs-keyword">if</span> (tb[IFA_CACHEINFO]) &#123;<br><span class="hljs-symbol">770 </span>                struct ifa_cacheinfo *ci;<br><span class="hljs-symbol">771 </span><br><span class="hljs-symbol">772 </span>                ci = nla_data(tb[IFA_CACHEINFO]);<br><span class="hljs-symbol">773 </span>                <span class="hljs-keyword">if</span> (!ci-&gt;ifa_valid || ci-&gt;ifa_prefered &gt; ci-&gt;ifa_valid) &#123;<br><span class="hljs-symbol">774 </span>                        <span class="hljs-keyword">err</span> = -EINVAL;<br><span class="hljs-symbol">775 </span>                        <span class="hljs-keyword">goto</span> errout_free;<br><span class="hljs-symbol">776 </span>                &#125;<br><span class="hljs-symbol">777 </span>                *pvalid_lft = ci-&gt;ifa_valid;<br><span class="hljs-symbol">778 </span>                *pprefered_lft = ci-&gt;ifa_prefered;<br><span class="hljs-symbol">779 </span>        &#125;<br><span class="hljs-symbol">780 </span><br><span class="hljs-symbol">781 </span>        <span class="hljs-keyword">return</span> ifa;<br><span class="hljs-symbol">782 </span><br><span class="hljs-symbol">783 </span>errout_free:<br><span class="hljs-symbol">784 </span>        inet_free_ifa(ifa);<br><span class="hljs-symbol">785 </span>errout:<br><span class="hljs-symbol">786 </span>        <span class="hljs-keyword">return</span> ERR_PTR(<span class="hljs-keyword">err</span>);<br><span class="hljs-symbol">787 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<h4 id="把-ifa-插入到对应的两个链表里。">0.2.2.2. 把 ifa 插入到对应的两个链表里。</h4><ul>
+<li>插入到网口下的 ip 地址列表</li>
+<li>插入同 ns 下的 hash 链表</li>
+<li>发送 netlink 更新消息</li>
+<li>发送<code>blocking_notifier_call_chain</code> :待学习</li>
+</ul>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">426 </span>static <span class="hljs-keyword">int</span> __inet_insert_ifa(struct in_ifaddr *ifa, struct nlmsghdr *nlh,<br><span class="hljs-symbol">427 </span>                             u32 portid)<br><span class="hljs-symbol">428 </span>&#123;<br><span class="hljs-symbol">429 </span>        struct in_device *in_dev = ifa-&gt;ifa_dev;<br><span class="hljs-symbol">430 </span>        struct in_ifaddr *ifa1, **ifap, **last_primary;<br><span class="hljs-symbol">431 </span><br><span class="hljs-symbol">432 </span>        ASSERT_RTNL();<br><span class="hljs-symbol">433 </span><br><span class="hljs-symbol">434 </span>        <span class="hljs-keyword">if</span> (!ifa-&gt;ifa_local) &#123;<br><span class="hljs-symbol">435 </span>                inet_free_ifa(ifa);<br><span class="hljs-symbol">436 </span>                <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-symbol">437 </span>        &#125;<br><span class="hljs-symbol">438 </span><br><span class="hljs-symbol">439 </span>        ifa-&gt;ifa_flags &amp;= ~IFA_F_SECONDARY;<br><span class="hljs-symbol">440 </span>        last_primary = &amp;in_dev-&gt;ifa_list;<br><span class="hljs-symbol">441 </span><br><span class="hljs-symbol">442 </span>        <span class="hljs-keyword">for</span> (ifap = &amp;in_dev-&gt;ifa_list; (ifa1 = *ifap) != NULL;<br><span class="hljs-symbol">443 </span>             ifap = &amp;ifa1-&gt;ifa_next) &#123;<br><span class="hljs-symbol">444 </span>                <span class="hljs-keyword">if</span> (!(ifa1-&gt;ifa_flags &amp; IFA_F_SECONDARY) &amp;&amp;<br><span class="hljs-symbol">445 </span>                    ifa-&gt;ifa_scope &lt;= ifa1-&gt;ifa_scope)<br><span class="hljs-symbol">446 </span>                        last_primary = &amp;ifa1-&gt;ifa_next;<br><span class="hljs-symbol">447 </span>                <span class="hljs-keyword">if</span> (ifa1-&gt;ifa_mask == ifa-&gt;ifa_mask &amp;&amp;<br><span class="hljs-symbol">448 </span>                    inet_ifa_match(ifa1-&gt;ifa_address, ifa)) &#123;<br><span class="hljs-symbol">449 </span>                        <span class="hljs-keyword">if</span> (ifa1-&gt;ifa_local == ifa-&gt;ifa_local) &#123;<br><span class="hljs-symbol">450 </span>                                inet_free_ifa(ifa);<br><span class="hljs-symbol">451 </span>                                <span class="hljs-keyword">return</span> -EEXIST;<br><span class="hljs-symbol">452 </span>                        &#125;<br><span class="hljs-symbol">453 </span>                        <span class="hljs-keyword">if</span> (ifa1-&gt;ifa_scope != ifa-&gt;ifa_scope) &#123;<br><span class="hljs-symbol">454 </span>                                inet_free_ifa(ifa);<br><span class="hljs-symbol">455 </span>                                <span class="hljs-keyword">return</span> -EINVAL;<br><span class="hljs-symbol">456 </span>                        &#125;<br><span class="hljs-symbol">457 </span>                        ifa-&gt;ifa_flags |= IFA_F_SECONDARY;<br><span class="hljs-symbol">458 </span>                &#125;<br><span class="hljs-symbol">459 </span>        &#125;<br><span class="hljs-symbol">460 </span><br><span class="hljs-symbol">461 </span>        <span class="hljs-keyword">if</span> (!(ifa-&gt;ifa_flags &amp; IFA_F_SECONDARY)) &#123;<br><span class="hljs-symbol">462 </span>                net_srandom(ifa-&gt;ifa_local);<br><span class="hljs-symbol">463 </span>                ifap = last_primary;<br><span class="hljs-symbol">464 </span>        &#125;<br><span class="hljs-symbol">465 </span><br><span class="hljs-symbol">466 </span>        ifa-&gt;ifa_next = *ifap;<br><span class="hljs-symbol">467 </span>        *ifap = ifa;<br><span class="hljs-symbol">468 </span><br><span class="hljs-symbol">469 </span>        inet_hash_insert(dev_net(in_dev-&gt;dev), ifa);<br><span class="hljs-symbol">470 </span><br><span class="hljs-symbol">471 </span>        cancel_delayed_work(&amp;check_lifetime_work);<br><span class="hljs-symbol">472 </span>        schedule_delayed_work(&amp;check_lifetime_work, <span class="hljs-number">0</span>);<br><span class="hljs-symbol">473 </span><br><span class="hljs-symbol">474 </span>        /* Send message first, <span class="hljs-keyword">then</span> <span class="hljs-keyword">call</span> notifier.<br><span class="hljs-symbol">475 </span>           Notifier will trigger FIB update, so that<br><span class="hljs-symbol">476 </span>           listeners of netlink will know about <span class="hljs-keyword">new</span> ifaddr */<br><span class="hljs-symbol">477 </span>        rtmsg_ifa(RTM_NEWADDR, ifa, nlh, portid);<br><span class="hljs-symbol">478 </span>        blocking_notifier_call_chain(&amp;inetaddr_chain, NETDEV_UP, ifa);<br><span class="hljs-symbol">479 </span><br><span class="hljs-symbol">480 </span>        <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-symbol">481 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Route/" class="category-chain-item">Route</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/address/" class="print-no-link">#address</a>
+      
+        <a href="/tags/IPv4/" class="print-no-link">#IPv4</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>how kernel add a IPv4 address</div>
+      <div>https://martinbj2008.github.io/2013/08/20/2013-08-20-how-kernel-add-a-ipv4-address/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>August 20, 2013</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2013/08/20/2013-08-20-callback-notify-when-add-a-ipv4-add/" title="callback notify when add a IPv4 add">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">callback notify when add a IPv4 add</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2013/08/02/2013-08-02-unregister-a-new-device/" title="unregister a net device">
+                        <span class="hidden-mobile">unregister a net device</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

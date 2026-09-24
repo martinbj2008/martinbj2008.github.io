@@ -1,0 +1,1180 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. 一、问题起源 (Problem Origin)0.1.1. 2.1 性能瓶颈 (Performance Bottleneck)David Ahern 在 2017 年左右开始构思 nexthop 对象化 (nexthop objectification)，核心动机来自大规模路由注入的性能瓶颈 (large-scale route injection performance bottlen">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Linux 内核 Nexthop 对象化: Patch 4c7e8084 深度解析">
+<meta property="og:url" content="https://martinbj2008.github.io/2026/03/10/fib-nexthop-object-patch/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. 一、问题起源 (Problem Origin)0.1.1. 2.1 性能瓶颈 (Performance Bottleneck)David Ahern 在 2017 年左右开始构思 nexthop 对象化 (nexthop objectification)，核心动机来自大规模路由注入的性能瓶颈 (large-scale route injection performance bottlen">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-03-10T13:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.753Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="fib">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>Linux 内核 Nexthop 对象化: Patch 4c7e8084 深度解析 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="Linux 内核 Nexthop 对象化: Patch 4c7e8084 深度解析"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2026-03-10 21:00" pubdate>
+          March 10, 2026 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          10k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          84 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">Linux 内核 Nexthop 对象化: Patch 4c7e8084 深度解析</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="一、问题起源-Problem-Origin">0.1. 一、问题起源 (Problem Origin)</h2><h3 id="2-1-性能瓶颈-Performance-Bottleneck">0.1.1. 2.1 性能瓶颈 (Performance Bottleneck)</h3><p>David Ahern 在 2017 年左右开始构思 nexthop 对象化 (nexthop objectification)，核心动机来自<strong>大规模路由注入的性能瓶颈 (large-scale route injection performance bottleneck)</strong>。当时的状况：</p>
+<table>
+<thead>
+<tr>
+<th>场景 (Scenario)</th>
+<th>耗时 (Duration)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>注入 70 万+ IPv4 路由，单路径 (single path)</td>
+<td><strong>18 秒</strong></td>
+</tr>
+<tr>
+<td>注入 70 万+ IPv4 路由，4 路径 ECMP</td>
+<td><strong>28 秒</strong></td>
+</tr>
+<tr>
+<td>注入 70 万+ IPv4 路由，16 路径 ECMP</td>
+<td><strong>72+ 秒</strong></td>
+</tr>
+</tbody></table>
+<p>时间随 ECMP (Equal-Cost Multi-Path，等价多路径) 路径数<strong>急剧膨胀</strong>，这对 BGP 大表 (full internet table，完整互联网路由表) 场景完全不可接受。</p>
+<span id="more"></span>
+
+<h3 id="2-2-旧架构的根本问题-Root-Cause-in-Legacy-Architecture">0.1.2. 2.2 旧架构的根本问题 (Root Cause in Legacy Architecture)</h3><p>在 nexthop 对象化之前，下一跳信息 (next-hop information) 是<strong>内嵌在路由条目 (route entry) 中</strong>的：</p>
+<figure class="highlight dart"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs dart">旧模式 - <span class="hljs-title class_">IPv4</span> (<span class="hljs-title class_">Legacy</span> <span class="hljs-title class_">Mode</span> - <span class="hljs-title class_">IPv4</span>):<br>  fib_info ──→ fib_nh[<span class="hljs-number">0</span>]    ← 下一跳直接嵌在结构体尾部<br>               fib_nh[<span class="hljs-number">1</span>]       (next-hops embedded at the end of the struct)<br>               fib_nh[<span class="hljs-number">2</span>]<br>               ...<br><br>旧模式 - <span class="hljs-title class_">IPv6</span> (<span class="hljs-title class_">Legacy</span> <span class="hljs-title class_">Mode</span> - <span class="hljs-title class_">IPv6</span>, 更糟糕 / even worse):<br>  fib6_info → sibling → sibling → ... → sibling<br>      │                                     │<br>      └───── 每个 sibling 是独立的 fib6_info ─┘<br>              (each sibling <span class="hljs-keyword">is</span> a separate fib6_info)<br></code></pre></td></tr></table></figure>
+
+<p>这种设计带来三大痛点 (three major pain points)：</p>
+<h4 id="痛点-1：重复验证，浪费-CPU-Redundant-Validation">0.1.2.1. 痛点 1：重复验证，浪费 CPU (Redundant Validation)</h4><p>每条路由创建时都要独立验证其 nexthop 规格 (nexthop specification)——包括 device (网络设备)、gateway (网关)、encap (封装)。即使 1000 条路由指向同一个网关，这 1000 次验证完全一样。</p>
+<h4 id="痛点-2：过多的-synchronize-rcu-调用-Excessive-synchronize-rcu，性能杀手">0.1.2.2. 痛点 2：过多的 synchronize_rcu 调用 (Excessive synchronize_rcu，性能杀手)</h4><p>IPv4 在路由变更路径中有大量的 <code>synchronize_rcu()</code> 调用。这是一个<strong>同步阻塞操作 (synchronous blocking operation)</strong>——等待所有 CPU 完成当前 RCU 读临界区 (RCU read-side critical section)。在大批量路由注入时造成极大延迟。</p>
+<h4 id="痛点-3：ECMP-路径数线性膨胀-Linear-Scaling-with-ECMP-Paths">0.1.2.3. 痛点 3：ECMP 路径数线性膨胀 (Linear Scaling with ECMP Paths)</h4><p>每条路由都要独立存储下一跳数组 (next-hop array)，N 路径 ECMP 的开销是 O(N) × 路由数。IPv6 的 sibling 链表 (sibling linked list) 更差——每个路径是独立的 <code>fib6_info</code>，内存和 CPU 开销都成倍增长。</p>
+<hr>
+<h2 id="二、总结-Summary">0.2. 二、总结 (Summary)</h2><p><code>4c7e8084</code> 是 <strong>nexthop 对象化改造中，将独立 nexthop 对象对接到 IPv4 FIB 路由核心数据结构 (<code>fib_info</code>) 的关键一步</strong>。</p>
+<p>它的作用是<strong>打通通道 (plumbing)</strong>：</p>
+<ol>
+<li>在 <code>fib_info</code> 中新增 <code>struct nexthop *nh</code> 指针，使路由可以引用独立管理的 nexthop 对象</li>
+<li>在 <code>struct nexthop</code> 中新增 <code>fi_list</code>，建立 nexthop → fib_info 的反向追踪关系</li>
+<li>适配所有相关的核心函数 (core functions)，处理新旧两条路径</li>
+<li>为后续 “Allow routes to use nexthop objects” 奠定基础</li>
+</ol>
+<p><strong>一句话概括 (One-line Summary)</strong>：这个 patch 在 <code>fib_info</code> 中打通了指向独立 nexthop 对象的通道，使得多条路由共享 nexthop、nexthop 变更一处生效成为可能，从而将 74 万路由的注入时间从 18 秒降至 4.3 秒。</p>
+<h2 id="三、Patch-核心内容详解-Patch-Detailed-Analysis">0.3. 三、Patch 核心内容详解 (Patch Detailed Analysis)</h2><h3 id="4-1-新增的数据结构关系-New-Data-Structure-Relationships">0.3.1. 4.1 新增的数据结构关系 (New Data Structure Relationships)</h3><figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs dns">旧模式 <span class="hljs-punctuation">(</span>Legacy Mode<span class="hljs-punctuation">)</span>：fib_info 内嵌 fib_nh[]<br>    fib_info ──→ fib_nh[<span class="hljs-number">0</span>], fib_nh[<span class="hljs-number">1</span>], ...  <span class="hljs-punctuation">(</span>数组直接在结构体尾部<span class="hljs-punctuation">)</span><br><br>新模式 <span class="hljs-punctuation">(</span>New Mode<span class="hljs-punctuation">)</span>：fib_info 引用独立 nexthop 对象 <span class="hljs-punctuation">(</span>standalone nexthop object<span class="hljs-punctuation">)</span><br>    fib_info ──→ nexthop ──→ nh_group ──→ nh_info[]<br>                   │<br>                   └── fi_list <span class="hljs-punctuation">(</span>反向链表/reverse linked list，追踪所有引用者<span class="hljs-punctuation">)</span><br></code></pre></td></tr></table></figure>
+
+<p>完整的新架构图 (Complete New Architecture Diagram)：</p>
+<figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs routeros">                  ┌─────────────────────────────────────┐<span class="hljs-built_in"></span><br><span class="hljs-built_in">route </span>A ──→ fib_info ──┐                                │<br>                       │                                │<span class="hljs-built_in"></span><br><span class="hljs-built_in">route </span>B ──→ fib_info ──┤──→ nexthop (<span class="hljs-attribute">id</span>=100) ──→ nh_group<br>                       │         │                      │<span class="hljs-built_in"></span><br><span class="hljs-built_in">route </span>C ──→ fib_info ──┘         │              ├─ nh_info → fib_nh (<span class="hljs-attribute">gw</span>=10.0.0.1, <span class="hljs-attribute">dev</span>=eth0)<br>                                 │              ├─ nh_info → fib_nh (<span class="hljs-attribute">gw</span>=10.0.0.2, <span class="hljs-attribute">dev</span>=eth1)<br>                                 │              └─ nh_info → fib_nh (<span class="hljs-attribute">gw</span>=10.0.0.3, <span class="hljs-attribute">dev</span>=eth2)<br>                                 │<br>                                 └──→ fi_list (反向链表，追踪所有引用的 fib_info)<br></code></pre></td></tr></table></figure>
+
+<p>关键设计 (Key Design Decisions)：</p>
+<ul>
+<li><strong>多条路由共享同一个 nexthop 对象</strong> (multiple routes share one nexthop object) —— 通过 <code>nh</code> 指针引用</li>
+<li>nexthop 对象通过 <code>fi_list</code> <strong>反向追踪</strong> (reverse tracking) 所有使用它的 <code>fib_info</code></li>
+<li>nexthop 变更（如链路故障 &#x2F; link failure）只需修改一处，所有路由自动生效</li>
+<li><code>fib_info</code> 中 <code>nh</code> 指针与 <code>fib_nh[]</code> 数组<strong>互斥</strong> (mutually exclusive) —— 要么走新路径，要么走传统路径</li>
+</ul>
+<h3 id="4-2-fib-info-新增字段-New-Fields-in-fib-info">0.3.2. 4.2 fib_info 新增字段 (New Fields in fib_info)</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">fib_info</span> &#123;</span><br>    ...<br>    <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nexthop</span>      *<span class="hljs-title">nh</span>;</span>       <span class="hljs-comment">// 新版 nexthop 对象指针（与 fib_nh[] 互斥）</span><br>                                   <span class="hljs-comment">// New nexthop object pointer (mutually exclusive with fib_nh[])</span><br>    <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>    <span class="hljs-title">nh_list</span>;</span>   <span class="hljs-comment">// 挂载到 nexthop-&gt;fi_list，nexthop 更新/删除时遍历</span><br>                                   <span class="hljs-comment">// Linked to nexthop-&gt;fi_list, traversed on nexthop update/delete</span><br>    ...<br>&#125;;<br></code></pre></td></tr></table></figure>
+
+<h3 id="4-3-nexthop-结构体新增字段-New-Field-in-struct-nexthop">0.3.3. 4.3 nexthop 结构体新增字段 (New Field in struct nexthop)</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nexthop</span> &#123;</span><br>    ...<br>    <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>    <span class="hljs-title">fi_list</span>;</span>   <span class="hljs-comment">// 追踪所有使用该 nexthop 的 fib_info</span><br>                                   <span class="hljs-comment">// Tracks all fib_info entries referencing this nexthop</span><br>    ...<br>&#125;;<br></code></pre></td></tr></table></figure>
+
+<h3 id="4-4-核心函数适配-Core-Function-Adaptations">0.3.4. 4.4 核心函数适配 (Core Function Adaptations)</h3><table>
+<thead>
+<tr>
+<th>函数 (Function)</th>
+<th>改动说明 (Change Description)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>fib_create_info</code></td>
+<td>验证 nexthop 引用 (verify nexthop reference)，将 fib_info 加入 nexthop 的 fi_list</td>
+</tr>
+<tr>
+<td><code>fib_release_info</code></td>
+<td>从 nexthop 的 fi_list 中移除 (remove from fi_list)</td>
+</tr>
+<tr>
+<td><code>free_fib_info_rcu</code></td>
+<td>释放 nexthop 对象引用 (put nexthop object reference)</td>
+</tr>
+<tr>
+<td><code>nh_comp</code></td>
+<td>使用 <code>nexthop_cmp</code> 比较两个 nexthop 是否相同</td>
+</tr>
+<tr>
+<td><code>fib_info_hashfn</code></td>
+<td>使用 nexthop id 进行哈希 (hash by nexthop id)，替代原来按 oif 哈希</td>
+</tr>
+<tr>
+<td><code>fib_nlmsg_size</code></td>
+<td>增加 RTA_NH_ID 属性的空间 (add space for RTA_NH_ID attribute)</td>
+</tr>
+<tr>
+<td><code>fib_select_multipath</code></td>
+<td>使用 <code>nexthop_path_fib_result()</code> 进行 ECMP 选路 (path selection)</td>
+</tr>
+<tr>
+<td><code>fib_table_lookup</code></td>
+<td>处理 blackhole nexthop 场景 (handle blackhole nexthop)</td>
+</tr>
+</tbody></table>
+<h3 id="4-5-新增-nexthop-辅助函数-New-Nexthop-Helper-Functions">0.3.5. 4.5 新增 nexthop 辅助函数 (New Nexthop Helper Functions)</h3><table>
+<thead>
+<tr>
+<th>函数 (Function)</th>
+<th>用途 (Purpose)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>nexthop_cmp</code></td>
+<td>比较两个 nexthop 是否相同 (compare if two nexthops are identical)</td>
+</tr>
+<tr>
+<td><code>nexthop_path_fib_result</code></td>
+<td>ECMP 选路：在多路径 nexthop 中选择一条路径 (select a path in multipath nexthop)</td>
+</tr>
+<tr>
+<td><code>nexthop_fib_nhc</code></td>
+<td>获取 nexthop 中特定的 <code>fib_nh_common</code> (get a specific fib_nh_common)</td>
+</tr>
+<tr>
+<td><code>__remove_nexthop_fib</code></td>
+<td>nexthop 删除时遍历 fi_list，标记关联的 fib_info 为 dead</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="四、Commit-Message-原文及翻译-Original-Commit-Message-with-Translation">0.4. 四、Commit Message 原文及翻译 (Original Commit Message with Translation)</h2><blockquote>
+<p>Add ‘struct nexthop’ and nh_list list_head to fib_info. nh_list is the fib_info side of the nexthop &lt;-&gt; fib_info relationship.</p>
+<p>向 fib_info 添加 <code>struct nexthop</code> 和 <code>nh_list</code> 链表头。<code>nh_list</code> 是 nexthop ↔ fib_info 双向关系中 fib_info 侧的链表节点。</p>
+</blockquote>
+<blockquote>
+<p>Add fi_list list_head to ‘struct nexthop’ to track fib_info entries using a nexthop instance. Add __remove_nexthop_fib and add it to __remove_nexthop to walk the new list_head and mark those fib entries as dead when the nexthop is deleted.</p>
+<p>向 <code>struct nexthop</code> 添加 <code>fi_list</code> 链表头，用于追踪使用该 nexthop 实例的 fib_info 条目。新增 <code>__remove_nexthop_fib</code> 函数并将其加入 <code>__remove_nexthop</code>，当 nexthop 被删除时遍历该链表并将关联的 fib 条目标记为 dead。</p>
+</blockquote>
+<blockquote>
+<p>Add a few nexthop helpers for use when a nexthop is added to fib_info:</p>
+<ul>
+<li>nexthop_cmp to determine if 2 nexthops are the same</li>
+<li>nexthop_path_fib_result to select a path for a multipath ‘struct nexthop’</li>
+<li>nexthop_fib_nhc to select a specific fib_nh_common within a multipath ‘struct nexthop’</li>
+</ul>
+<p>新增若干 nexthop 辅助函数，用于 nexthop 被添加到 fib_info 时：</p>
+<ul>
+<li><code>nexthop_cmp</code>：判断两个 nexthop 是否相同</li>
+<li><code>nexthop_path_fib_result</code>：在多路径 nexthop 中选择一条路径</li>
+<li><code>nexthop_fib_nhc</code>：在多路径 nexthop 中选择特定的 <code>fib_nh_common</code></li>
+</ul>
+</blockquote>
+<blockquote>
+<p>Update existing fib_info_nhc to use nexthop_fib_nhc if a fib_info uses a ‘struct nexthop’, and mark fib_info_nh as only used for the non-nexthop case.</p>
+<p>更新现有的 <code>fib_info_nhc</code>，当 fib_info 使用了 nexthop 对象时调用 <code>nexthop_fib_nhc</code>，并将 <code>fib_info_nh</code> 标记为仅用于非 nexthop 的传统场景。</p>
+</blockquote>
+<blockquote>
+<p>The bulk of the changes are in fib_semantics.c and most of that is moving the existing change_nexthops into an else branch.</p>
+<p>大部分改动在 <code>fib_semantics.c</code> 中，主要是将已有的 <code>change_nexthops</code> 逻辑移入 else 分支。</p>
+</blockquote>
+<blockquote>
+<p>Update the nexthop code to walk fi_list on a nexthop deleted to remove fib entries referencing it.</p>
+<p>更新 nexthop 代码，当 nexthop 被删除时遍历 <code>fi_list</code>，移除引用它的 fib 条目。</p>
+</blockquote>
+<hr>
+<h2 id="五、Cover-Letter-原文及翻译-Original-Cover-Letter-with-Translation">0.5. 五、Cover Letter 原文及翻译 (Original Cover Letter with Translation)</h2><p>以下摘自阶段二 Merge commit <code>48debfd736d5</code> 的 cover letter：</p>
+<blockquote>
+<p><em>“When I started this idea almost 2 years ago, it took 18 seconds to inject 700k+ IPv4 routes with 1 hop and about 28 seconds for 4-paths. Some of that time was due to inefficiencies in ‘ip’, but most of it was kernel side with excessive synchronize_rcu calls in ipv4, and redundant processing validating a nexthop spec (device, gateway, encap). Worse, the time increased dramatically as the number of legs in the routes increased; for example, taking over 72 seconds for 16-path routes.”</em></p>
+<p>翻译：当我在大约 2 年前开始这个想法时，注入 70 万+ 条单路径 IPv4 路由需要 18 秒，4 路径需要约 28 秒。部分时间是由于 <code>ip</code> 工具的低效，但大部分是内核侧的问题——IPv4 中过多的 <code>synchronize_rcu</code> 调用，以及冗余的 nexthop 规格验证 (device, gateway, encap)。更糟糕的是，时间随路径数急剧增长——例如 16 路径路由需要超过 72 秒。</p>
+</blockquote>
+<blockquote>
+<p><em>“After this set, with increased dirty memory limits (fib_sync_mem sysctl), an improved ip and nexthop objects a full internet fib (743,799 routes based on a pull in January 2019) can be pushed to the kernel in 4.3 seconds.”</em></p>
+<p>翻译：在这组 patch 之后，通过增加脏内存限制 (<code>fib_sync_mem</code> sysctl)、改进的 ip 工具和 nexthop 对象，一个完整的互联网 FIB (基于 2019 年 1 月的 743,799 条路由) 可以在 4.3 秒内推送到内核。</p>
+</blockquote>
+<blockquote>
+<p><em>“Even better, the time to insert is ‘almost constant’ with increasing number of paths. The ‘almost constant’ time is due to expanding the nexthop definitions when generating notifications. A follow on patch will be sent adding a sysctl that allows an admin to avoid the nexthop expansion and truly get constant route insert time regardless of the number of paths in a route!”</em></p>
+<p>翻译：更好的是，插入时间随路径数增加”几乎恒定”。”几乎恒定”是因为生成通知时仍需展开 nexthop 定义。后续 patch 将添加一个 sysctl 参数，允许管理员跳过 nexthop 展开，真正实现无论路径数多少都恒定的路由插入时间！</p>
+</blockquote>
+<hr>
+<h2 id="六、性能效果-Performance-Results">0.6. 六、性能效果 (Performance Results)</h2><table>
+<thead>
+<tr>
+<th>场景 (Scenario)</th>
+<th>旧模式 (Legacy)</th>
+<th>新模式 (New with Nexthop Objects)</th>
+<th>提升 (Improvement)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>注入 74 万 IPv4 全表 (full table)，单路径</td>
+<td>~18s</td>
+<td><strong>~4.3s</strong></td>
+<td><strong>~4.2x</strong></td>
+</tr>
+<tr>
+<td>多路径路由注入时间增长 (multipath scaling)</td>
+<td>O(N) 线性增长</td>
+<td><strong>几乎恒定 (almost constant)</strong></td>
+<td>—</td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="七、整体时间线-Overall-Timeline">0.7. 七、整体时间线 (Overall Timeline)</h2><pre><code class=" mermaid">graph TD
+    A[&quot;2017: 发现大规模路由注入性能瓶颈&lt;br/&gt;Discovered large-scale route injection bottleneck&quot;] --&gt; B[&quot;2018: 重构 fib_nh_common&lt;br/&gt;Refactored fib_nh_common&lt;br/&gt;统一 IPv4/IPv6 下一跳&quot;]
+    B --&gt; C[&quot;2019-05: 阶段一 Phase 1&lt;br/&gt;建立 nexthop 基础设施&lt;br/&gt;(UAPI + core framework + IPv4/v6/group)&lt;br/&gt;c38e57aecbb4&quot;]
+    C --&gt; D[&quot;2019-06: 阶段二 Phase 2 - Merge 1&lt;br/&gt;前置准备 + fib_info 植入 nexthop&lt;br/&gt;9ec49a7e58fb&quot;]
+    D --&gt; E[&quot;★ 4c7e8084&lt;br/&gt;ipv4: Plumb support for&lt;br/&gt;nexthop object in a fib_info&quot;]
+    E --&gt; F[&quot;2019-06: 阶段二 Phase 2 - Merge 2&lt;br/&gt;允许路由真正使用 nexthop&lt;br/&gt;48debfd736d5&quot;]
+    F --&gt; G[&quot;2019-06: selftests + replace 支持&quot;]
+    G --&gt; H[&quot;2021: Resilient nexthop groups&lt;br/&gt;弹性 nexthop 组&lt;br/&gt;(减少流量中断 / minimize traffic disruption)&quot;]
+
+    style E fill:#ff6b6b,stroke:#333,color:#fff
+</code></pre>
+
+<hr>
+<h2 id="八、解决方案：Nexthop-作为独立对象-Solution-Nexthop-as-Standalone-Object">0.8. 八、解决方案：Nexthop 作为独立对象 (Solution: Nexthop as Standalone Object)</h2><h3 id="3-1-整体分两阶段落地-Two-Phase-Implementation">0.8.1. 3.1 整体分两阶段落地 (Two-Phase Implementation)</h3><h4 id="阶段一-Phase-1-：建立-nexthop-基础设施-2019-05-6-patches">0.8.1.1. 阶段一 (Phase 1)：建立 nexthop 基础设施 (2019-05, 6 patches)</h4><blockquote>
+<p>Merge commit: <code>c38e57aecbb4</code> — <strong>“net: API and initial implementation for nexthop objects”</strong></p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Commit</th>
+<th>标题 (Title)</th>
+<th>说明 (Description)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><code>65ee00a9409f</code></td>
+<td>net: nexthop uapi</td>
+<td>定义 UAPI：RTM_*NEXTHOP 命令、NHA_* 属性</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>ab84be7e54fc</code></td>
+<td>net: Initial nexthop code</td>
+<td>核心框架：rbtree、RTM 命令处理、通知机制 (notification)</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>597cfe4fc339</code></td>
+<td>nexthop: Add support for IPv4 nexthops</td>
+<td>IPv4 网关 + 网络设备事件处理 (netdev event handling)</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>53010f991a9f</code></td>
+<td>nexthop: Add support for IPv6 gateways</td>
+<td>IPv6 网关支持</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>b513bd035f40</code></td>
+<td>nexthop: Add support for lwt encaps</td>
+<td>轻量隧道封装 (Lightweight Tunnel encapsulation)</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>430a049190de</code></td>
+<td>nexthop: Add support for nexthop groups</td>
+<td>ECMP nexthop 组</td>
+</tr>
+</tbody></table>
+<p>此阶段结束后，可以创建&#x2F;删除 nexthop 对象，但<strong>路由还不能引用它们 (routes cannot reference them yet)</strong>。</p>
+<p>Cover letter 原文：</p>
+<blockquote>
+<p><em>“At the end of this set, nexthop objects can be created and deleted and userspace can monitor nexthop events, but ipv4 and ipv6 routes can not use them yet.”</em></p>
+<p>翻译：在这组 patch 之后，nexthop 对象可以被创建和删除，用户态可以监听 nexthop 事件，但 IPv4 和 IPv6 路由还不能使用它们。</p>
+</blockquote>
+<h4 id="阶段二-Phase-2-：将-nexthop-对接到路由系统-2019-06">0.8.1.2. 阶段二 (Phase 2)：将 nexthop 对接到路由系统 (2019-06)</h4><p>分为两个 merge：</p>
+<p><strong>Merge 1</strong>: <code>9ec49a7e58fb</code> — <strong>“net: add struct nexthop to fib info”</strong> (7 patches)</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Commit</th>
+<th>标题 (Title)</th>
+<th>说明 (Description)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td><code>5481d73f8154</code></td>
+<td>ipv4: Use accessors for fib_info nexthop data</td>
+<td>前置准备：引入 accessor 函数 (访问器函数)</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>dcb1ecb50edf</code></td>
+<td>ipv4: Prepare for fib6_nh from a nexthop object</td>
+<td>前置准备：适配 fib6_nh</td>
+</tr>
+<tr>
+<td><strong>3</strong></td>
+<td><strong><code>4c7e8084fd46</code></strong></td>
+<td><strong>ipv4: Plumb support for nexthop object in a fib_info</strong></td>
+<td><strong>★ 本 patch：向 fib_info 植入 nexthop 指针</strong></td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>f88d8ea67fbd</code></td>
+<td>ipv6: Plumb support for nexthop object in a fib6_info</td>
+<td>IPv6 同步改造</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>54250805d8e4</code></td>
+<td>mlxsw: Fail attempts to use routes with nexthop objects</td>
+<td>mlxsw 驱动适配</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>6a87afc072c3</code></td>
+<td>mlx5: Fail attempts to use routes with nexthop objects</td>
+<td>mlx5 驱动适配</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>dbcc4fa718ee</code></td>
+<td>rocker: Fail attempts to use routes with nexthop objects</td>
+<td>rocker 驱动适配</td>
+</tr>
+</tbody></table>
+<p><strong>Merge 2</strong>: <code>48debfd736d5</code> — <strong>“net: Enable nexthop objects with IPv4 and IPv6 routes”</strong> (20 patches)</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Commit</th>
+<th>标题 (Title)</th>
+<th>说明 (Description)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1-10</td>
+<td><code>f88c9aa1</code>..<code>2d44234b</code></td>
+<td>ipv6: Handle all fib6_nh in a nexthop in …</td>
+<td>IPv6 遍历 nexthop 中的所有 fib6_nh</td>
+</tr>
+<tr>
+<td>11</td>
+<td><code>493ced1ac47c</code></td>
+<td>ipv4: Allow routes to use nexthop objects</td>
+<td><strong>路由真正可以使用 nexthop</strong></td>
+</tr>
+<tr>
+<td>12</td>
+<td><code>6c48ea5fe639</code></td>
+<td>ipv4: Optimization for fib_info lookup with nexthops</td>
+<td>查找优化</td>
+</tr>
+<tr>
+<td>13</td>
+<td><code>5b98324ebe29</code></td>
+<td>ipv6: Allow routes to use nexthop objects</td>
+<td>IPv6 路由使用 nexthop</td>
+</tr>
+<tr>
+<td>14</td>
+<td><code>7bf4796dd099</code></td>
+<td>nexthops: add support for replace</td>
+<td>nexthop 替换支持</td>
+</tr>
+<tr>
+<td>15-20</td>
+<td><code>243781db</code>..<code>cab14d10</code></td>
+<td>selftests: …</td>
+<td>测试用例 (test cases)</td>
+</tr>
+</tbody></table>
+<hr>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/FIB/" class="category-chain-item">FIB</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/fib/" class="print-no-link">#fib</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>Linux 内核 Nexthop 对象化: Patch 4c7e8084 深度解析</div>
+      <div>https://martinbj2008.github.io/2026/03/10/fib-nexthop-object-patch/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>March 10, 2026</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2026/03/12/fib-multipath-hash-detail/" title="ECMP Hash 计算详解: fib_multipath_hash() 四种策略全解析">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">ECMP Hash 计算详解: fib_multipath_hash() 四种策略全解析</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2026/03/08/2026-03-08-tcp-v4-connect-route-lookup/" title="tcp_v4_connect 三次路由查询详解">
+                        <span class="hidden-mobile">tcp_v4_connect 三次路由查询详解</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

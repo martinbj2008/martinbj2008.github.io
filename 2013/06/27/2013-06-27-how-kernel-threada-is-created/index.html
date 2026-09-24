@@ -1,0 +1,851 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="JUN 27TH, 2013 | COMMENTSHow to create a kernel thread 0.1. create a kthread by kthread_createkthread_create(threadfn, data, namefmt, arg...) example: file drivers&#x2F;char&#x2F;apm-emulation.c 1651">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How Kernel Thread Is Created">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/06/27/2013-06-27-how-kernel-threada-is-created/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="JUN 27TH, 2013 | COMMENTSHow to create a kernel thread 0.1. create a kthread by kthread_createkthread_create(threadfn, data, namefmt, arg...) example: file drivers&#x2F;char&#x2F;apm-emulation.c 1651">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2013-06-26T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.748Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="sched">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>How Kernel Thread Is Created - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="How Kernel Thread Is Created"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2013-06-27 00:00" pubdate>
+          June 27, 2013 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          8.5k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          71 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">How Kernel Thread Is Created</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <p>JUN 27TH, 2013 | COMMENTS<br>How to create a kernel thread</p>
+<h2 id="create-a-kthread-by-kthread-create">0.1. create a kthread by kthread_create</h2><p><code>kthread_create(threadfn, data, namefmt, arg...)</code></p>
+<p>example: file drivers&#x2F;char&#x2F;apm-emulation.c</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">651 </span>kapmd_tsk = kthread_create(kapmd, NULL, <span class="hljs-string">&quot;kapmd&quot;</span>);<br></code></pre></td></tr></table></figure>
+<span id="more"></span>
+
+<h2 id="Principle">0.2. Principle</h2><p>When kernel bootup, two important threads are created. INIT thread(PID1) and kthreadd(PID2).</p>
+<p>PID2 is what we analysis here.</p>
+<p>kthread_create_list: all the threads to be created are stored in this list.<br>To creae a new thread, we just fill the related information in a struct kthread_create_info, and list it to the list, then wait until the thread is ready by mutex.</p>
+<h3 id="kthreadd-PID2-main-function">0.2.1. kthreadd: PID2 main function</h3><p>it is a infinite loop, which removes the nodes from kthread_create_list, and creates a thread per node struct kthread_create_info, then notify the kthread is ready.</p>
+<p>After the new thread is created by <code>do_fork</code>, a common funtion <code>thread</code> is call as the new thread entry, not the <code>threadfn</code> we give by API <code>kthread_create</code></p>
+<p><code>thread</code> will do some common initialization, and notify new thread is ready, and then the real new thread function <code>threadfn</code> is called.</p>
+<p>All the kernel threads are the children of PID2(kthreadd).</p>
+<h2 id="Data-structure">0.3. Data structure</h2><h3 id="kthread-create-lock">0.3.1. kthread_create_lock</h3><p>spin lock kthread_create_lock is used to protect the kthread_create_list.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">23</span> <span class="hljs-type">static</span> <span class="hljs-title function_">DEFINE_SPINLOCK</span><span class="hljs-params">(kthread_create_lock)</span>;<br><span class="hljs-number">24</span> <span class="hljs-type">static</span> <span class="hljs-title function_">LIST_HEAD</span><span class="hljs-params">(kthread_create_list)</span>;<br><span class="hljs-number">25</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">task_struct</span> *<span class="hljs-title">kthreadd_task</span>;</span> &lt;== store PID2.<br></code></pre></td></tr></table></figure>
+
+<p>In order to create a kernel thread, this structure MUST be created and filled.</p>
+<h3 id="kthread-create-info">0.3.2. kthread_create_info</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">27</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">kthread_create_info</span></span><br><span class="hljs-class">28 &#123;</span><br><span class="hljs-number">29</span>         <span class="hljs-comment">/* Information passed to kthread() from kthreadd. */</span><br><span class="hljs-number">30</span>         <span class="hljs-type">int</span> (*threadfn)(<span class="hljs-type">void</span> *data);<br><span class="hljs-number">31</span>         <span class="hljs-type">void</span> *data;<br><span class="hljs-number">32</span>         <span class="hljs-type">int</span> node; &lt;== memory node;<br><span class="hljs-number">33</span><br><span class="hljs-number">34</span>         <span class="hljs-comment">/* Result passed back to kthread_create() from kthreadd. */</span><br><span class="hljs-number">35</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">task_struct</span> *<span class="hljs-title">result</span>;</span><br><span class="hljs-number">36</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">completion</span> <span class="hljs-title">done</span>;</span><br><span class="hljs-number">37</span><br><span class="hljs-number">38</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span> <span class="hljs-title">list</span>;</span><br><span class="hljs-number">39</span> &#125;;<br></code></pre></td></tr></table></figure>
+<h3 id="struct-kthread">0.3.3. struct kthread</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">41</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">kthread</span> &#123;</span><br><span class="hljs-number">42</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> flags;<br><span class="hljs-number">43</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> cpu;<br><span class="hljs-number">44</span>         <span class="hljs-type">void</span> *data;<br><span class="hljs-number">45</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">completion</span> <span class="hljs-title">parked</span>;</span><br><span class="hljs-number">46</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">completion</span> <span class="hljs-title">exited</span>;</span><br><span class="hljs-number">47</span> &#125;;<br></code></pre></td></tr></table></figure>
+<p>坑爹: There are a struct kthread and a static int kthread(void *_create). NND，看第一遍的时候没注意到。</p>
+<h2 id="method-kthread-create">0.4. method: kthread_create</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">13</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> kthread_create(threadfn, data, namefmt, arg...) \</span><br><span class="hljs-meta">14         kthread_create_on_node(threadfn, data, -1, namefmt, ##arg)</span><br></code></pre></td></tr></table></figure>
+
+<h3 id="Call-Trace">0.4.1. Call Trace</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs c">&gt; kthread_create<br>&gt; &gt; kthread_create_on_node<br>&gt; &gt; &gt; spin_lock(&amp;kthread_create_lock);<br>&gt; &gt; &gt; list_add_tail(&amp;create.<span class="hljs-built_in">list</span>, &amp;kthread_create_list);<br>&gt; &gt; &gt; spin_unlock(&amp;kthread_create_lock);<br>&gt; &gt; &gt; wake_up_process(kthreadd_task); &lt;== hi PID2, 来活了 !!!<br>&gt; &gt; &gt; wait_for_completion(&amp;create.done); &lt;== waiting <span class="hljs-keyword">for</span> ready.<br></code></pre></td></tr></table></figure>
+
+<h3 id="kthread-create-on-node">0.4.2. kthread_create_on_node</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">231 </span>/**<br><span class="hljs-symbol">232 </span> * kthread_create_on_node - create a kthread.<br><span class="hljs-symbol">233 </span> * @threadfn: the function <span class="hljs-keyword">to</span> <span class="hljs-keyword">run</span> until signal_pending(current).<br><span class="hljs-symbol">234 </span> * @<span class="hljs-keyword">data</span>: <span class="hljs-keyword">data</span> ptr <span class="hljs-keyword">for</span> @threadfn.<br><span class="hljs-symbol">235 </span> * @node: memory node number.<br><span class="hljs-symbol">236 </span> * @namefmt: printf-style <span class="hljs-keyword">name</span> <span class="hljs-keyword">for</span> the thread.<br><span class="hljs-symbol">237 </span> *<br><span class="hljs-symbol">238 </span> * Description: This helper function creates <span class="hljs-keyword">and</span> names a kernel<br><span class="hljs-symbol">239 </span> * thread.  The thread will be stopped: use wake_up_process() <span class="hljs-keyword">to</span> start<br><span class="hljs-symbol">240 </span> * it.  See also kthread_run().<br><span class="hljs-symbol">241 </span> *<br><span class="hljs-symbol">242 </span> * <span class="hljs-keyword">If</span> thread is going <span class="hljs-keyword">to</span> be bound <span class="hljs-keyword">on</span> a particular cpu, give its node<br><span class="hljs-symbol">243 </span> * in @node, <span class="hljs-keyword">to</span> <span class="hljs-keyword">get</span> NUMA affinity <span class="hljs-keyword">for</span> kthread stack, <span class="hljs-keyword">or</span> <span class="hljs-keyword">else</span> give -<span class="hljs-number">1</span>.<br><span class="hljs-symbol">244 </span> * When woken, the thread will <span class="hljs-keyword">run</span> @threadfn() with @<span class="hljs-keyword">data</span> as its<br><span class="hljs-symbol">245 </span> * argument. @threadfn() can either <span class="hljs-keyword">call</span> do_exit() directly <span class="hljs-keyword">if</span> it is a<br><span class="hljs-symbol">246 </span> * standalone thread <span class="hljs-keyword">for</span> which no one will <span class="hljs-keyword">call</span> kthread_stop(), <span class="hljs-keyword">or</span><br><span class="hljs-symbol">247 </span> * <span class="hljs-keyword">return</span> when <span class="hljs-comment">&#x27;kthread_should_stop()&#x27; is true (which means</span><br><span class="hljs-symbol">248 </span> * kthread_stop() has been called).  The <span class="hljs-keyword">return</span> value should be zero<br><span class="hljs-symbol">249 </span> * <span class="hljs-keyword">or</span> a negative <span class="hljs-keyword">error</span> number; it will be passed <span class="hljs-keyword">to</span> kthread_stop().<br><span class="hljs-symbol">250 </span> *<br><span class="hljs-symbol">251 </span> * Returns a task_struct <span class="hljs-keyword">or</span> ERR_PTR(-ENOMEM).<br><span class="hljs-symbol">252 </span> */<br><span class="hljs-symbol">253 </span>struct task_struct *kthread_create_on_node(<span class="hljs-keyword">int</span> (*threadfn)(void *<span class="hljs-keyword">data</span>),<br><span class="hljs-symbol">254 </span>                                           void *<span class="hljs-keyword">data</span>, <span class="hljs-keyword">int</span> node,<br><span class="hljs-symbol">255 </span>                                           const char namefmt[],<br><span class="hljs-symbol">256 </span>                                           ...)<br><span class="hljs-symbol">257 </span>&#123;<br><span class="hljs-symbol">258 </span>        struct kthread_create_info create;<br><span class="hljs-number">259</span><br><span class="hljs-symbol">260 </span>        create.threadfn = threadfn;<br><span class="hljs-symbol">261 </span>        create.<span class="hljs-keyword">data</span> = <span class="hljs-keyword">data</span>;<br><span class="hljs-symbol">262 </span>        create.node = node;<br><span class="hljs-symbol">263 </span>        init_completion(&amp;create.done);<br><span class="hljs-number">264</span><br><span class="hljs-symbol">265 </span>        spin_lock(&amp;kthread_create_lock);<br><span class="hljs-symbol">266 </span>        list_add_tail(&amp;create.<span class="hljs-keyword">list</span>, &amp;kthread_create_list);<br><span class="hljs-symbol">267 </span>        spin_unlock(&amp;kthread_create_lock);<br><span class="hljs-number">268</span><br><span class="hljs-symbol">269 </span>        wake_up_process(kthreadd_task);<br><span class="hljs-symbol">270 </span>        wait_for_completion(&amp;create.done);<br><span class="hljs-number">271</span><br><span class="hljs-symbol">272 </span>        <span class="hljs-keyword">if</span> (!IS_ERR(create.result)) &#123;<br><span class="hljs-symbol">273 </span>                static const struct sched_param param = &#123; .sched_priority = <span class="hljs-number">0</span> &#125;;<br><span class="hljs-symbol">274 </span>                va_list args;<br><span class="hljs-number">275</span><br><span class="hljs-symbol">276 </span>                va_start(args, namefmt);<br><span class="hljs-symbol">277 </span>                vsnprintf(create.result-&gt;comm, sizeof(create.result-&gt;comm),<br><span class="hljs-symbol">278 </span>                          namefmt, args);<br><span class="hljs-symbol">279 </span>                va_end(args);<br><span class="hljs-symbol">280 </span>                /*<br><span class="hljs-symbol">281 </span>                 * root may have changed our (kthreadd<span class="hljs-comment">&#x27;s) priority or CPU mask.</span><br><span class="hljs-symbol">282 </span>                 * The kernel thread should <span class="hljs-keyword">not</span> inherit these properties.<br><span class="hljs-symbol">283 </span>                 */<br><span class="hljs-symbol">284 </span>                sched_setscheduler_nocheck(create.result, SCHED_NORMAL, &amp;param);<br><span class="hljs-symbol">285 </span>                set_cpus_allowed_ptr(create.result, cpu_all_mask);<br><span class="hljs-symbol">286 </span>        &#125;<br><span class="hljs-symbol">287 </span>        <span class="hljs-keyword">return</span> create.result;<br><span class="hljs-symbol">288 </span>&#125;<br><span class="hljs-symbol">289 </span>EXPORT_SYMBOL(kthread_create_on_node);<br></code></pre></td></tr></table></figure>
+
+<h3 id="How-a-kthread-is-really-created">0.4.3. How a kthread is really created.</h3><h4 id="Call-Trace-1">0.4.3.1. Call Trace</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs c">&gt; kthreadd<br>&gt; &gt; spin_lock(&amp;kthread_create_lock);<br>&gt; &gt; create = list_entry(kthread_create_list.next, <span class="hljs-keyword">struct</span> kthread_create_info, <span class="hljs-built_in">list</span>);<br>&gt; &gt; list_del_init(&amp;create-&gt;<span class="hljs-built_in">list</span>);<br>&gt; &gt; spin_unlock(&amp;kthread_create_lock);<br>&gt; &gt; create_kthread(create);<br>&gt; &gt; &gt;  kernel_thread(kthread, create, CLONE_FS | CLONE_FILES | SIGCHLD);<br>&gt; &gt; &gt; &gt; do_fork<br>&gt; &gt; &gt; &gt; &gt; kthread<br>&gt; &gt; &gt; &gt; &gt; &gt; __set_current_state(TASK_UNINTERRUPTIBLE);<br>&gt; &gt; &gt; &gt; &gt; &gt; create-&gt;result = current;<br>&gt; &gt; &gt; &gt; &gt; &gt; complete(&amp;create-&gt;done); &lt;=== NOTIFY thread is ready !!!<br>NOTE: line <span class="hljs-number">224</span> the pameter kthread in funtion create_thread, is a funtion<br></code></pre></td></tr></table></figure>
+
+<h4 id="method-kthreadd">0.4.3.2. method kthreadd</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">446</span> <span class="hljs-type">int</span> <span class="hljs-title function_">kthreadd</span><span class="hljs-params">(<span class="hljs-type">void</span> *unused)</span><br>447 &#123;<br><span class="hljs-number">448</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">task_struct</span> *<span class="hljs-title">tsk</span> =</span> current;<br><span class="hljs-number">449</span><br><span class="hljs-number">450</span>         <span class="hljs-comment">/* Setup a clean context for our children to inherit. */</span><br><span class="hljs-number">451</span>         set_task_comm(tsk, <span class="hljs-string">&quot;kthreadd&quot;</span>);<br><span class="hljs-number">452</span>         ignore_signals(tsk);<br><span class="hljs-number">453</span>         set_cpus_allowed_ptr(tsk, cpu_all_mask);<br><span class="hljs-number">454</span>         set_mems_allowed(node_states[N_MEMORY]);<br><span class="hljs-number">455</span><br><span class="hljs-number">456</span>         current-&gt;flags |= PF_NOFREEZE;<br><span class="hljs-number">457</span><br><span class="hljs-number">458</span>         <span class="hljs-keyword">for</span> (;;) &#123;<br><span class="hljs-number">459</span>                 set_current_state(TASK_INTERRUPTIBLE);<br><span class="hljs-number">460</span>                 <span class="hljs-keyword">if</span> (list_empty(&amp;kthread_create_list))<br><span class="hljs-number">461</span>                         schedule();<br><span class="hljs-number">462</span>                 __set_current_state(TASK_RUNNING);<br><span class="hljs-number">463</span><br><span class="hljs-number">464</span>                 spin_lock(&amp;kthread_create_lock);<br><span class="hljs-number">465</span>                 <span class="hljs-keyword">while</span> (!list_empty(&amp;kthread_create_list)) &#123;<br><span class="hljs-number">466</span>                         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">kthread_create_info</span> *<span class="hljs-title">create</span>;</span><br><span class="hljs-number">467</span><br><span class="hljs-number">468</span>                         create = list_entry(kthread_create_list.next,<br><span class="hljs-number">469</span>                                             <span class="hljs-keyword">struct</span> kthread_create_info, <span class="hljs-built_in">list</span>);<br><span class="hljs-number">470</span>                         list_del_init(&amp;create-&gt;<span class="hljs-built_in">list</span>);<br><span class="hljs-number">471</span>                         spin_unlock(&amp;kthread_create_lock);<br><span class="hljs-number">472</span><br><span class="hljs-number">473</span>                         create_kthread(create);<br><span class="hljs-number">474</span><br><span class="hljs-number">475</span>                         spin_lock(&amp;kthread_create_lock);<br><span class="hljs-number">476</span>                 &#125;<br><span class="hljs-number">477</span>                 spin_unlock(&amp;kthread_create_lock);<br><span class="hljs-number">478</span>         &#125;<br><span class="hljs-number">479</span><br><span class="hljs-number">480</span>         <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">481</span> &#125;<br></code></pre></td></tr></table></figure>
+<h4 id="create-kthread">0.4.3.3. create_kthread</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">216</span> <span class="hljs-type">static</span> <span class="hljs-type">void</span> <span class="hljs-title function_">create_kthread</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> kthread_create_info *create)</span><br>217 &#123;<br><span class="hljs-number">218</span>         <span class="hljs-type">int</span> pid;<br><span class="hljs-number">219</span><br><span class="hljs-number">220</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_NUMA</span><br><span class="hljs-number">221</span>         current-&gt;pref_node_fork = create-&gt;node;<br><span class="hljs-number">222</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">223</span>         <span class="hljs-comment">/* We want our own signal handler (we take no signals by default). */</span><br><span class="hljs-number">224</span>         pid = kernel_thread(kthread, create, CLONE_FS | CLONE_FILES | SIGCHLD);<br><span class="hljs-number">225</span>         <span class="hljs-keyword">if</span> (pid &lt; <span class="hljs-number">0</span>) &#123;<br><span class="hljs-number">226</span>                 create-&gt;result = ERR_PTR(pid);<br><span class="hljs-number">227</span>                 complete(&amp;create-&gt;done);<br><span class="hljs-number">228</span>         &#125;<br><span class="hljs-number">229</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h4 id="kthread-do-some-preparation-before-really-run-the-threadfn">0.4.3.4. kthread: do some preparation before really run the threadfn.</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">175</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">kthread</span><span class="hljs-params">(<span class="hljs-type">void</span> *_create)</span><br>176 &#123;<br><span class="hljs-number">177</span>         <span class="hljs-comment">/* Copy data: it&#x27;s on kthread&#x27;s stack */</span><br><span class="hljs-number">178</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">kthread_create_info</span> *<span class="hljs-title">create</span> =</span> _create;<br><span class="hljs-number">179</span>         <span class="hljs-type">int</span> (*threadfn)(<span class="hljs-type">void</span> *data) = create-&gt;threadfn;<br><span class="hljs-number">180</span>         <span class="hljs-type">void</span> *data = create-&gt;data;<br><span class="hljs-number">181</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">kthread</span> <span class="hljs-title">self</span>;</span><br><span class="hljs-number">182</span>         <span class="hljs-type">int</span> ret;<br><span class="hljs-number">183</span><br><span class="hljs-number">184</span>         self.flags = <span class="hljs-number">0</span>;<br><span class="hljs-number">185</span>         self.data = data;<br><span class="hljs-number">186</span>         init_completion(&amp;self.exited);<br><span class="hljs-number">187</span>         init_completion(&amp;self.parked);<br><span class="hljs-number">188</span>         current-&gt;vfork_done = &amp;self.exited;<br><span class="hljs-number">189</span><br><span class="hljs-number">190</span>         <span class="hljs-comment">/* OK, tell user we&#x27;re spawned, wait for stop or wakeup */</span><br><span class="hljs-number">191</span>         __set_current_state(TASK_UNINTERRUPTIBLE);<br><span class="hljs-number">192</span>         create-&gt;result = current;<br><span class="hljs-number">193</span>         complete(&amp;create-&gt;done);   &lt;=== NOTIFY new thread is ready.<br><span class="hljs-number">194</span>         schedule();<br><span class="hljs-number">195</span><br><span class="hljs-number">196</span>         ret = -EINTR;<br><span class="hljs-number">197</span><br><span class="hljs-number">198</span>         <span class="hljs-keyword">if</span> (!test_bit(KTHREAD_SHOULD_STOP, &amp;self.flags)) &#123;<br><span class="hljs-number">199</span>                 __kthread_parkme(&amp;self);<br><span class="hljs-number">200</span>                 ret = threadfn(data);<br><span class="hljs-number">201</span>         &#125;<br><span class="hljs-number">202</span>         <span class="hljs-comment">/* we can&#x27;t just return, we must preserve &quot;self&quot; on stack */</span><br><span class="hljs-number">203</span>         do_exit(ret);<br><span class="hljs-number">204</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="Where-is-kthreadd-task-created-at">0.4.4. Where is kthreadd_task created at?</h3><p>PID2 and <code>kthreadd_task</code> is created just after boot up</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">364</span> <span class="hljs-type">static</span> noinline <span class="hljs-type">void</span> __init_refok <span class="hljs-title function_">rest_init</span><span class="hljs-params">(<span class="hljs-type">void</span>)</span><br>365 &#123;<br><span class="hljs-number">366</span>         <span class="hljs-type">int</span> pid;<br><span class="hljs-number">367</span><br><span class="hljs-number">368</span>         rcu_scheduler_starting();<br><span class="hljs-number">369</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment">370          * We need to spawn init first so that it obtains pid 1, however</span><br><span class="hljs-comment">371          * the init task will end up wanting to create kthreads, which, if</span><br><span class="hljs-comment">372          * we schedule it before we create kthreadd, will OOPS.</span><br><span class="hljs-comment">373          */</span><br><span class="hljs-number">374</span>         kernel_thread(kernel_init, <span class="hljs-literal">NULL</span>, CLONE_FS | CLONE_SIGHAND);<br><span class="hljs-number">375</span>         numa_default_policy();<br><span class="hljs-number">376</span>         pid = kernel_thread(kthreadd, <span class="hljs-literal">NULL</span>, CLONE_FS | CLONE_FILES); &lt;==PID1<br><span class="hljs-number">377</span>         rcu_read_lock();<br><span class="hljs-number">378</span>         kthreadd_task = find_task_by_pid_ns(pid, &amp;init_pid_ns); &lt;== PID2<br><span class="hljs-number">379</span>         rcu_read_unlock();<br><span class="hljs-number">380</span>         complete(&amp;kthreadd_done);<br><span class="hljs-number">381</span><br><span class="hljs-number">382</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment">383          * The boot idle thread must execute schedule()</span><br><span class="hljs-comment">384          * at least once to get things moving:</span><br><span class="hljs-comment">385          */</span><br><span class="hljs-number">386</span>         init_idle_bootup_task(current);<br><span class="hljs-number">387</span>         schedule_preempt_disabled();<br><span class="hljs-number">388</span>         <span class="hljs-comment">/* Call into cpu_idle with preempt disabled */</span><br><span class="hljs-number">389</span>         cpu_startup_entry(CPUHP_ONLINE);<br><span class="hljs-number">390</span> &#125;<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Sched/" class="category-chain-item">Sched</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/sched/" class="print-no-link">#sched</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>How Kernel Thread Is Created</div>
+      <div>https://martinbj2008.github.io/2013/06/27/2013-06-27-how-kernel-threada-is-created/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>June 27, 2013</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2013/07/10/2013-07-10-isolcpus/" title="draft: isolcpus">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">draft: isolcpus</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2013/06/26/2013-06-26-submit-kernel-patch-by-git-mail/" title="How to submit kernel patch by git-mail">
+                        <span class="hidden-mobile">How to submit kernel patch by git-mail</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

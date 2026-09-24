@@ -1,0 +1,916 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. netlink介绍  netlink是一种用于内核和用户空间进行数据交互的socket。 关于netlink的具体介绍，google给出更好的解释。  netlink是socket的一种，其的family号是PF_NETLINK, netlink包括很多种proto，并且用户可以根据自己的需要进行扩展。每个netlinksocket都有一个pid，该pid在所属proto下是唯一的。 在">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Netlink in kernel(continue)">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/03/15/2013-03-15-netlink-in-kernel/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. netlink介绍  netlink是一种用于内核和用户空间进行数据交互的socket。 关于netlink的具体介绍，google给出更好的解释。  netlink是socket的一种，其的family号是PF_NETLINK, netlink包括很多种proto，并且用户可以根据自己的需要进行扩展。每个netlinksocket都有一个pid，该pid在所属proto下是唯一的。 在">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2013-03-14T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.747Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="netlink">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>Netlink in kernel(continue) - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="Netlink in kernel(continue)"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2013-03-15 00:00" pubdate>
+          March 15, 2013 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          14k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          117 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">Netlink in kernel(continue)</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="netlink介绍">0.1. netlink介绍</h2><p>  netlink是一种用于内核和用户空间进行数据交互的socket。 关于netlink的具体介绍，google给出更好的解释。<br>  netlink是socket的一种，其的family号是PF_NETLINK, netlink包括很多种proto，并且用户可以根据自己的需要进行扩展。<br>每个netlinksocket都有一个pid，该pid在所属proto下是唯一的。 在netlink消息<br>传递是，pid常被用来标识目的地socket。 </p>
+<p>Every netlink socket is indicated by (net, proto, pid). </p>
+<ol>
+<li>net: the net namespace. </li>
+<li>proto: netlink proto. </li>
+<li>pid:</li>
+</ol>
+<span id="more"></span>
+
+<p>netlink的消息可以分为两种类型： 单播(unicast)和组播(broadcast). </p>
+<ol>
+<li>单播：目的socket是固定的。 </li>
+<li>组播：目的socket可以是一个，或者多个，甚至还可能是没有。 组播消息为被发送到每一个监听对应group的socket的接受队列上。</li>
+</ol>
+<p>netlink的使用跟普通socket基本相同。 “create&#x2F;bind send&#x2F;recv”</p>
+<p>每个netlink socket在创建时候必须指明 family 和proto。 family当然是netlink， proto可以个netlink支持的任意一个。</p>
+<p>每个proto下都可以有包含很多个组播组（group）。 如xfrm proto下面包含</p>
+<p>每个socket的创建是都可以指定对一个或者几个group感兴趣， 那么内核就自动将相关的group上的组播消息组播到该socket上。 该socket通过recv函数接受这些组播消息。</p>
+<p>注：每个netlinksocket在创建的时候必须指明所属的proto。 因此每个netlink socket只能监听其所在proto下的group组播消息。</p>
+<p>example： dump出内核里所有的interface， 那么我创建一个netlink socket， 然后调用send&#x2F;rcv让内核吧所有的interface信息输出。</p>
+<p>如果我们还要求： 监控interface状态改变， 比如 当”interface down&#x2F;up” 我们第一时间知道interface的新状态。 那么我们在创建sock的时候需指明要监听groupXX. group可以在创建socket时候指明， 也可以在socket创建后，通过set sockopt来更改。 当然也可在程序运行过程中通过sockopt更改。 这个group信息会保存在netlink sock的group里， 同时也会更新对应proto下的group信息。</p>
+<p>见示例代码。xxx todo.</p>
+<p>netlink_table</p>
+<p>netlink支持的所有proto都保存在一个数组nl_table中.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-type">static</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">netlink_table</span> *<span class="hljs-title">nl_table</span>;</span><br></code></pre></td></tr></table></figure>
+
+<p>也就是每个proto都对应一个<code>struct netlink_table</code>.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">119</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">netlink_table</span> &#123;</span><br><span class="hljs-number">120</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nl_pid_hash</span> <span class="hljs-title">hash</span>;</span>          <span class="hljs-comment">/* store all the netlink socket with hash list */</span><br><span class="hljs-number">121</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">hlist_head</span> <span class="hljs-title">mc_list</span>;</span>            <span class="hljs-comment">/* store all the netlink socket listen broadcast netlink message */</span><br><span class="hljs-number">122</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">listeners</span> __<span class="hljs-title">rcu</span> *<span class="hljs-title">listeners</span>;</span>      <span class="hljs-comment">/* store with a bit(1) for each netlink broadcast type, which is listened by one or more netlink sockets in mc_list(line 121) */</span><br><span class="hljs-number">123</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> nl_nonroot;<br><span class="hljs-number">124</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> groups;            <span class="hljs-comment">/* the counts of bits in listeners(line 122)*/</span><br><span class="hljs-number">125</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">mutex</span> *<span class="hljs-title">cb_mutex</span>;</span><br><span class="hljs-number">126</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">module</span> *<span class="hljs-title">module</span>;</span><br><span class="hljs-number">127</span>         <span class="hljs-type">int</span> registered;             <span class="hljs-comment">/* avoid repeated register. */</span><br><span class="hljs-number">128</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<p>针对特定的一个proto: </p>
+<ol>
+<li>hash: 所有的proto类型的netlink socket 都放到这个hash链表里。 </li>
+<li>mc_list: hash链表。记录希望监听组播消息的netlink socket.</li>
+<li>listeners: 记录哪些group被监听, 一个group占1位.</li>
+<li>nl_noroot: todo! </li>
+<li>groups: 被监听的group的总个数 </li>
+<li>cb_mutex: callback 函数用到的锁 </li>
+<li>module: 在lsm模式下使用（不严格）。 </li>
+<li>register: 是否被注册（占用）。</li>
+</ol>
+<p>同一个proto下的所有netlink socket都会挂载到 hash链上， 这些socket中凡是对希望监听group组播消息的， 都还会被挂载到mc_list上。 不论是要监听多少个group，每个sock都只作为mc_list一个节点，不会重复。</p>
+<p>当有组播消息产生时，kernel首先查看netlink_table-&gt;groups是否为0， 如果为0， 那么没有任何一个group没监听。显然，这种情况下，kernel啥也不用做。 直接退出。</p>
+<p>如果netlink_table-&gt;groups不为0，那么kernel会遍历mc_list， 取出每个netlink socket查看当前组播消息的类型是否是 在该socket所监听的goups里，如果是那么发送当前消息到该socket的接受队列里。 否则啥也不做，继续遍历mc_list里下一个netlink socket.</p>
+<p>如果要投递单播消息那么直接根据 netlink sock的pid， 在hash链里找到对应的socket并发送消息副本(skb clone or copy)到对应的sk接收队列 同时激发data_ready.</p>
+<p>[netlink_table的读写保护] (<a target="_blank" rel="noopener" href="http://martinbj2008.github.com/kernel/2013/03/11/netlink-grab/">http://martinbj2008.github.com/kernel/2013/03/11/netlink-grab/</a>)</p>
+<p>综述</p>
+<p>每个netlink socket 被创建的时候，proto已经被指定。 1. 保存了自己的groups，用来表明自己对莫个(些）group感兴趣。 2. 挂在自己的socket的到netlink_table-&gt;hash下。 3. 根据其是否对组播感兴趣（sock-&gt;groups &#x3D;&#x3D; 0 ?) ，决定是否挂到netlink_table-&gt;mc_list下 并根据需要更行netlink_table下的listeners的标志位和groups，</p>
+<p>每个proto在初始化时都: 1. 创建一个内核态netlink socket。(pid 为0) 2. 注册到一个netlink_table， ：lback函数,用于接受并处理该类型的netlink消息。 In initialization, each type netlink call netlink_kernel_create, which will prepare two parts: 1. Register in a netlink_table of nl_table, 2. Create a netlink kernel socket for the registered proto.</p>
+<p>要组播一个netlink消息,指定groups即可。 要发一个netlink消息给特定的netlink socket只需指明其pid即可。 所有发送给内核的单播消息pid为0。 内核根据proto自动调用相应proto的callback函数， 根据具体消息内容，有的还需要kernel为处理结构回送一个新的netlinkmessage 给发送方的netlink sock。</p>
+<p>netlink socket proto</p>
+<p>neilink支持的proto类型非常多。且可以自定义扩展(不建议), 建议使用generic进行扩展。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">7</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_ROUTE           0       <span class="hljs-comment">/* Routing/device hook                          */</span></span><br> <span class="hljs-number">8</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_UNUSED          1       <span class="hljs-comment">/* Unused number                                */</span></span><br> <span class="hljs-number">9</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_USERSOCK        2       <span class="hljs-comment">/* Reserved for user mode socket protocols      */</span></span><br><span class="hljs-number">10</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_FIREWALL        3       <span class="hljs-comment">/* Firewalling hook                             */</span></span><br><span class="hljs-number">11</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_SOCK_DIAG       4       <span class="hljs-comment">/* socket monitoring                            */</span></span><br><span class="hljs-number">12</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_NFLOG           5       <span class="hljs-comment">/* netfilter/iptables ULOG */</span></span><br><span class="hljs-number">13</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_XFRM            6       <span class="hljs-comment">/* ipsec */</span></span><br><span class="hljs-number">14</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_SELINUX         7       <span class="hljs-comment">/* SELinux event notifications */</span></span><br><span class="hljs-number">15</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_ISCSI           8       <span class="hljs-comment">/* Open-iSCSI */</span></span><br><span class="hljs-number">16</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_AUDIT           9       <span class="hljs-comment">/* auditing */</span></span><br><span class="hljs-number">17</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_FIB_LOOKUP      10</span><br><span class="hljs-number">18</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_CONNECTOR       11</span><br><span class="hljs-number">19</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_NETFILTER       12      <span class="hljs-comment">/* netfilter subsystem */</span></span><br><span class="hljs-number">20</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_IP6_FW          13</span><br><span class="hljs-number">21</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_DNRTMSG         14      <span class="hljs-comment">/* DECnet routing messages */</span></span><br><span class="hljs-number">22</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_KOBJECT_UEVENT  15      <span class="hljs-comment">/* Kernel messages to userspace */</span></span><br><span class="hljs-number">23</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_GENERIC         16</span><br><span class="hljs-number">24</span> <span class="hljs-comment">/* leave room for NETLINK_DM (DM Events) */</span><br><span class="hljs-number">25</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_SCSITRANSPORT   18      <span class="hljs-comment">/* SCSI Transports */</span></span><br><span class="hljs-number">26</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_ECRYPTFS        19</span><br><span class="hljs-number">27</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_RDMA            20</span><br><span class="hljs-number">28</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_CRYPTO          21      <span class="hljs-comment">/* Crypto layer */</span></span><br><span class="hljs-number">29</span><br><span class="hljs-number">30</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_INET_DIAG       NETLINK_SOCK_DIAG</span><br><span class="hljs-number">31</span><br><span class="hljs-number">32</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> MAX_LINKS 32</span><br></code></pre></td></tr></table></figure>
+<p>以下xfrm netlink为例，进行描述。</p>
+<p>Each proto of netlink has many groups, for example xfrm netlink:</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">462 </span>enum xfrm_nlgroups &#123;<br><span class="hljs-symbol">463 </span>        XFRMNLGRP_NONE,<br><span class="hljs-symbol">464 </span>#define XFRMNLGRP_NONE          XFRMNLGRP_NONE<br><span class="hljs-symbol">465 </span>        XFRMNLGRP_ACQUIRE,<br><span class="hljs-symbol">466 </span>#define XFRMNLGRP_ACQUIRE       XFRMNLGRP_ACQUIRE<br><span class="hljs-symbol">467 </span>        XFRMNLGRP_EXPIRE,<br><span class="hljs-symbol">468 </span>#define XFRMNLGRP_EXPIRE        XFRMNLGRP_EXPIRE<br><span class="hljs-symbol">469 </span>        XFRMNLGRP_SA,<br><span class="hljs-symbol">470 </span>#define XFRMNLGRP_SA            XFRMNLGRP_SA<br><span class="hljs-symbol">471 </span>        XFRMNLGRP_POLICY,<br><span class="hljs-symbol">472 </span>#define XFRMNLGRP_POLICY        XFRMNLGRP_POLICY<br><span class="hljs-symbol">473 </span>        XFRMNLGRP_AEVENTS,<br><span class="hljs-symbol">474 </span>#define XFRMNLGRP_AEVENTS       XFRMNLGRP_AEVENTS<br><span class="hljs-symbol">475 </span>        XFRMNLGRP_REPORT,<br><span class="hljs-symbol">476 </span>#define XFRMNLGRP_REPORT        XFRMNLGRP_REPORT<br><span class="hljs-symbol">477 </span>        XFRMNLGRP_MIGRATE,<br><span class="hljs-symbol">478 </span>#define XFRMNLGRP_MIGRATE       XFRMNLGRP_MIGRATE<br><span class="hljs-symbol">479 </span>        XFRMNLGRP_MAPPING,<br><span class="hljs-symbol">480 </span>#define XFRMNLGRP_MAPPING       XFRMNLGRP_MAPPING<br><span class="hljs-symbol">481 </span>        __XFRMNLGRP_MAX<br><span class="hljs-symbol">482 </span>&#125;;<br><span class="hljs-symbol">483 </span>#define XFRMNLGRP_MAX   (__XFRMNLGRP_MAX - <span class="hljs-number">1</span>)<br></code></pre></td></tr></table></figure>
+<h2 id="Data-struct-method">0.2. Data struct &amp;&amp; method</h2><h3 id="struct-netlink-sock">0.2.1. struct netlink_sock</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">67</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">netlink_sock</span> &#123;</span><br><span class="hljs-number">68</span>         <span class="hljs-comment">/* struct sock has to be the first member of netlink_sock */</span><br><span class="hljs-number">69</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sock</span>             <span class="hljs-title">sk</span>;</span><br><span class="hljs-number">70</span>         u32                     pid;<br><span class="hljs-number">71</span>         u32                     dst_pid;<br><span class="hljs-number">72</span>         u32                     dst_group;<br><span class="hljs-number">73</span>         u32                     flags;<br><span class="hljs-number">74</span>         u32                     subscriptions;<br><span class="hljs-number">75</span>         u32                     ngroups;<br><span class="hljs-number">76</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span>           *groups;<br><span class="hljs-number">77</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span>           state;<br><span class="hljs-number">78</span>         <span class="hljs-type">wait_queue_head_t</span>       wait;<br><span class="hljs-number">79</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">netlink_callback</span> *<span class="hljs-title">cb</span>;</span><br><span class="hljs-number">80</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">mutex</span>            *<span class="hljs-title">cb_mutex</span>;</span><br><span class="hljs-number">81</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">mutex</span>            <span class="hljs-title">cb_def_mutex</span>;</span><br><span class="hljs-number">82</span>         <span class="hljs-type">void</span>                    (*netlink_rcv)(<span class="hljs-keyword">struct</span> sk_buff *skb);<br><span class="hljs-number">83</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">module</span>           *<span class="hljs-title">module</span>;</span><br><span class="hljs-number">84</span> &#125;;<br></code></pre></td></tr></table></figure>
+<p>Every netlink socket has a pid. The pid of netlink kernel sockets is 0. All the the netlink message need kernel process, will be sent to them. (net, pid, protocol) will be used to locate the destination of a netlink message.</p>
+<h3 id="xfrm-netlink-Register">0.2.2. xfrm netlink Register</h3><p>To register a new netlink proto, two elements are needed in a struct netlink_kernel_cfg, a. groups: the MAX groups in this proto. b. input: a callback funciton for all received netlink message whose type is ‘proto’. Register a netlink type with NETLINK_XFRM, which has XFRMNLGRP_MAX groups. and all the netlink message will be processed by xfrm_netlink_rcv.</p>
+<p>We skip pernet initilization for xfrm, See XXX for detail about pernet ops. Finaly, xfrm_user_net_init is called.</p>
+<h3 id="xx">0.2.3. xx?</h3><ol>
+<li>xfrm_user_net_init</li>
+</ol>
+<p>  1.1 call netlink_kernel_create </p>
+<p>  1.2 init the xfrm netlink part of corresponding net namespace.</p>
+<ol start="2">
+<li>netlink_kernel_create(__netlink_kernel_create)</li>
+</ol>
+<pre><code class="hljs">2.1 create a netlink xfrm socket(kernel), which will be used a netlink kernel socket to rcv(queue) all the message send to “kernel/xfrm” 
+
+2.2 regiser the xfrm proto in the netlink_table.
+</code></pre>
+<p><code>__netlink_create</code>[socket_sock_png]: <a target="_blank" rel="noopener" href="http://martinbj2008.github.com/pic/socket_sock.png">http://martinbj2008.github.com/pic/socket_sock.png</a> [Source]<a target="_blank" rel="noopener" href="https://gist.github.com/martinbj2008/5096075#file-gistfile3-c">https://gist.github.com/martinbj2008/5096075#file-gistfile3-c</a></p>
+<h2 id="user-socket-creation">0.3. user socket creation</h2><p>netlink_sendmsg</p>
+<p>netlink_sendmsg —–&gt; netlink_unicastg —–&gt; nlk-&gt;netlink_rcv,</p>
+<p>Create a skb and init NETLINK_CB(skb), Copy the message data with memcpy_fromiovec.</p>
+<p>If its destination is a group, then broadcast it with netlink_broadcast, or it is a unicast message, send it by netlink_unicast.</p>
+<p>nlk-&gt;netlink_rcv is set in netlink_create fox xfrm netlink message, it is xfrm_netlink_rcv</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1313</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">netlink_sendmsg</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> kiocb *kiocb, <span class="hljs-keyword">struct</span> socket *sock,</span><br><span class="hljs-params"><span class="hljs-number">1314</span>                            <span class="hljs-keyword">struct</span> msghdr *msg, <span class="hljs-type">size_t</span> len)</span><br>1315 &#123;<br><span class="hljs-number">1316</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sock_iocb</span> *<span class="hljs-title">siocb</span> =</span> kiocb_to_siocb(kiocb);<br><span class="hljs-number">1317</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sock</span> *<span class="hljs-title">sk</span> =</span> sock-&gt;sk;<br><span class="hljs-number">1318</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">netlink_sock</span> *<span class="hljs-title">nlk</span> =</span> nlk_sk(sk);<br><span class="hljs-number">1319</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sockaddr_nl</span> *<span class="hljs-title">addr</span> =</span> msg-&gt;msg_name;<br><span class="hljs-number">1320</span>         u32 dst_pid;<br><span class="hljs-number">1321</span>         u32 dst_group;<br><span class="hljs-number">1322</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sk_buff</span> *<span class="hljs-title">skb</span>;</span><br><span class="hljs-number">1323</span>         <span class="hljs-type">int</span> err;<br><span class="hljs-number">1324</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">scm_cookie</span> <span class="hljs-title">scm</span>;</span><br><span class="hljs-number">1325</span><br><span class="hljs-number">1326</span>         <span class="hljs-keyword">if</span> (msg-&gt;msg_flags&amp;MSG_OOB)<br><span class="hljs-number">1327</span>                 <span class="hljs-keyword">return</span> -EOPNOTSUPP;<br><span class="hljs-number">1328</span><br><span class="hljs-number">1329</span>         <span class="hljs-keyword">if</span> (<span class="hljs-literal">NULL</span> == siocb-&gt;scm)<br><span class="hljs-number">1330</span>                 siocb-&gt;scm = &amp;scm;<br><span class="hljs-number">1331</span><br><span class="hljs-number">1332</span>         err = scm_send(sock, msg, siocb-&gt;scm, <span class="hljs-literal">true</span>);<br><span class="hljs-number">1333</span>         <span class="hljs-keyword">if</span> (err &lt; <span class="hljs-number">0</span>)<br><span class="hljs-number">1334</span>                 <span class="hljs-keyword">return</span> err;<br><span class="hljs-number">1335</span><br><span class="hljs-number">1336</span>         <span class="hljs-keyword">if</span> (msg-&gt;msg_namelen) &#123;<br><span class="hljs-number">1337</span>                 err = -EINVAL;<br><span class="hljs-number">1338</span>                 <span class="hljs-keyword">if</span> (addr-&gt;nl_family != AF_NETLINK)<br><span class="hljs-number">1339</span>                         <span class="hljs-keyword">goto</span> out;<br><span class="hljs-number">1340</span>                 dst_pid = addr-&gt;nl_pid;<br><span class="hljs-number">1341</span>                 dst_group = ffs(addr-&gt;nl_groups);<br><span class="hljs-number">1342</span>                 err =  -EPERM;<br><span class="hljs-number">1343</span>                 <span class="hljs-keyword">if</span> ((dst_group || dst_pid) &amp;&amp;<br><span class="hljs-number">1344</span>                     !netlink_capable(sock, NL_NONROOT_SEND))<br><span class="hljs-number">1345</span>                         <span class="hljs-keyword">goto</span> out;<br><span class="hljs-number">1346</span>         &#125; <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-number">1347</span>                 dst_pid = nlk-&gt;dst_pid;<br><span class="hljs-number">1348</span>                 dst_group = nlk-&gt;dst_group;<br><span class="hljs-number">1349</span>         &#125;<br><span class="hljs-number">1350</span><br><span class="hljs-number">1351</span>         <span class="hljs-keyword">if</span> (!nlk-&gt;pid) &#123;<br><span class="hljs-number">1352</span>                 err = netlink_autobind(sock);<br><span class="hljs-number">1353</span>                 <span class="hljs-keyword">if</span> (err)<br><span class="hljs-number">1354</span>                         <span class="hljs-keyword">goto</span> out;<br><span class="hljs-number">1355</span>         &#125;<br><span class="hljs-number">1356</span><br><span class="hljs-number">1357</span>         err = -EMSGSIZE;<br><span class="hljs-number">1358</span>         <span class="hljs-keyword">if</span> (len &gt; sk-&gt;sk_sndbuf - <span class="hljs-number">32</span>)<br><span class="hljs-number">1359</span>                 <span class="hljs-keyword">goto</span> out;<br><span class="hljs-number">1360</span>         err = -ENOBUFS;<br><span class="hljs-number">1361</span>         skb = alloc_skb(len, GFP_KERNEL);<br><span class="hljs-number">1362</span>         <span class="hljs-keyword">if</span> (skb == <span class="hljs-literal">NULL</span>)<br><span class="hljs-number">1363</span>                 <span class="hljs-keyword">goto</span> out;<br><span class="hljs-number">1364</span><br><span class="hljs-number">1365</span>         NETLINK_CB(skb).pid     = nlk-&gt;pid;<br><span class="hljs-number">1366</span>         NETLINK_CB(skb).dst_group = dst_group;<br><span class="hljs-number">1367</span>         <span class="hljs-built_in">memcpy</span>(NETLINK_CREDS(skb), &amp;siocb-&gt;scm-&gt;creds, <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> ucred));<br><span class="hljs-number">1368</span><br><span class="hljs-number">1369</span>         err = -EFAULT;<br><span class="hljs-number">1370</span>         <span class="hljs-keyword">if</span> (memcpy_fromiovec(skb_put(skb, len), msg-&gt;msg_iov, len)) &#123;<br><span class="hljs-number">1371</span>                 kfree_skb(skb);<br><span class="hljs-number">1372</span>                 <span class="hljs-keyword">goto</span> out;<br><span class="hljs-number">1373</span>         &#125;<br><span class="hljs-number">1374</span><br><span class="hljs-number">1375</span>         err = security_netlink_send(sk, skb);<br><span class="hljs-number">1376</span>         <span class="hljs-keyword">if</span> (err) &#123;<br><span class="hljs-number">1377</span>                 kfree_skb(skb);<br><span class="hljs-number">1378</span>                 <span class="hljs-keyword">goto</span> out;<br><span class="hljs-number">1379</span>         &#125;<br><span class="hljs-number">1380</span><br><span class="hljs-number">1381</span>         <span class="hljs-keyword">if</span> (dst_group) &#123;<br><span class="hljs-number">1382</span>                 atomic_inc(&amp;skb-&gt;users);<br><span class="hljs-number">1383</span>                 netlink_broadcast(sk, skb, dst_pid, dst_group, GFP_KERNEL);<br><span class="hljs-number">1384</span>         &#125;<br><span class="hljs-number">1385</span>         err = netlink_unicast(sk, skb, dst_pid, msg-&gt;msg_flags&amp;MSG_DONTWAIT);<br><span class="hljs-number">1386</span><br><span class="hljs-number">1387</span> out:<br><span class="hljs-number">1388</span>         scm_destroy(siocb-&gt;scm);<br><span class="hljs-number">1389</span>         <span class="hljs-keyword">return</span> err;<br><span class="hljs-number">1390</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="netlink-unicast">0.3.1. netlink_unicast</h3><p>find the dest netlink socket by its pid.<br>if dst socket is a kernl socket, call netlink_unicast_kernel. for example : in the case, dump xfrm sa. else put the skb into the dest socket recv queue.<br>891 int netlink_unicast(struct sock ssk, struct sk_buff skb, 892 u32 pid, int nonblock) 893 { 894 struct sock *sk; 895 int err; 896 long timeo; 897 898 skb &#x3D; netlink_trim(skb, gfp_any()); 899 900 timeo &#x3D; sock_sndtimeo(ssk, nonblock); 901 retry: 902 sk &#x3D; netlink_getsockbypid(ssk, pid); 903 if (IS_ERR(sk)) { 904 kfree_skb(skb); 905 return PTR_ERR(sk); 906 } 907 if (netlink_is_kernel(sk)) 908 return netlink_unicast_kernel(sk, skb); 909 910 if (sk_filter(sk, skb)) { 911 err &#x3D; skb-&gt;len; 912 kfree_skb(skb); 913 sock_put(sk); 914 return err; 915 } 916 917 err &#x3D; netlink_attachskb(sk, skb, &amp;timeo, ssk); 918 if (err &#x3D;&#x3D; 1) 919 goto retry; 920 if (err) 921 return err; 922 923 return netlink_sendskb(sk, skb); 924 } 925 EXPORT_SYMBOL(netlink_unicast);</p>
+<p>broadcast message</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">905</span> <span class="hljs-type">int</span> <span class="hljs-title function_">netlink_unicast</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sock *ssk, <span class="hljs-keyword">struct</span> sk_buff *skb,</span><br><span class="hljs-params"><span class="hljs-number">906</span>                     u32 pid, <span class="hljs-type">int</span> nonblock)</span><br>907 &#123;<br><span class="hljs-number">908</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sock</span> *<span class="hljs-title">sk</span>;</span><br><span class="hljs-number">909</span>         <span class="hljs-type">int</span> err;<br><span class="hljs-number">910</span>         <span class="hljs-type">long</span> timeo;<br><span class="hljs-number">911</span><br><span class="hljs-number">912</span>         skb = netlink_trim(skb, gfp_any());<br><span class="hljs-number">913</span><br><span class="hljs-number">914</span>         timeo = sock_sndtimeo(ssk, nonblock);<br><span class="hljs-number">915</span> retry:<br><span class="hljs-number">916</span>         sk = netlink_getsockbypid(ssk, pid);<br><span class="hljs-number">917</span>         <span class="hljs-keyword">if</span> (IS_ERR(sk)) &#123;<br><span class="hljs-number">918</span>                 kfree_skb(skb);<br><span class="hljs-number">919</span>                 <span class="hljs-keyword">return</span> PTR_ERR(sk);<br><span class="hljs-number">920</span>         &#125;<br><span class="hljs-number">921</span>         <span class="hljs-keyword">if</span> (netlink_is_kernel(sk))<br><span class="hljs-number">922</span>                 <span class="hljs-keyword">return</span> netlink_unicast_kernel(sk, skb);<br><span class="hljs-number">923</span><br><span class="hljs-number">924</span>         <span class="hljs-keyword">if</span> (sk_filter(sk, skb)) &#123;<br><span class="hljs-number">925</span>                 err = skb-&gt;len;<br><span class="hljs-number">926</span>                 kfree_skb(skb);<br><span class="hljs-number">927</span>                 sock_put(sk);<br><span class="hljs-number">928</span>                 <span class="hljs-keyword">return</span> err;<br><span class="hljs-number">929</span>         &#125;<br><span class="hljs-number">930</span><br><span class="hljs-number">931</span>         err = netlink_attachskb(sk, skb, &amp;timeo, ssk);<br><span class="hljs-number">932</span>         <span class="hljs-keyword">if</span> (err == <span class="hljs-number">1</span>)<br><span class="hljs-number">933</span>                 <span class="hljs-keyword">goto</span> retry;<br><span class="hljs-number">934</span>         <span class="hljs-keyword">if</span> (err)<br><span class="hljs-number">935</span>                 <span class="hljs-keyword">return</span> err;<br><span class="hljs-number">936</span><br><span class="hljs-number">937</span>         <span class="hljs-keyword">return</span> netlink_sendskb(sk, skb);<br><span class="hljs-number">938</span> &#125;<br></code></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">889</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">netlink_unicast_kernel</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-keyword">struct</span> sk_buff *skb)</span><br>890 &#123;<br><span class="hljs-number">891</span>         <span class="hljs-type">int</span> ret;<br><span class="hljs-number">892</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">netlink_sock</span> *<span class="hljs-title">nlk</span> =</span> nlk_sk(sk);<br><span class="hljs-number">893</span><br><span class="hljs-number">894</span>         ret = -ECONNREFUSED;<br><span class="hljs-number">895</span>         <span class="hljs-keyword">if</span> (nlk-&gt;netlink_rcv != <span class="hljs-literal">NULL</span>) &#123;<br><span class="hljs-number">896</span>                 ret = skb-&gt;len;<br><span class="hljs-number">897</span>                 skb_set_owner_r(skb, sk);<br><span class="hljs-number">898</span>                 nlk-&gt;netlink_rcv(skb);<br><span class="hljs-number">899</span>         &#125;<br><span class="hljs-number">900</span>         kfree_skb(skb);<br><span class="hljs-number">901</span>         sock_put(sk);<br><span class="hljs-number">902</span>         <span class="hljs-keyword">return</span> ret;<br><span class="hljs-number">903</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">86</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">listeners</span> &#123;</span><br><span class="hljs-number">87</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rcu_head</span>         <span class="hljs-title">rcu</span>;</span><br><span class="hljs-number">88</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span>           masks[<span class="hljs-number">0</span>];<br><span class="hljs-number">89</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">106</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nl_pid_hash</span> &#123;</span><br><span class="hljs-number">107</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">hlist_head</span> *<span class="hljs-title">table</span>;</span><br><span class="hljs-number">108</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> rehash_time;<br><span class="hljs-number">109</span><br><span class="hljs-number">110</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> mask;<br><span class="hljs-number">111</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> shift;<br><span class="hljs-number">112</span><br><span class="hljs-number">113</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> entries;<br><span class="hljs-number">114</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> max_shift;<br><span class="hljs-number">115</span><br><span class="hljs-number">116</span>         u32 rnd;<br><span class="hljs-number">117</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">55</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rtnl_link</span> &#123;</span><br><span class="hljs-number">56</span>         rtnl_doit_func          doit;<br><span class="hljs-number">57</span>         rtnl_dumpit_func        dumpit;<br><span class="hljs-number">58</span>         rtnl_calcit_func        calcit;<br><span class="hljs-number">59</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">101</span> <span class="hljs-type">static</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rtnl_link</span> *<span class="hljs-title">rtnl_msg_handlers</span>[<span class="hljs-title">RTNL_FAMILY_MAX</span> + 1];</span><br>pernet ops<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2124</span> <span class="hljs-type">static</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">pernet_operations</span> __<span class="hljs-title">net_initdata</span> <span class="hljs-title">netlink_net_ops</span> =</span> &#123;<br><span class="hljs-number">2125</span>         .init = netlink_net_init,<br><span class="hljs-number">2126</span>         .<span class="hljs-built_in">exit</span> = netlink_net_exit,<br><span class="hljs-number">2127</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h3 id="socket-related-ops">0.3.2. socket related ops</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">396 </span>static struct proto netlink_proto = &#123;<br><span class="hljs-symbol">397 </span>        .<span class="hljs-keyword">name</span>     = <span class="hljs-string">&quot;NETLINK&quot;</span>,<br><span class="hljs-symbol">398 </span>        .owner    = THIS_MODULE,<br><span class="hljs-symbol">399 </span>        .obj_size = sizeof(struct netlink_sock),<br><span class="hljs-symbol">400 </span>&#125;;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2061</span> <span class="hljs-type">static</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">proto_ops</span> <span class="hljs-title">netlink_ops</span> =</span> &#123;<br><span class="hljs-number">2062</span>         .family =       PF_NETLINK,<br><span class="hljs-number">2063</span>         .owner =        THIS_MODULE,<br><span class="hljs-number">2064</span>         .release =      netlink_release,<br><span class="hljs-number">2065</span>         .bind =         netlink_bind,<br><span class="hljs-number">2066</span>         .connect =      netlink_connect,<br><span class="hljs-number">2067</span>         .socketpair =   sock_no_socketpair,<br><span class="hljs-number">2068</span>         .accept =       sock_no_accept,<br><span class="hljs-number">2069</span>         .getname =      netlink_getname,<br><span class="hljs-number">2070</span>         .poll =         datagram_poll,<br><span class="hljs-number">2071</span>         .ioctl =        sock_no_ioctl,<br><span class="hljs-number">2072</span>         .listen =       sock_no_listen,<br><span class="hljs-number">2073</span>         .shutdown =     sock_no_shutdown,<br><span class="hljs-number">2074</span>         .setsockopt =   netlink_setsockopt,<br><span class="hljs-number">2075</span>         .getsockopt =   netlink_getsockopt,<br><span class="hljs-number">2076</span>         .sendmsg =      netlink_sendmsg,<br><span class="hljs-number">2077</span>         .recvmsg =      netlink_recvmsg,<br><span class="hljs-number">2078</span>         .mmap =         sock_no_mmap,<br><span class="hljs-number">2079</span>         .sendpage =     sock_no_sendpage,<br><span class="hljs-number">2080</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2082</span> <span class="hljs-type">static</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net_proto_family</span> <span class="hljs-title">netlink_family_ops</span> =</span> &#123;<br><span class="hljs-number">2083</span>         .family = PF_NETLINK,<br><span class="hljs-number">2084</span>         .create = netlink_create,<br><span class="hljs-number">2085</span>         .owner  = THIS_MODULE,  <span class="hljs-comment">/* for consistency 8) */</span><br><span class="hljs-number">2086</span> &#125;;<br></code></pre></td></tr></table></figure>
+<h3 id="Initialization">0.3.3. Initialization</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2129</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> __init <span class="hljs-title function_">netlink_proto_init</span><span class="hljs-params">(<span class="hljs-type">void</span>)</span><br>2130 &#123;<br><span class="hljs-number">2131</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sk_buff</span> *<span class="hljs-title">dummy_skb</span>;</span><br><span class="hljs-number">2132</span>         <span class="hljs-type">int</span> i;<br><span class="hljs-number">2133</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> limit;<br><span class="hljs-number">2134</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> order;<br><span class="hljs-number">2135</span>         <span class="hljs-type">int</span> err = proto_register(&amp;netlink_proto, <span class="hljs-number">0</span>);<br><span class="hljs-number">2136</span><br><span class="hljs-number">2137</span>         <span class="hljs-keyword">if</span> (err != <span class="hljs-number">0</span>)<br><span class="hljs-number">2138</span>                 <span class="hljs-keyword">goto</span> out;<br><span class="hljs-number">2139</span><br><span class="hljs-number">2140</span>         BUILD_BUG_ON(<span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> netlink_skb_parms) &gt; <span class="hljs-keyword">sizeof</span>(dummy_skb-&gt;cb));<br><span class="hljs-number">2141</span><br><span class="hljs-number">2142</span>         nl_table = kcalloc(MAX_LINKS, <span class="hljs-keyword">sizeof</span>(*nl_table), GFP_KERNEL);<br><span class="hljs-number">2143</span>         <span class="hljs-keyword">if</span> (!nl_table)<br><span class="hljs-number">2144</span>                 <span class="hljs-keyword">goto</span> panic;<br><span class="hljs-number">2145</span><br><span class="hljs-number">2146</span>         <span class="hljs-keyword">if</span> (totalram_pages &gt;= (<span class="hljs-number">128</span> * <span class="hljs-number">1024</span>))<br><span class="hljs-number">2147</span>                 limit = totalram_pages &gt;&gt; (<span class="hljs-number">21</span> - PAGE_SHIFT);<br><span class="hljs-number">2148</span>         <span class="hljs-keyword">else</span><br><span class="hljs-number">2149</span>                 limit = totalram_pages &gt;&gt; (<span class="hljs-number">23</span> - PAGE_SHIFT);<br><span class="hljs-number">2150</span><br><span class="hljs-number">2151</span>         order = get_bitmask_order(limit) - <span class="hljs-number">1</span> + PAGE_SHIFT;<br><span class="hljs-number">2152</span>         limit = (<span class="hljs-number">1UL</span> &lt;&lt; order) / <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> hlist_head);<br><span class="hljs-number">2153</span>         order = get_bitmask_order(min(limit, (<span class="hljs-type">unsigned</span> <span class="hljs-type">long</span>)UINT_MAX)) - <span class="hljs-number">1</span>;<br><span class="hljs-number">2154</span><br><span class="hljs-number">2155</span>         <span class="hljs-keyword">for</span> (i = <span class="hljs-number">0</span>; i &lt; MAX_LINKS; i++) &#123;<br><span class="hljs-number">2156</span>                 <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nl_pid_hash</span> *<span class="hljs-title">hash</span> =</span> &amp;nl_table[i].hash;<br><span class="hljs-number">2157</span><br><span class="hljs-number">2158</span>                 hash-&gt;table = nl_pid_hash_zalloc(<span class="hljs-number">1</span> * <span class="hljs-keyword">sizeof</span>(*hash-&gt;table));<br><span class="hljs-number">2159</span>                 <span class="hljs-keyword">if</span> (!hash-&gt;table) &#123;<br><span class="hljs-number">2160</span>                         <span class="hljs-keyword">while</span> (i-- &gt; <span class="hljs-number">0</span>)<br><span class="hljs-number">2161</span>                                 nl_pid_hash_free(nl_table[i].hash.table,<br><span class="hljs-number">2162</span>                                                  <span class="hljs-number">1</span> * <span class="hljs-keyword">sizeof</span>(*hash-&gt;table));<br><span class="hljs-number">2163</span>                         kfree(nl_table);<br><span class="hljs-number">2164</span>                         <span class="hljs-keyword">goto</span> panic;<br><span class="hljs-number">2165</span>                 &#125;<br><span class="hljs-number">2166</span>                 hash-&gt;max_shift = order;<br><span class="hljs-number">2167</span>                 hash-&gt;shift = <span class="hljs-number">0</span>;<br><span class="hljs-number">2168</span>                 hash-&gt;mask = <span class="hljs-number">0</span>;<br><span class="hljs-number">2169</span>                 hash-&gt;rehash_time = jiffies;<br><span class="hljs-number">2170</span>         &#125;<br><span class="hljs-number">2171</span><br><span class="hljs-number">2172</span>         netlink_add_usersock_entry();<br><span class="hljs-number">2173</span><br><span class="hljs-number">2174</span>         sock_register(&amp;netlink_family_ops);<br><span class="hljs-number">2175</span>         register_pernet_subsys(&amp;netlink_net_ops);<br><span class="hljs-number">2176</span>         <span class="hljs-comment">/* The netlink device handler may be needed early. */</span><br><span class="hljs-number">2177</span>         rtnetlink_init();<br><span class="hljs-number">2178</span> out:<br><span class="hljs-number">2179</span>         <span class="hljs-keyword">return</span> err;<br><span class="hljs-number">2180</span> panic:<br><span class="hljs-number">2181</span>         panic(<span class="hljs-string">&quot;netlink_init: Cannot allocate nl_table\n&quot;</span>);<br><span class="hljs-number">2182</span> &#125;<br><span class="hljs-number">2183</span><br><span class="hljs-number">2184</span> core_initcall(netlink_proto_init);<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Netlink/" class="category-chain-item">Netlink</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/netlink/" class="print-no-link">#netlink</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>Netlink in kernel(continue)</div>
+      <div>https://martinbj2008.github.io/2013/03/15/2013-03-15-netlink-in-kernel/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>March 15, 2013</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2013/06/23/2013-06-23-promsic-bit-in-struct-net-devices-flag/" title="PROMISC in net device-&gt;flag">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">PROMISC in net device-&gt;flag</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2013/03/11/2013-06-22-netlink-grab/" title="netlink grab">
+                        <span class="hidden-mobile">netlink grab</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

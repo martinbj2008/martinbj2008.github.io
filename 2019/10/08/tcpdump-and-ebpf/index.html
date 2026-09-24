@@ -1,0 +1,869 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="以内核v6.6代码，介绍tcpdump程序如何与内核交互，加载bpf程序的。 0.1. 加载：libpcap通过sockopt里的“SO_ATTACH_FILTER“，在 packet socket下的”sk_filter“挂载prog呈现。 0.2. 运行：当skb报文到达packet_rcv时候， 通过调用___bpf_prog_run函数（注意，这个函数是3个下滑线，区别于2个下划线的函数）">
+<meta property="og:type" content="article">
+<meta property="og:title" content="tcpdump and ebpf">
+<meta property="og:url" content="https://martinbj2008.github.io/2019/10/08/tcpdump-and-ebpf/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="以内核v6.6代码，介绍tcpdump程序如何与内核交互，加载bpf程序的。 0.1. 加载：libpcap通过sockopt里的“SO_ATTACH_FILTER“，在 packet socket下的”sk_filter“挂载prog呈现。 0.2. 运行：当skb报文到达packet_rcv时候， 通过调用___bpf_prog_run函数（注意，这个函数是3个下滑线，区别于2个下划线的函数）">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2019-10-08T03:18:21.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.754Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="Tcpdump">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>tcpdump and ebpf - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="tcpdump and ebpf"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2019-10-08 11:18" pubdate>
+          October 8, 2019 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          8k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          68 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">tcpdump and ebpf</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <p>以内核v6.6代码，介绍tcpdump程序如何与内核交互，加载bpf程序的。</p>
+<h2 id="加载：">0.1. 加载：</h2><p>libpcap通过sockopt里的“SO_ATTACH_FILTER“，<br>在 packet socket下的”sk_filter“挂载prog呈现。</p>
+<h2 id="运行：">0.2. 运行：</h2><p>当skb报文到达packet_rcv时候， 通过调用___bpf_prog_run函数（注意，这个函数是3个下滑线，区别于2个下划线的函数）<br>运行”sk_filter“对应的prog。<br>其中prog的<br>&#x3D;&#x3D;&gt;packet_rcv<br>&#x3D;&#x3D;&gt; &#x3D;&#x3D;&gt; run_filter<br>&#x3D;&#x3D;&gt; &#x3D;&#x3D;&gt; &#x3D;&#x3D;&gt;bpf_prog_run_clear_cb</p>
+<span id="more"></span>
+
+<p> 563 struct sk_filter {<br> 564         refcount_t      refcnt;<br> 565         struct rcu_head rcu;<br> 566         struct bpf_prog *prog;<br> 567 };</p>
+<h3 id="加载调用栈：">0.2.1. 加载调用栈：</h3><figure class="highlight sml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><code class="hljs sml">==&gt; pcap_setfilter<br>==&gt; ==&gt; p-&gt;setfilter_op 相当于pcap_setfilter_linux<br>==&gt; ==&gt; ==&gt; pcap_setfilter_linux<br>==&gt; ==&gt; ==&gt; ==&gt; set_kernel_filter<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; setsockopt(<span class="hljs-keyword">handle</span>-&gt;fd, <span class="hljs-type">SOL_SOCKET</span>, <span class="hljs-type">SO_ATTACH_FILTER</span>,<br>——————————————————kernel——————————————————<br>==&gt; setsockopt<br>==&gt; ==&gt; __sys_setsockopt<br>==&gt; ==&gt; sock_setsockopt<br>==&gt; ==&gt; ==&gt; sk_setsockopt<br>==&gt; ==&gt; ==&gt; ==&gt;sk_attach_filter <br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; __get_filter<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; bpf_prepare_filter<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; bpf_migrate_filter<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt;  ==&gt;bpf_prog_select_runtime<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt;bpf_prog_select_func<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt;  ==&gt; ==&gt; ==&gt;fp-&gt;bpf_func = interpreters[(round_up(stack_depth, <span class="hljs-number">32</span>) / <span class="hljs-number">32</span>) - <span class="hljs-number">1</span>];<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; __sk_attach_prog<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; rcu_assign_pointer(sk-&gt;sk_filter, fp);<br></code></pre></td></tr></table></figure>
+
+<h3 id="函数定义">0.2.2. 函数定义</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">3723 </span><span class="hljs-keyword">int</span><br><span class="hljs-symbol">3724 </span>pcap_setfilter(pcap_t *p, struct bpf_program *fp)<br><span class="hljs-symbol">3725 </span>&#123;<br><span class="hljs-symbol">3726 </span>        <span class="hljs-keyword">return</span> (p-&gt;setfilter_op(p, fp));<br><span class="hljs-symbol">3727 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight sml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs sml"><span class="hljs-number">992</span> static <span class="hljs-built_in">int</span><br> <span class="hljs-number">993</span> pcap_activate_linux(pcap_t *<span class="hljs-keyword">handle</span>)<br> <span class="hljs-number">994</span> &#123;<br>...<br><span class="hljs-number">1119</span>         <span class="hljs-keyword">handle</span>-&gt;setfilter_op = pcap_setfilter_linux;<br><span class="hljs-number">1120</span>         <span class="hljs-keyword">handle</span>-&gt;setdirection_op = pcap_setdirection_linux;<br><span class="hljs-number">1121</span>         <span class="hljs-keyword">handle</span>-&gt;set_datalink_op = pcap_set_datalink_linux;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">4315</span> static int<br><span class="hljs-number">4316</span> pcap_setfilter_linux<span class="hljs-punctuation">(</span>pcap_t *handle, struct bpf_program *filter<span class="hljs-punctuation">)</span><br><span class="hljs-number">4317</span> &#123;<br>...<br><span class="hljs-number">4429</span>         if <span class="hljs-punctuation">(</span>can_filter_in_kernel<span class="hljs-punctuation">)</span> &#123;<br><span class="hljs-number">4430</span>                 if <span class="hljs-punctuation">(</span><span class="hljs-punctuation">(</span>err = set_kernel_filter<span class="hljs-punctuation">(</span>handle, &amp;fcode<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> == <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">5414</span> static int<br><span class="hljs-number">5415</span> set_kernel_filter<span class="hljs-punctuation">(</span>pcap_t *handle, struct sock_fprog *fcode<span class="hljs-punctuation">)</span><br><span class="hljs-number">5416</span> &#123;<br>…<br><span class="hljs-number">5453</span>         if <span class="hljs-punctuation">(</span>setsockopt<span class="hljs-punctuation">(</span>handle-&gt;fd, SOL_SOCKET, SO_ATTACH_FILTER,<br><span class="hljs-number">5454</span>                        &amp;total_fcode, sizeof<span class="hljs-punctuation">(</span>total_fcode<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> == <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> &#123;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight coq"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs coq">——————————————————kernel——————————————————<br>==&gt; setsockopt<br>==&gt; ==&gt; __sys_setsockopt<br>==&gt; ==&gt; sock_setsockopt<br>==&gt; ==&gt; ==&gt; sk_setsockopt<br>==&gt; ==&gt; ==&gt; ==&gt;sk_attach_filter <br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; __get_filter<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; bpf_prepare_filter<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; bpf_migrate_filter<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt;  ==&gt;bpf_prog_select_runtime<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt;bpf_prog_select_func<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt;  ==&gt; ==&gt; ==&gt;fp-&gt;bpf_func = interpreters[(round_up(stack_depth, <span class="hljs-number">32</span>) / <span class="hljs-number">32</span>) - <span class="hljs-number">1</span>];<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; __sk_attach_prog<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; rcu_assign_pointer(sk-&gt;sk_filter, fp);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-number">1094</span> <span class="hljs-function"><span class="hljs-type">int</span> <span class="hljs-title">sk_setsockopt</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-type">int</span> level, <span class="hljs-type">int</span> optname,</span></span><br><span class="hljs-params"><span class="hljs-function"><span class="hljs-number">1095</span>                   <span class="hljs-type">sockptr_t</span> optval, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> optlen)</span></span><br><span class="hljs-function">1096 </span>&#123;<br>...<br><span class="hljs-number">1306</span>         <span class="hljs-keyword">case</span> SO_ATTACH_FILTER: &#123;<br><span class="hljs-number">1307</span>                 <span class="hljs-keyword">struct</span> <span class="hljs-title class_">sock_fprog</span> fprog;<br><span class="hljs-number">1308</span><br><span class="hljs-number">1309</span>                 ret = <span class="hljs-built_in">copy_bpf_fprog_from_user</span>(&amp;fprog, optval, optlen);<br><span class="hljs-number">1310</span>                 <span class="hljs-keyword">if</span> (!ret)<br><span class="hljs-number">1311</span>                         ret = <span class="hljs-built_in">sk_attach_filter</span>(&amp;fprog, sk);<br><span class="hljs-number">1312</span>                 <span class="hljs-keyword">break</span>;<br><span class="hljs-number">1313</span>         &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">1528</span> int sk_attach_filter<span class="hljs-punctuation">(</span>struct sock_fprog *fprog, struct sock *sk<span class="hljs-punctuation">)</span><br> <span class="hljs-number">1529</span> &#123;<br> <span class="hljs-number">1530</span>         struct bpf_prog *prog = __get_filter<span class="hljs-punctuation">(</span>fprog, sk<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>…<br><span class="hljs-number">1536</span>         err = __sk_attach_prog<span class="hljs-punctuation">(</span>prog, sk<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>...<br> <span class="hljs-number">1543</span> &#125;<br> <span class="hljs-number">1544</span> EXPORT_SYMBOL_GPL<span class="hljs-punctuation">(</span>sk_attach_filter<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">1481</span> static<br> <span class="hljs-number">1482</span> struct bpf_prog *__get_filter<span class="hljs-punctuation">(</span>struct sock_fprog *fprog, struct sock *sk<span class="hljs-punctuation">)</span><br> <span class="hljs-number">1483</span> &#123;<br> <span class="hljs-number">1484</span>         unsigned int fsize = bpf_classic_proglen<span class="hljs-punctuation">(</span>fprog<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br> <span class="hljs-number">1485</span>         struct bpf_prog *prog<span class="hljs-comment">;</span><br>...<br> <span class="hljs-number">1495</span>         prog = bpf_prog_alloc<span class="hljs-punctuation">(</span>bpf_prog_size<span class="hljs-punctuation">(</span>fprog-&gt;len<span class="hljs-punctuation">)</span>, <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>...<br> <span class="hljs-number">1499</span>         if <span class="hljs-punctuation">(</span>copy_from_user<span class="hljs-punctuation">(</span>prog-&gt;insns, fprog-&gt;filter, fsize<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> &#123;<br>...<br><br> <span class="hljs-number">1515</span>         return bpf_prepare_filter<span class="hljs-punctuation">(</span>prog, NULL<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br> <span class="hljs-number">1516</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight mipsasm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs mipsasm"> <span class="hljs-number">1312</span> static struct <span class="hljs-keyword">bpf_prog </span>*<span class="hljs-keyword">bpf_prepare_filter(struct </span><span class="hljs-keyword">bpf_prog </span>*<span class="hljs-built_in">fp</span>,<br> <span class="hljs-number">1313</span>                                            <span class="hljs-keyword">bpf_aux_classic_check_t </span>trans)<br> <span class="hljs-number">1314</span> &#123;<br>...<br> <span class="hljs-number">1318</span>         <span class="hljs-built_in">fp</span>-&gt;<span class="hljs-keyword">jited </span>= <span class="hljs-number">0</span>;<br>...<br> <span class="hljs-number">1340</span>         <span class="hljs-keyword">bpf_jit_compile(fp);</span><br><span class="hljs-keyword"></span>...<br> <span class="hljs-number">1345</span>         if (!<span class="hljs-built_in">fp</span>-&gt;<span class="hljs-keyword">jited)</span><br><span class="hljs-keyword"></span> <span class="hljs-number">1346</span>                 <span class="hljs-built_in">fp</span> = <span class="hljs-keyword">bpf_migrate_filter(fp);</span><br><span class="hljs-keyword"></span> <span class="hljs-number">1347</span><br> <span class="hljs-number">1348</span>         return <span class="hljs-built_in">fp</span>;<br> <span class="hljs-number">1349</span> &#125;<br></code></pre></td></tr></table></figure>
+
+
+<figure class="highlight mipsasm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs mipsasm"> <span class="hljs-number">1242</span> static struct <span class="hljs-keyword">bpf_prog </span>*<span class="hljs-keyword">bpf_migrate_filter(struct </span><span class="hljs-keyword">bpf_prog </span>*<span class="hljs-built_in">fp</span>)<br> <span class="hljs-number">1243</span> &#123;<br>...<br><span class="hljs-number">1298</span>         <span class="hljs-built_in">fp</span> = <span class="hljs-keyword">bpf_prog_select_runtime(fp, </span>&amp;err);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">2179</span> struct bpf_prog *bpf_prog_select_runtime<span class="hljs-punctuation">(</span>struct bpf_prog *fp, int *err<span class="hljs-punctuation">)</span><br><span class="hljs-number">2180</span> &#123;<br>...<br><span class="hljs-number">2193</span>         bpf_prog_select_func<span class="hljs-punctuation">(</span>fp<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">2157 </span>static void bpf_prog_select_func(struct bpf_prog *fp)<br><span class="hljs-symbol">2158 </span>&#123;<br><span class="hljs-symbol">2159 </span>#ifndef CONFIG_BPF_JIT_ALWAYS_ON<br><span class="hljs-symbol">2160 </span>        u32 stack_depth = max_t(u32, fp-&gt;aux-&gt;stack_depth, <span class="hljs-number">1</span>);<br><span class="hljs-number">2161</span><br><span class="hljs-symbol">2162 </span>        fp-&gt;bpf_func = interpreters[(round_up(stack_depth, <span class="hljs-number">32</span>) / <span class="hljs-number">32</span>) - <span class="hljs-number">1</span>];<br><span class="hljs-symbol">2163 </span>#<span class="hljs-keyword">else</span><br><span class="hljs-symbol">2164 </span>        fp-&gt;bpf_func = __bpf_prog_ret0_warn;<br><span class="hljs-symbol">2165 </span>#endif<br><span class="hljs-symbol">2166 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1455 </span>static <span class="hljs-keyword">int</span> __sk_attach_prog(struct bpf_prog *prog, struct sock *sk)<br><span class="hljs-symbol">1456 </span>&#123;<br><span class="hljs-symbol">1457 </span>        struct sk_filter *fp, *old_fp;<br><span class="hljs-number">1458</span><br><span class="hljs-symbol">1459 </span>        fp = kmalloc(sizeof(*fp), GFP_KERNEL);<br><span class="hljs-symbol">1460 </span>        <span class="hljs-keyword">if</span> (!fp)<br><span class="hljs-symbol">1461 </span>                <span class="hljs-keyword">return</span> -ENOMEM;<br><span class="hljs-number">1462</span><br><span class="hljs-symbol">1463 </span>        fp-&gt;prog = prog;<br><span class="hljs-number">1464</span><br><span class="hljs-symbol">1465 </span>        <span class="hljs-keyword">if</span> (!__sk_filter_charge(sk, fp)) &#123;<br><span class="hljs-symbol">1466 </span>                kfree(fp);<br><span class="hljs-symbol">1467 </span>                <span class="hljs-keyword">return</span> -ENOMEM;<br><span class="hljs-symbol">1468 </span>        &#125;<br><span class="hljs-symbol">1469 </span>        refcount_set(&amp;fp-&gt;refcnt, <span class="hljs-number">1</span>);<br><span class="hljs-number">1470</span><br><span class="hljs-symbol">1471 </span>        old_fp = rcu_dereference_protected(sk-&gt;sk_filter,<br><span class="hljs-symbol">1472 </span>                                           lockdep_sock_is_held(sk));<br><span class="hljs-symbol">1473 </span>        rcu_assign_pointer(sk-&gt;sk_filter, fp);<br><span class="hljs-number">1474</span><br><span class="hljs-symbol">1475 </span>        <span class="hljs-keyword">if</span> (old_fp)<br><span class="hljs-symbol">1476 </span>                sk_filter_uncharge(sk, old_fp);<br><span class="hljs-number">1477</span><br><span class="hljs-symbol">1478 </span>        <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-symbol">1479 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D; 内核态运行 &#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;&#x3D;<br>运行：<br>当skb报文到达packet_rcv时候， 通过调用bpf run函数，<br>运行”sk_filter“对应的prog。<br>prog的bpf_func在attach时候被初始化为interpreters函数指针中对应的栈大小的函数。也就是___bpf_prog_run函数。</p>
+<figure class="highlight zephir"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs zephir">==&gt;packet_rcv<br>==&gt; ==&gt; run_filter<br>==&gt; ==&gt; ==&gt; bpf_prog_run_clear_cb<br>==&gt; ==&gt; ==&gt; ==&gt; bpf_prog_run_pin_on_cpu<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; bpf_prog_run<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt;__bpf_prog_run(prog, ctx, bpf_dispatcher_nop_func); <span class="hljs-comment">//注意这个函数是两个下划线，不是三个下划线的___bpf_prog_run</span><br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; dfunc(ctx, prog-&gt;insnsi, prog-&gt;bpf_func);   <span class="hljs-comment">//dfunc，相当于bpf_dispatcher_nop_func(ctx, prog-&gt;insnsi, prog-&gt;bpf_func); </span><br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; bpf_dispatcher_nop_func(ctx, prog-&gt;insnsi, prog-&gt;bpf_func) <span class="hljs-comment">//bpf_func</span><br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; ==&gt; bpf_func(ctx, insnsi);   <span class="hljs-comment">//</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-number">2121</span> <span class="hljs-function"><span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title">packet_rcv</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sk_buff *skb, <span class="hljs-keyword">struct</span> net_device *dev,</span></span><br><span class="hljs-params"><span class="hljs-function"><span class="hljs-number">2122</span>                       <span class="hljs-keyword">struct</span> packet_type *pt, <span class="hljs-keyword">struct</span> net_device *orig_dev)</span></span><br><span class="hljs-function">2123 </span>&#123;<br>...<br><span class="hljs-number">2161</span>         res = <span class="hljs-built_in">run_filter</span>(skb, sk, snaplen);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">2079</span> static unsigned int run_filter<span class="hljs-punctuation">(</span>struct sk_buff *skb,<br><span class="hljs-number">2080</span>                                const struct sock *sk,<br><span class="hljs-number">2081</span>                                unsigned int res<span class="hljs-punctuation">)</span><br><span class="hljs-number">2082</span> &#123;<br>...<br><span class="hljs-number">2085</span>         rcu_read_lock<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">2086</span>         filter = rcu_dereference<span class="hljs-punctuation">(</span>sk-&gt;sk_filter<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">2087</span>         if <span class="hljs-punctuation">(</span>filter != NULL<span class="hljs-punctuation">)</span><br><span class="hljs-number">2088</span>                 res = bpf_prog_run_clear_cb<span class="hljs-punctuation">(</span>filter-&gt;prog, skb<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">2089</span>         rcu_read_unlock<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>...<br></code></pre></td></tr></table></figure>
+
+
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs cpp"> <span class="hljs-number">749</span> <span class="hljs-function"><span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> u32 <span class="hljs-title">bpf_prog_run_clear_cb</span><span class="hljs-params">(<span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> bpf_prog *prog,</span></span><br><span class="hljs-params"><span class="hljs-function"> <span class="hljs-number">750</span>                                         <span class="hljs-keyword">struct</span> sk_buff *skb)</span></span><br><span class="hljs-function"> 751 </span>&#123;<br>...<br> <span class="hljs-number">758</span>         res = <span class="hljs-built_in">bpf_prog_run_pin_on_cpu</span>(prog, skb);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight dart"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs dart"><span class="hljs-number">618</span> <span class="hljs-keyword">static</span> inline u32 <span class="hljs-title function_">bpf_prog_run_pin_on_cpu</span>(<span class="hljs-keyword">const</span> struct bpf_prog *prog,<br> <span class="hljs-number">619</span>                                           <span class="hljs-keyword">const</span> <span class="hljs-keyword">void</span> *ctx)<br> <span class="hljs-number">620</span> &#123;<br>...<br> <span class="hljs-number">623</span>         <span class="hljs-title function_">migrate_disable</span>();<br> <span class="hljs-number">624</span>         ret = <span class="hljs-title function_">bpf_prog_run</span>(prog, ctx);<br> <span class="hljs-number">625</span>         <span class="hljs-title function_">migrate_enable</span>();<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">605 </span>static __always_inline u32 bpf_prog_run(const struct bpf_prog *prog, const void *ctx)<br><span class="hljs-symbol">606 </span>&#123;<br><span class="hljs-symbol">607 </span>        <span class="hljs-keyword">return</span> __bpf_prog_run(prog, ctx, bpf_dispatcher_nop_func);<br><span class="hljs-symbol">608 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs rust"> <span class="hljs-number">581</span> <span class="hljs-keyword">static</span> __always_inline <span class="hljs-type">u32</span> __bpf_prog_run(<span class="hljs-keyword">const</span> <span class="hljs-keyword">struct</span> <span class="hljs-title class_">bpf_prog</span> *prog,<br> <span class="hljs-number">582</span>                                           <span class="hljs-keyword">const</span> void *ctx,<br> <span class="hljs-number">583</span>                                           bpf_dispatcher_<span class="hljs-keyword">fn</span> <span class="hljs-title function_">dfunc</span>)<br> <span class="hljs-number">584</span> &#123;<br>...<br> <span class="hljs-number">600</span>                 ret = <span class="hljs-title function_ invoke__">dfunc</span>(ctx, prog<span class="hljs-punctuation">-&gt;</span>insnsi, prog<span class="hljs-punctuation">-&gt;</span>bpf_func);<br></code></pre></td></tr></table></figure>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1162 </span>static __always_inline __nocfi unsigned <span class="hljs-keyword">int</span> bpf_dispatcher_nop_func(<br><span class="hljs-symbol">1163 </span>        const void *ctx,<br><span class="hljs-symbol">1164 </span>        const struct bpf_insn *insnsi,<br><span class="hljs-symbol">1165 </span>        bpf_func_t bpf_func)<br><span class="hljs-symbol">1166 </span>&#123;<br><span class="hljs-symbol">1167 </span>        <span class="hljs-keyword">return</span> bpf_func(ctx, insnsi);<br><span class="hljs-symbol">1168 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1644 </span>/**<br><span class="hljs-symbol">1645 </span> *      ___bpf_prog_run - <span class="hljs-keyword">run</span> eBPF program <span class="hljs-keyword">on</span> a given context<br><span class="hljs-symbol">1646 </span> *      @regs: is the array of MAX_BPF_EXT_REG eBPF pseudo-registers<br><span class="hljs-symbol">1647 </span> *      @insn: is the array of eBPF instructions<br><span class="hljs-symbol">1648 </span> *<br><span class="hljs-symbol">1649 </span> * Decode <span class="hljs-keyword">and</span> execute eBPF instructions.<br><span class="hljs-symbol">1650 </span> *<br><span class="hljs-symbol">1651 </span> * <span class="hljs-keyword">Return</span>: whatever value is in %BPF_R0 at program exit<br><span class="hljs-symbol">1652 </span> */<br><span class="hljs-symbol">1653 </span>static u64 ___bpf_prog_run(u64 *regs, const struct bpf_insn *insn)<br><span class="hljs-symbol">1654 </span>&#123;<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Tcpdump/" class="category-chain-item">Tcpdump</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/Tcpdump/" class="print-no-link">#Tcpdump</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>tcpdump and ebpf</div>
+      <div>https://martinbj2008.github.io/2019/10/08/tcpdump-and-ebpf/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>October 8, 2019</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2019/10/09/how-tcpdump-work-with-vlan-filter/" title="how tcpdump work with vlan filter">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">how tcpdump work with vlan filter</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2019/09/25/how-tcpdump-work-with-cbpf/" title="how tcpdump work with cbpf">
+                        <span class="hidden-mobile">how tcpdump work with cbpf</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

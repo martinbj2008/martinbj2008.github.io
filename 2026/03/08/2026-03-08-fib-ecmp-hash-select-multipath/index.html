@@ -1,0 +1,1088 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. 一、概述 (Overview)Linux 内核中的 ECMP（Equal-Cost Multi-Path）选路机制允许将流量分布到多条等价路径上。 核心实现主要分为两个阶段, 分别对应两个函数。  hash计算 ：           fib_multipath_hash()（net&#x2F;ipv4&#x2F;route.c）—— 计算 hash 值  如根据skb或flow的五元组、三元组等策略，计算">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ECMP选路: fib_select_multipath Hash 机制深度解析">
+<meta property="og:url" content="https://martinbj2008.github.io/2026/03/08/2026-03-08-fib-ecmp-hash-select-multipath/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. 一、概述 (Overview)Linux 内核中的 ECMP（Equal-Cost Multi-Path）选路机制允许将流量分布到多条等价路径上。 核心实现主要分为两个阶段, 分别对应两个函数。  hash计算 ：           fib_multipath_hash()（net&#x2F;ipv4&#x2F;route.c）—— 计算 hash 值  如根据skb或flow的五元组、三元组等策略，计算">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ecmp-dataflow.svg">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ecmp-hash-equal-weight.svg">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ecmp-hash-weighted.svg">
+<meta property="article:published_time" content="2026-03-08T09:15:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.752Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="fib">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/ecmp-dataflow.svg">
+  
+  
+  
+  <title>ECMP选路: fib_select_multipath Hash 机制深度解析 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="ECMP选路: fib_select_multipath Hash 机制深度解析"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2026-03-08 17:15" pubdate>
+          March 8, 2026 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          9.6k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          81 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">ECMP选路: fib_select_multipath Hash 机制深度解析</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="一、概述-Overview">0.1. 一、概述 (Overview)</h2><p>Linux 内核中的 ECMP（Equal-Cost Multi-Path）选路机制允许将流量分布到多条等价路径上。</p>
+<p>核心实现主要分为两个阶段, 分别对应两个函数。</p>
+<ol>
+<li>hash计算 ：           <code>fib_multipath_hash()</code>（<code>net/ipv4/route.c</code>）—— <strong>计算 hash 值</strong><br>  如根据skb或flow的五元组、三元组等策略，计算出hash值。</li>
+<li>根据hash选择nexthop： <code>fib_select_multipath()</code>（<code>net/ipv4/fib_semantics.c</code>）—— <strong>用 hash 选 nexthop</strong></li>
+</ol>
+<p>本文基于 Linux v6.16 源码，逐层剖析 ECMP 的 hash 计算与路径选择全流程。<br>使用<code>coebuddy+claude-4.6-ops</code>辅助生成。</p>
+<h2 id="二、整体架构-Architecture">0.2. 二、整体架构 (Architecture)</h2><h3 id="2-1-内部流程">0.2.1. 2.1 内部流程</h3><img src="/images/ecmp-dataflow.svg" srcset="/img/loading.gif" lazyload class>
+
+<span id="more"></span>
+
+<h3 id="2-2-ECMP入口">0.2.2. 2.2 ECMP入口</h3><p>ECMP选路的入口是 <code>fib_select_path()</code>，当路由查找命中多路径时触发：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-comment">/* net/ipv4/fib_semantics.c */</span><br><span class="hljs-number">2208</span> <span class="hljs-type">void</span> <span class="hljs-title function_">fib_select_path</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net *net, <span class="hljs-keyword">struct</span> fib_result *res,</span><br><span class="hljs-params"><span class="hljs-number">2209</span>                      <span class="hljs-keyword">struct</span> flowi4 *fl4, <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> sk_buff *skb)</span><br>2210 &#123;<br><span class="hljs-number">2211</span>         <span class="hljs-keyword">if</span> (fl4-&gt;flowi4_oif)<br><span class="hljs-number">2212</span>                 <span class="hljs-keyword">goto</span> check_saddr;<br><span class="hljs-number">2213</span><br><span class="hljs-number">2214</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_IP_ROUTE_MULTIPATH</span><br><span class="hljs-number">2215</span>         <span class="hljs-keyword">if</span> (fib_info_num_path(res-&gt;fi) &gt; <span class="hljs-number">1</span>) &#123;<br><span class="hljs-number">2216</span>                 <span class="hljs-type">int</span> h = fib_multipath_hash(net, fl4, skb, <span class="hljs-literal">NULL</span>);<br><span class="hljs-number">2217</span><br><span class="hljs-number">2218</span>                 fib_select_multipath(res, h, fl4);<br><span class="hljs-number">2219</span>         &#125;<br><span class="hljs-number">2220</span>         <span class="hljs-keyword">else</span><br><span class="hljs-number">2221</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br>...<br><span class="hljs-number">2239</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h2 id="三、第一阶段：Hash-计算-—-fib-multipath-hash">0.3. 三、第一阶段：Hash 计算 — fib_multipath_hash()</h2><p><code>fib_multipath_hash()</code> 根据 sysctl <code>net.ipv4.fib_multipath_hash_policy</code> 分发 4 种 hash 策略：</p>
+<table>
+<thead>
+<tr>
+<th>策略</th>
+<th align="center">sysctl 值</th>
+<th>Hash 字段</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>L3</strong></td>
+<td align="center">0</td>
+<td>saddr + daddr</td>
+<td>通用默认</td>
+</tr>
+<tr>
+<td><strong>L4</strong></td>
+<td align="center">1</td>
+<td>五元组</td>
+<td>双 ISP &#x2F; 数据中心</td>
+</tr>
+<tr>
+<td><strong>Inner L3</strong></td>
+<td align="center">2</td>
+<td>内层 saddr + daddr</td>
+<td>GRE&#x2F;VXLAN 中转</td>
+</tr>
+<tr>
+<td><strong>Custom</strong></td>
+<td align="center">3</td>
+<td>位掩码自定义</td>
+<td>高级定制</td>
+</tr>
+</tbody></table>
+<p>各策略的完整源码解析与 hash 算法（SipHash&#x2F;jhash2、seed 防极化）详见 <a href="/2026/03/12/fib-multipath-hash-detail/" title="ECMP Hash 计算详解: fib_multipath_hash() 四种策略全解析">ECMP Hash 计算详解: fib_multipath_hash() 四种策略全解析</a>。</p>
+<h2 id="四、第二阶段：用-Hash-选-Nexthop-—-fib-select-multipath">0.4. 四、第二阶段：用 Hash 选 Nexthop — fib_select_multipath()</h2><h3 id="4-1-函数实现">0.4.1. 4.1 函数实现</h3><p>定义在 <code>net/ipv4/fib_semantics.c</code>：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-comment">/* net/ipv4/fib_semantics.c */</span><br><span class="hljs-number">2164</span> <span class="hljs-type">void</span> <span class="hljs-title function_">fib_select_multipath</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> fib_result *res, <span class="hljs-type">int</span> hash,</span><br><span class="hljs-params"><span class="hljs-number">2165</span>                           <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> flowi4 *fl4)</span><br>2166 &#123;<br><span class="hljs-number">2167</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">fib_info</span> *<span class="hljs-title">fi</span> =</span> res-&gt;fi;<br><span class="hljs-number">2168</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net</span> *<span class="hljs-title">net</span> =</span> fi-&gt;fib_net;<br><span class="hljs-number">2169</span>         <span class="hljs-type">bool</span> use_neigh;<br><span class="hljs-number">2170</span>         <span class="hljs-type">int</span> score = <span class="hljs-number">-1</span>;<br><span class="hljs-number">2171</span>         __be32 saddr;<br><span class="hljs-number">2172</span><br><span class="hljs-number">2173</span>         <span class="hljs-comment">/* nexthop object 走单独路径 */</span><br><span class="hljs-number">2174</span>         <span class="hljs-keyword">if</span> (unlikely(res-&gt;fi-&gt;nh)) &#123;<br><span class="hljs-number">2175</span>                 nexthop_path_fib_result(res, hash);<br><span class="hljs-number">2176</span>                 <span class="hljs-keyword">return</span>;<br><span class="hljs-number">2177</span>         &#125;<br><span class="hljs-number">2178</span><br><span class="hljs-number">2179</span>         use_neigh = READ_ONCE(net-&gt;ipv4.sysctl_fib_multipath_use_neigh);<br><span class="hljs-number">2180</span>         saddr = fl4 ? fl4-&gt;saddr : <span class="hljs-number">0</span>;<br><span class="hljs-number">2181</span><br><span class="hljs-number">2182</span>         change_nexthops(fi) &#123;<br><span class="hljs-number">2183</span>                 <span class="hljs-type">int</span> nh_upper_bound, nh_score = <span class="hljs-number">0</span>;<br><span class="hljs-number">2184</span><br><span class="hljs-number">2185</span>                 <span class="hljs-comment">/* dead 或 linkdown 的 nexthop，upper_bound 为 -1 */</span><br><span class="hljs-number">2186</span>                 nh_upper_bound = atomic_read(&amp;nexthop_nh-&gt;fib_nh_upper_bound);<br><span class="hljs-number">2187</span>                 <span class="hljs-keyword">if</span> (nh_upper_bound == <span class="hljs-number">-1</span> ||<br><span class="hljs-number">2188</span>                     (use_neigh &amp;&amp; !fib_good_nh(nexthop_nh)))<br><span class="hljs-number">2189</span>                         <span class="hljs-keyword">continue</span>;<br><span class="hljs-number">2190</span><br><span class="hljs-number">2191</span>                 <span class="hljs-comment">/* 源地址匹配加 2 分 */</span><br><span class="hljs-number">2192</span>                 <span class="hljs-keyword">if</span> (saddr &amp;&amp; nexthop_nh-&gt;nh_saddr == saddr)<br><span class="hljs-number">2193</span>                         nh_score += <span class="hljs-number">2</span>;<br><span class="hljs-number">2194</span>                 <span class="hljs-comment">/* hash 落在区间内加 1 分 */</span><br><span class="hljs-number">2195</span>                 <span class="hljs-keyword">if</span> (hash &lt;= nh_upper_bound)<br><span class="hljs-number">2196</span>                         nh_score++;<br><span class="hljs-number">2197</span>                 <span class="hljs-comment">/* 选最高分的 nexthop */</span><br><span class="hljs-number">2198</span>                 <span class="hljs-keyword">if</span> (score &lt; nh_score) &#123;<br><span class="hljs-number">2199</span>                         res-&gt;nh_sel = nhsel;<br><span class="hljs-number">2200</span>                         res-&gt;nhc = &amp;nexthop_nh-&gt;nh_common;<br><span class="hljs-number">2201</span>                         <span class="hljs-keyword">if</span> (nh_score == <span class="hljs-number">3</span> || (!saddr &amp;&amp; nh_score == <span class="hljs-number">1</span>))<br><span class="hljs-number">2202</span>                                 <span class="hljs-keyword">return</span>;<br><span class="hljs-number">2203</span>                         score = nh_score;<br><span class="hljs-number">2204</span>                 &#125;<br><span class="hljs-number">2205</span><br><span class="hljs-number">2206</span>         &#125; endfor_nexthops(fi);<br><span class="hljs-number">2207</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="4-2-upper-bound-权重区间计算-—-fib-rebalance">0.4.2. 4.2 upper_bound 权重区间计算 — fib_rebalance()</h3><p><code>fib_rebalance()</code> 在路由变化时被调用，为每个 nexthop 计算 <code>fib_nh_upper_bound</code>，将 hash 值空间 <code>[0, 2^31-1]</code> 按权重比例划分：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-comment">/* net/ipv4/fib_semantics.c */</span><br> <span class="hljs-number">825</span> <span class="hljs-type">static</span> <span class="hljs-type">void</span> <span class="hljs-title function_">fib_rebalance</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> fib_info *fi)</span><br> 826 &#123;<br> <span class="hljs-number">827</span>         <span class="hljs-type">int</span> total;<br> <span class="hljs-number">828</span>         <span class="hljs-type">int</span> w;<br> <span class="hljs-number">829</span><br> <span class="hljs-number">830</span>         <span class="hljs-keyword">if</span> (fib_info_num_path(fi) &lt; <span class="hljs-number">2</span>)<br> <span class="hljs-number">831</span>                 <span class="hljs-keyword">return</span>;<br> <span class="hljs-number">832</span><br> <span class="hljs-number">833</span>         <span class="hljs-comment">/* Step 1: 计算存活 nexthop 的总权重 */</span><br> <span class="hljs-number">834</span>         total = <span class="hljs-number">0</span>;<br> <span class="hljs-number">835</span>         for_nexthops(fi) &#123;<br> <span class="hljs-number">836</span>                 <span class="hljs-keyword">if</span> (nh-&gt;fib_nh_flags &amp; RTNH_F_DEAD)<br> <span class="hljs-number">837</span>                         <span class="hljs-keyword">continue</span>;<br> <span class="hljs-number">838</span><br> <span class="hljs-number">839</span>                 <span class="hljs-keyword">if</span> (ip_ignore_linkdown(nh-&gt;fib_nh_dev) &amp;&amp;<br> <span class="hljs-number">840</span>                     nh-&gt;fib_nh_flags &amp; RTNH_F_LINKDOWN)<br> <span class="hljs-number">841</span>                         <span class="hljs-keyword">continue</span>;<br> <span class="hljs-number">842</span><br> <span class="hljs-number">843</span>                 total += nh-&gt;fib_nh_weight;<br> <span class="hljs-number">844</span>         &#125; endfor_nexthops(fi);<br> <span class="hljs-number">845</span><br> <span class="hljs-number">846</span>         <span class="hljs-comment">/* Step 2: 按权重累加，划分 [0, 2^31-1] 的区间 */</span><br> <span class="hljs-number">847</span>         w = <span class="hljs-number">0</span>;<br> <span class="hljs-number">848</span>         change_nexthops(fi) &#123;<br> <span class="hljs-number">849</span>                 <span class="hljs-type">int</span> upper_bound;<br> <span class="hljs-number">850</span><br> <span class="hljs-number">851</span>                 <span class="hljs-keyword">if</span> (nexthop_nh-&gt;fib_nh_flags &amp; RTNH_F_DEAD) &#123;<br> <span class="hljs-number">852</span>                         upper_bound = <span class="hljs-number">-1</span>;<br> <span class="hljs-number">853</span>                 &#125; <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (ip_ignore_linkdown(nexthop_nh-&gt;fib_nh_dev) &amp;&amp;<br> <span class="hljs-number">854</span>                            nexthop_nh-&gt;fib_nh_flags &amp; RTNH_F_LINKDOWN) &#123;<br> <span class="hljs-number">855</span>                         upper_bound = <span class="hljs-number">-1</span>;<br> <span class="hljs-number">856</span>                 &#125; <span class="hljs-keyword">else</span> &#123;<br> <span class="hljs-number">857</span>                         w += nexthop_nh-&gt;fib_nh_weight;<br> <span class="hljs-number">858</span>                         upper_bound = DIV_ROUND_CLOSEST_ULL((u64)w &lt;&lt; <span class="hljs-number">31</span>,<br> <span class="hljs-number">859</span>                                                             total) - <span class="hljs-number">1</span>;<br> <span class="hljs-number">860</span>                 &#125;<br> <span class="hljs-number">861</span><br> <span class="hljs-number">862</span>                 atomic_set(&amp;nexthop_nh-&gt;fib_nh_upper_bound, upper_bound);<br> <span class="hljs-number">863</span>         &#125; endfor_nexthops(fi);<br> <span class="hljs-number">864</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="4-3-图解：Hash-到-Nexthop-的映射">0.4.3. 4.3 图解：Hash 到 Nexthop 的映射</h3><ul>
+<li>每个nexthop占据一个区间段,依次从低到高排列，占满真个hash空间。</li>
+<li>每个nexthop记录一个<code>upper_bound</code> ,作为空间最大值。 最小值是前一个空间最大值+1</li>
+<li>各 nexthop 的 <code>upper_bound</code> 值由 <code>fib_rebalance()</code> 计算，公式为 <code>DIV_ROUND_CLOSEST_ULL((u64)w &lt;&lt; 31, total) - 1</code>：</li>
+</ul>
+<h4 id="等权场景：">0.4.3.1. 等权场景：</h4><p><strong>3 条路径（weight 均为 1），hash 空间三等分：</strong></p>
+<img src="/images/ecmp-hash-equal-weight.svg" srcset="/img/loading.gif" lazyload class>
+
+<table>
+<thead>
+<tr>
+<th>Nexthop</th>
+<th align="center">Weight</th>
+<th>upper_bound</th>
+<th>公式</th>
+<th>覆盖区间</th>
+<th align="center">占比</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>NH0</strong></td>
+<td align="center">1</td>
+<td>715827882</td>
+<td>≈ 2³¹&#x2F;3 − 1</td>
+<td><code>[0, 715827882]</code></td>
+<td align="center">33.3%</td>
+</tr>
+<tr>
+<td><strong>NH1</strong></td>
+<td align="center">1</td>
+<td>1431655764</td>
+<td>≈ 2·2³¹&#x2F;3 − 1</td>
+<td><code>(715827882, 1431655764]</code></td>
+<td align="center">33.3%</td>
+</tr>
+<tr>
+<td><strong>NH2</strong></td>
+<td align="center">1</td>
+<td>2147483646</td>
+<td>&#x3D; 2³¹ − 2</td>
+<td><code>(1431655764, 2147483646]</code></td>
+<td align="center">33.3%</td>
+</tr>
+</tbody></table>
+<h4 id="加权场景：">0.4.3.2. 加权场景：</h4><p><strong>3 条路径，weight 分别为 1:2:1（总权重 4）</strong></p>
+<img src="/images/ecmp-hash-weighted.svg" srcset="/img/loading.gif" lazyload class>
+
+<p>各 nexthop 的 <code>upper_bound</code> 值（总权重 4）：</p>
+<table>
+<thead>
+<tr>
+<th>Nexthop</th>
+<th align="center">Weight</th>
+<th>upper_bound</th>
+<th>公式</th>
+<th>覆盖区间</th>
+<th align="center">占比</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>NH0</strong></td>
+<td align="center">1</td>
+<td>536870911</td>
+<td>≈ 2³¹&#x2F;4 − 1</td>
+<td><code>[0, 536870911]</code></td>
+<td align="center">25%</td>
+</tr>
+<tr>
+<td><strong>NH1</strong></td>
+<td align="center">2</td>
+<td>1610612735</td>
+<td>≈ 3·2³¹&#x2F;4 − 1</td>
+<td><code>(536870911, 1610612735]</code></td>
+<td align="center">50%</td>
+</tr>
+<tr>
+<td><strong>NH2</strong></td>
+<td align="center">1</td>
+<td>2147483646</td>
+<td>&#x3D; 2³¹ − 2</td>
+<td><code>(1610612735, 2147483646]</code></td>
+<td align="center">25%</td>
+</tr>
+</tbody></table>
+<h3 id="4-4-根据源地址优选路由出口（v6-16-新增，commit-32607a332cfe）">0.4.4. 4.4 根据源地址优选路由出口（v6.16 新增，commit 32607a332cfe）</h3><p>v6.16 中 <code>fib_select_multipath</code> 引入了 <strong>根据源地址优选路由出口</strong> 的机制，不再是简单的 <code>hash &lt;= upper_bound</code> 即返回：</p>
+<table>
+<thead>
+<tr>
+<th>条件</th>
+<th>得分</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>nh_saddr == saddr</code>（源地址匹配）</td>
+<td>+2</td>
+</tr>
+<tr>
+<td><code>hash &lt;= nh_upper_bound</code>（hash 区间匹配）</td>
+<td>+1</td>
+</tr>
+</tbody></table>
+<p>优先级逻辑：</p>
+<ul>
+<li><strong>满分 3 分</strong>（源地址 + hash 都匹配）：立即返回，最佳选择</li>
+<li><strong>2 分</strong>（源地址匹配但 hash 不在区间）：优先于纯 hash 匹配</li>
+<li><strong>1 分</strong>（hash 匹配但源地址不匹配）：如果没有 saddr 约束，也立即返回</li>
+</ul>
+<blockquote>
+<p><strong>解决的问题</strong>：TCP <code>connect</code> 中 <code>tcp_v4_connect</code> 会做 3 次路由查询（选源地址、确定路由、选端口后再查），每次 <code>fib_select_multipath</code> 可能因 hash 不同选中不同 nexthop，导致数据包的源 IP 属于 veth0 但从 veth1 发出。在双 ISP 场景下，运营商路由器会因源地址不属于该链路而丢包。该机制确保后续查询优先选中与已选源地址匹配的 nexthop，即根据源地址优选路由出口。</p>
+</blockquote>
+<h4 id="Commit-32607a332cfe-详解">0.4.4.1. Commit 32607a332cfe 详解</h4><h5 id="Commit-Message-原文">0.4.4.1.1. Commit Message 原文</h5><blockquote>
+<figure class="highlight livecodeserver"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br></pre></td><td class="code"><pre><code class="hljs livecodeserver">ipv4: prefer multipath nexthop that matches source address<br><br>With multipath routes, <span class="hljs-keyword">try</span> <span class="hljs-built_in">to</span> ensure that packets leave <span class="hljs-keyword">on</span> <span class="hljs-title">the</span> <span class="hljs-title">device</span><br>that is associated <span class="hljs-keyword">with</span> <span class="hljs-keyword">the</span> source address.<br><br>Avoid <span class="hljs-keyword">the</span> following tcpdump example:<br><br>    veth0 Out IP <span class="hljs-number">10.1</span><span class="hljs-number">.0</span><span class="hljs-number">.2</span><span class="hljs-number">.38640</span> &gt; <span class="hljs-number">10.2</span><span class="hljs-number">.0</span><span class="hljs-number">.3</span><span class="hljs-number">.8000</span>: Flags [S]<br>    veth1 Out IP <span class="hljs-number">10.1</span><span class="hljs-number">.0</span><span class="hljs-number">.2</span><span class="hljs-number">.38648</span> &gt; <span class="hljs-number">10.2</span><span class="hljs-number">.0</span><span class="hljs-number">.3</span><span class="hljs-number">.8000</span>: Flags [S]<br><br>Which can happen easily <span class="hljs-keyword">with</span> <span class="hljs-keyword">the</span> most straightforward setup:<br><br>    ip addr <span class="hljs-built_in">add</span> <span class="hljs-number">10.0</span><span class="hljs-number">.0</span><span class="hljs-number">.1</span>/<span class="hljs-number">24</span> dev veth0<br>    ip addr <span class="hljs-built_in">add</span> <span class="hljs-number">10.1</span><span class="hljs-number">.0</span><span class="hljs-number">.1</span>/<span class="hljs-number">24</span> dev veth1<br><br>    ip route <span class="hljs-built_in">add</span> <span class="hljs-number">10.2</span><span class="hljs-number">.0</span><span class="hljs-number">.3</span> nexthop via <span class="hljs-number">10.0</span><span class="hljs-number">.0</span><span class="hljs-number">.2</span> dev veth0 \<br>                          nexthop via <span class="hljs-number">10.1</span><span class="hljs-number">.0</span><span class="hljs-number">.2</span> dev veth1<br><br>This is apparently considered WAI, based <span class="hljs-keyword">on</span> <span class="hljs-title">the</span> <span class="hljs-title">comment</span> <span class="hljs-title">in</span><br>ip_route_output_key_hash_rcu:<br><br>    * <span class="hljs-number">2.</span> Moreover, we are allowed <span class="hljs-built_in">to</span> <span class="hljs-built_in">send</span> packets <span class="hljs-keyword">with</span> saddr<br>    *    <span class="hljs-keyword">of</span> another iface. <span class="hljs-comment">--ANK</span><br><br>It may be ok <span class="hljs-keyword">for</span> some uses <span class="hljs-keyword">of</span> multipath, but <span class="hljs-keyword">not</span> all. For instance,<br>when <span class="hljs-keyword">using</span> <span class="hljs-literal">two</span> ISPs, <span class="hljs-keyword">a</span> router may drop packets <span class="hljs-keyword">with</span> unknown source.<br><br>The behavior occurs because tcp_v4_connect makes <span class="hljs-literal">three</span> route<br>lookups when establishing <span class="hljs-keyword">a</span> connection:<br><br><span class="hljs-number">1.</span> ip_route_connect calls <span class="hljs-built_in">to</span> select <span class="hljs-keyword">a</span> source address, <span class="hljs-keyword">with</span> saddr <span class="hljs-literal">zero</span>.<br><span class="hljs-number">2.</span> ip_route_connect calls again now that saddr <span class="hljs-keyword">and</span> daddr are known.<br><span class="hljs-number">3.</span> ip_route_newports calls again <span class="hljs-keyword">after</span> <span class="hljs-keyword">a</span> source port is also chosen.<br><br>With <span class="hljs-keyword">a</span> route <span class="hljs-keyword">with</span> multiple nexthops, <span class="hljs-keyword">each</span> lookup may make <span class="hljs-keyword">a</span> different<br>choice depending <span class="hljs-keyword">on</span> <span class="hljs-title">available</span> <span class="hljs-title">entropy</span> <span class="hljs-title">to</span> <span class="hljs-title">fib_select_multipath</span>. <span class="hljs-title">So</span> <span class="hljs-title">it</span><br>is possible <span class="hljs-keyword">for</span> <span class="hljs-number">1</span> <span class="hljs-built_in">to</span> select <span class="hljs-keyword">the</span> saddr <span class="hljs-built_in">from</span> <span class="hljs-keyword">the</span> <span class="hljs-keyword">first</span> entry, but <span class="hljs-number">3</span> <span class="hljs-built_in">to</span><br>select <span class="hljs-keyword">the</span> <span class="hljs-keyword">second</span> entry. Leading <span class="hljs-built_in">to</span> <span class="hljs-keyword">the</span> above situation.<br><br>Address this <span class="hljs-keyword">by</span> preferring <span class="hljs-keyword">a</span> match that matches <span class="hljs-keyword">the</span> flowi4 saddr. This<br>will make <span class="hljs-number">2</span> <span class="hljs-keyword">and</span> <span class="hljs-number">3</span> make <span class="hljs-keyword">the</span> same choice <span class="hljs-keyword">as</span> <span class="hljs-number">1.</span> Continue <span class="hljs-built_in">to</span> update <span class="hljs-keyword">the</span><br>backup choice <span class="hljs-keyword">until</span> <span class="hljs-keyword">a</span> choice that matches saddr is found.<br><br>Do this <span class="hljs-keyword">in</span> fib_select_multipath itself, rather than passing <span class="hljs-keyword">an</span> fl4_oif<br>constraint, <span class="hljs-built_in">to</span> avoid changing non-multipath route selection. Commit<br>e6b45241c57a (<span class="hljs-string">&quot;ipv4: reset flowi parameters on route connect&quot;</span>) shows<br>how that may cause regressions.<br><br>Also <span class="hljs-built_in">read</span> ipv4.sysctl_fib_multipath_use_neigh only once. No need <span class="hljs-built_in">to</span><br>refresh <span class="hljs-keyword">in</span> <span class="hljs-keyword">the</span> loop.<br><br>This does <span class="hljs-keyword">not</span> happen <span class="hljs-keyword">in</span> IPv6, which performs only <span class="hljs-literal">one</span> lookup.<br><br>Signed-off-<span class="hljs-keyword">by</span>: Willem de Bruijn &lt;willemb@google.com&gt;<br></code></pre></td></tr></table></figure></blockquote>
+<h5 id="翻译">0.4.4.1.2. 翻译</h5><p><strong>标题</strong>：ipv4：优先选择与源地址匹配的多路径 nexthop</p>
+<p>使用多路径路由时，尽量确保数据包从与其源地址关联的设备发出。</p>
+<p><strong>问题现象</strong>：tcpdump 中可能出现源 IP 属于 veth0 但数据包从 veth1 发出的情况（如上面的抓包示例）。</p>
+<p>根据 <code>ip_route_output_key_hash_rcu</code> 中的注释，这在以前被认为是 WAI（按预期工作）：”我们允许使用另一个接口的 saddr 发包”。但对于双 ISP 等场景，运营商路由器会因源地址不属于该链路而丢包。</p>
+<p><strong>根因</strong>：<code>tcp_v4_connect</code> 建立连接时会做 <strong>三次路由查询</strong>：</p>
+<ol>
+<li><code>ip_route_connect</code> 首次调用——选择源地址（此时 saddr 为零）</li>
+<li><code>ip_route_connect</code> 再次调用——saddr 和 daddr 已确定</li>
+<li><code>ip_route_newports</code> 调用——源端口也已选定后再查一次</li>
+</ol>
+<p>由于每次查询传入 <code>fib_select_multipath</code> 的熵（hash 输入）不同，三次查询可能选中不同的 nexthop。例如第 1 次选中了第一条路径的源地址，但第 3 次选中了第二条路径，导致源 IP 和出口设备不匹配。</p>
+<p><strong>解决方案</strong>：在 <code>fib_select_multipath</code> 中优先选择与 <code>flowi4.saddr</code> 匹配的 nexthop，使第 2、3 次查询与第 1 次保持一致。在匹配到 saddr 之前，持续更新备选 nexthop。</p>
+<p><strong>实现细节</strong>：</p>
+<ul>
+<li>在 <code>fib_select_multipath</code> 自身中实现，而非传入 <code>fl4_oif</code> 约束，以避免影响非多路径的路由选择（commit e6b45241c57a 表明那样做会导致回归问题）</li>
+<li>同时优化了 <code>sysctl_fib_multipath_use_neigh</code> 的读取，在循环外只读一次</li>
+<li>IPv6 不存在此问题，因为 IPv6 只做一次路由查询</li>
+</ul>
+<h2 id="五、被调用场景与调用栈详解-Callers-Call-Stack-Details">0.5. 五、被调用场景与调用栈详解 (Callers &amp; Call Stack Details)</h2><p>ECMP 选路存在 <strong>两条主要路径</strong> 和 <strong>两条辅助路径</strong>，最终都汇聚到 hash 计算 + nexthop 选择：</p>
+<table>
+<thead>
+<tr>
+<th>路径</th>
+<th>典型场景</th>
+<th>入口函数</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>本地发包</strong></td>
+<td><code>tcp_v4_connect()</code> &#x2F; <code>udp_sendmsg()</code></td>
+<td><code>fib_select_path()</code></td>
+<td>经 <code>ip_route_output_key_hash_rcu()</code> 触发</td>
+</tr>
+<tr>
+<td><strong>转发</strong></td>
+<td><code>ip_rcv()</code> → <code>ip_forward()</code></td>
+<td><code>ip_mkroute_input()</code></td>
+<td>直接调用 <code>fib_multipath_hash()</code> + <code>fib_select_multipath()</code>，不经过 <code>fib_select_path()</code></td>
+</tr>
+<tr>
+<td>ICMP Redirect</td>
+<td>收到重定向报文</td>
+<td><code>fib_select_path()</code></td>
+<td>辅助路径</td>
+</tr>
+<tr>
+<td>PMTU 更新</td>
+<td>路径 MTU 变化</td>
+<td><code>fib_select_path()</code></td>
+<td>辅助路径</td>
+</tr>
+</tbody></table>
+<h3 id="6-1-路径一：本地发包（Output-Path）">0.5.1. 6.1 路径一：本地发包（Output Path）</h3><p>典型场景：<code>tcp_v4_connect()</code>、<code>udp_sendmsg()</code> 等本地发包时查找出站路由。</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><code class="hljs dns">tcp_v4_connect<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span> / udp_sendmsg<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span> / ...<br>  └─ ip_route_connect<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span>                         // include/net/route.h<br>       ├─ __ip_route_output_key<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span>               // 第<span class="hljs-number">1</span>次查询：获取地址（wildcard port）<br>       │    └─ ip_route_output_key_hash<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span>        // net/ipv4/route.c<br>       │         └─ ip_route_output_key_hash_rcu<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span><br>       │              ├─ fib_lookup<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span>            // FIB 查找<br>       │              └─ fib_select_path<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span>       // ★ ECMP 选路入口<br>       │                   ├─ fib_multipath_hash<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span><br>       │                   └─ fib_select_multipath<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span><br>       │<br>       └─ ip_route_output_flow<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span>                // 第<span class="hljs-number">2</span>次查询：带端口 + xfrm<br>            └─ __ip_route_output_key<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span><br>                 └─ ... <span class="hljs-punctuation">(</span>同上<span class="hljs-punctuation">)</span><br><br>ip_route_newports<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span>                             // 第<span class="hljs-number">3</span>次查询：端口分配后<br>  └─ ip_route_output_flow<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span><br>       └─ __ip_route_output_key<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span><br>            └─ ... <span class="hljs-punctuation">(</span>同上<span class="hljs-punctuation">)</span><br></code></pre></td></tr></table></figure>
+
+<p>tcp_v4_connect 三次路由查询详解详见 <a href="/2026/03/08/2026-03-08-tcp-v4-connect-route-lookup/" title="tcp_v4_connect 三次路由查询详解">tcp_v4_connect 三次路由查询详解</a>。</p>
+<h3 id="6-2-路径二：转发路径（Forward-Input-Path）">0.5.2. 6.2 路径二：转发路径（Forward &#x2F; Input Path）</h3><p>典型场景：收到需要转发的数据包。</p>
+<figure class="highlight scss"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs scss"><span class="hljs-built_in">ip_rcv</span>()                                        <span class="hljs-comment">// net/ipv4/ip_input.c</span><br>  └─ NF_HOOK → <span class="hljs-built_in">ip_rcv_finish</span>()<br>       └─ <span class="hljs-built_in">ip_rcv_finish_core</span>()<br>            └─ <span class="hljs-built_in">ip_route_input_noref</span>()            <span class="hljs-comment">// net/ipv4/route.c</span><br>                 └─ <span class="hljs-built_in">ip_route_input_rcu</span>()<br>                      └─ <span class="hljs-built_in">ip_route_input_slow</span>()   <span class="hljs-comment">// FIB 查找</span><br>                           └─ <span class="hljs-built_in">ip_mkroute_input</span>() <span class="hljs-comment">// ★ ECMP 选路入口</span><br>                                ├─ <span class="hljs-built_in">fib_multipath_hash</span>()<br>                                └─ <span class="hljs-built_in">fib_select_multipath</span>()<br></code></pre></td></tr></table></figure>
+
+<blockquote>
+<p><strong>注意</strong>：转发路径中 <code>ip_mkroute_input()</code> <strong>直接调用</strong> <code>fib_multipath_hash()</code> + <code>fib_select_multipath()</code>，不经过 <code>fib_select_path()</code>。因为转发时不需要源地址选择逻辑。</p>
+</blockquote>
+<h3 id="6-3-路径三：ICMP-Redirect-处理">0.5.3. 6.3 路径三：ICMP Redirect 处理</h3><p>略过</p>
+<h3 id="6-4-路径四：PMTU-更新">0.5.4. 6.4 路径四：PMTU 更新</h3><p>略过</p>
+<h2 id="六、关键-sysctl-参数-Key-sysctl-Parameters">0.6. 六、关键 sysctl 参数 (Key sysctl Parameters)</h2><table>
+<thead>
+<tr>
+<th>Sysctl</th>
+<th>默认值</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>net.ipv4.fib_multipath_hash_policy</code></td>
+<td>0</td>
+<td>hash 策略：0&#x3D;L3, 1&#x3D;L4, 2&#x3D;inner L3, 3&#x3D;custom</td>
+</tr>
+<tr>
+<td><code>net.ipv4.fib_multipath_hash_fields</code></td>
+<td>默认掩码</td>
+<td>policy&#x3D;3 时自定义参与 hash 的字段</td>
+</tr>
+<tr>
+<td><code>net.ipv4.fib_multipath_hash_seed</code></td>
+<td>随机</td>
+<td>hash seed，防止多跳极化</td>
+</tr>
+<tr>
+<td><code>net.ipv4.fib_multipath_use_neigh</code></td>
+<td>0</td>
+<td>是否检查邻居可达性跳过故障路径</td>
+</tr>
+<tr>
+<td><code>net.ipv4.conf.*.ignore_routes_with_linkdown</code></td>
+<td>0</td>
+<td>linkdown 的 nexthop 是否设为 upper_bound&#x3D;-1</td>
+</tr>
+</tbody></table>
+<h2 id="七、实践建议-Practical-Recommendations">0.7. 七、实践建议 (Practical Recommendations)</h2><h3 id="双线-多-ISP-场景">0.7.1. 双线&#x2F;多 ISP 场景</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs bash"><span class="hljs-comment"># 使用 L4 五元组 hash，让不同连接均匀分散</span><br>sysctl -w net.ipv4.fib_multipath_hash_policy=1<br><br><span class="hljs-comment"># 开启邻居可达性检查，自动绕开故障路径</span><br>sysctl -w net.ipv4.fib_multipath_use_neigh=1<br><br><span class="hljs-comment"># 开启 linkdown 感知，dead 链路不参与选路</span><br>sysctl -w net.ipv4.conf.all.ignore_routes_with_linkdown=1<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/FIB/" class="category-chain-item">FIB</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/fib/" class="print-no-link">#fib</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>ECMP选路: fib_select_multipath Hash 机制深度解析</div>
+      <div>https://martinbj2008.github.io/2026/03/08/2026-03-08-fib-ecmp-hash-select-multipath/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>March 8, 2026</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2026/03/08/2026-03-08-tcp-v4-connect-route-lookup/" title="tcp_v4_connect 三次路由查询详解">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">tcp_v4_connect 三次路由查询详解</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2026/03/08/fib-node-animation/" title="FIB Trie 路由动画演示">
+                        <span class="hidden-mobile">FIB Trie 路由动画演示</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

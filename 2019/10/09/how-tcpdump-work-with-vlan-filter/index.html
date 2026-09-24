@@ -1,0 +1,902 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. 问题场景tcpdump在网口直接抓包和读取pcap文件两种场景下，同一个filter表达式icmp，对vlan报文有不同的处理结果。  在网口上抓包可以看到vlan和非vlan两种流量 读取pcap只能看到非vlan流量一种流量  【Q1】：在读取pcap文件时候，为什么不能读取到vlan报文呢？ 0.2. 分析结论内核协议栈：  过滤条件 icmp：tcpdump 解析出来的 ebpf">
+<meta property="og:type" content="article">
+<meta property="og:title" content="how tcpdump work with vlan filter">
+<meta property="og:url" content="https://martinbj2008.github.io/2019/10/09/how-tcpdump-work-with-vlan-filter/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. 问题场景tcpdump在网口直接抓包和读取pcap文件两种场景下，同一个filter表达式icmp，对vlan报文有不同的处理结果。  在网口上抓包可以看到vlan和非vlan两种流量 读取pcap只能看到非vlan流量一种流量  【Q1】：在读取pcap文件时候，为什么不能读取到vlan报文呢？ 0.2. 分析结论内核协议栈：  过滤条件 icmp：tcpdump 解析出来的 ebpf">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2019-10-09T03:42:57.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.754Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="Tcpdump">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>how tcpdump work with vlan filter - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="how tcpdump work with vlan filter"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2019-10-09 11:42" pubdate>
+          October 9, 2019 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          6.6k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          56 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">how tcpdump work with vlan filter</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="问题场景">0.1. 问题场景</h2><p>tcpdump在网口直接抓包和读取pcap文件两种场景下，同一个filter表达式<code>icmp</code>，对vlan报文有不同的处理结果。</p>
+<ul>
+<li>在网口上抓包可以看到vlan和非vlan两种流量</li>
+<li>读取pcap只能看到非vlan流量一种流量</li>
+</ul>
+<p><strong>【Q1】</strong>：在读取pcap文件时候，为什么不能读取到vlan报文呢？</p>
+<h2 id="分析结论">0.2. 分析结论</h2><p><strong>内核协议栈：</strong></p>
+<ol>
+<li><p><strong>过滤条件 <code>icmp</code></strong>：tcpdump 解析出来的 ebpf 指令，是要求报文是<code>eth+IP+ICMP</code>格式。通过ETH&#x2F;IP 头里的协议类型分别做了限制: IPv4(0x0800)+ICMP(1)。</p>
+</li>
+<li><p><strong>在网口上抓包</strong>：内核代码里，在tcpdump抓包过滤的钩子函数之前，会把报文的vlan解析并剔除掉。被剥离的vlan头信息，被保存到skb的metadata里了。所以 tcpdump(af_packet)在内核里，通过钩子函数运行过滤条件的 ebpf 指令时，被处理的报文已经不带vlan头了。因此只要满足icmp 头，带和不带 vlan头的报文都会被抓取到。</p>
+</li>
+<li><p><strong>读取pcap文件</strong>：tcpdump 直接读取文件内容，vlan头并没有被剥离掉，所以vlan报文不满足过滤条件(<code>eth+IP+ICMP</code>)，被丢弃了。</p>
+</li>
+</ol>
+<blockquote>
+<p>国外已经有人发现并分析过这个问题：<a target="_blank" rel="noopener" href="https://andreaskaris.github.io/blog/networking/bpf-and-tcpdump/">BPF and tcpdump</a></p>
+</blockquote>
+<span id="more"></span>
+
+<h2 id="复现问题">0.3. 复现问题</h2><h3 id="网络拓扑">0.3.1. 网络拓扑</h3><figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">3.3.3.3</span>/<span class="hljs-number">24</span>                 <span class="hljs-number">3.3.3.2</span>/<span class="hljs-number">24</span><br>     vlan3                     vlan2 <span class="hljs-punctuation">(</span>ns2<span class="hljs-punctuation">)</span><br>       |  vlanid <span class="hljs-number">333</span>             |<br>       |                         |<br>     veth3 --------------------veth2<br>   <span class="hljs-number">1.1.1.3</span>/<span class="hljs-number">24</span>                <span class="hljs-number">1.1.1.2</span>/<span class="hljs-number">24</span><br></code></pre></td></tr></table></figure>
+
+<h3 id="复现步骤">0.3.2. 复现步骤</h3><ol>
+<li>创建一个新的netns， ns2</li>
+<li>创建veth对， veth2-veth3，其中veth2被放置到ns2里</li>
+<li>分别在veth2和veth3口上建立vlan口，vlan ID 333</li>
+<li>依次为四个网口配置IP地址<ul>
+<li>3.3.3.3&#x2F;24</li>
+<li>1.1.1.3&#x2F;24</li>
+<li>1.1.1.2&#x2F;24</li>
+<li>3.3.3.2&#x2F;24</li>
+</ul>
+</li>
+<li>在vlan2上ping vlan3， 在veth2上ping veth3</li>
+</ol>
+<p>网口veth3上抓包，显示有vlan和非vlan两种流量：</p>
+<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs apache"><span class="hljs-attribute">root</span>@martin-HOST:/home/martin# tcpdump  -n -i veth3 icmp -ne -c <span class="hljs-number">4</span><br><span class="hljs-attribute">tcpdump</span>: verbose output suppressed, use -v[v]... for full protocol decode<br><span class="hljs-attribute">listening</span> <span class="hljs-literal">on</span> veth3, link-type EN10MB (Ethernet), snapshot length <span class="hljs-number">262144</span> bytes<br><span class="hljs-attribute">18</span>:<span class="hljs-number">27</span>:<span class="hljs-number">50</span>.<span class="hljs-number">825272</span> <span class="hljs-number">82</span>:<span class="hljs-number">40</span>:<span class="hljs-number">26</span>:<span class="hljs-number">88</span>:ee:<span class="hljs-number">93</span> &gt; f6:f4:f8:<span class="hljs-number">0</span>c:<span class="hljs-number">17</span>:ea, ethertype <span class="hljs-number">802</span>.<span class="hljs-number">1</span>Q (<span class="hljs-number">0</span>x8100), length <span class="hljs-number">102</span>: vlan <span class="hljs-number">333</span>, p <span class="hljs-number">0</span>, ethertype IPv4 (<span class="hljs-number">0</span>x0800), <span class="hljs-number">3.3.3.2</span> &gt; <span class="hljs-number">3.3.3.3</span>: ICMP echo request, id <span class="hljs-number">56302</span>, seq <span class="hljs-number">33168</span>, length <span class="hljs-number">64</span><br><span class="hljs-attribute">18</span>:<span class="hljs-number">27</span>:<span class="hljs-number">50</span>.<span class="hljs-number">825332</span> f6:f4:f8:<span class="hljs-number">0</span>c:<span class="hljs-number">17</span>:ea &gt; <span class="hljs-number">82</span>:<span class="hljs-number">40</span>:<span class="hljs-number">26</span>:<span class="hljs-number">88</span>:ee:<span class="hljs-number">93</span>, ethertype <span class="hljs-number">802</span>.<span class="hljs-number">1</span>Q (<span class="hljs-number">0</span>x8100), length <span class="hljs-number">102</span>: vlan <span class="hljs-number">333</span>, p <span class="hljs-number">0</span>, ethertype IPv4 (<span class="hljs-number">0</span>x0800), <span class="hljs-number">3.3.3.3</span> &gt; <span class="hljs-number">3.3.3.2</span>: ICMP echo reply, id <span class="hljs-number">56302</span>, seq <span class="hljs-number">33168</span>, length <span class="hljs-number">64</span><br><span class="hljs-attribute">18</span>:<span class="hljs-number">27</span>:<span class="hljs-number">50</span>.<span class="hljs-number">856960</span> <span class="hljs-number">82</span>:<span class="hljs-number">40</span>:<span class="hljs-number">26</span>:<span class="hljs-number">88</span>:ee:<span class="hljs-number">93</span> &gt; f6:f4:f8:<span class="hljs-number">0</span>c:<span class="hljs-number">17</span>:ea, ethertype IPv4 (<span class="hljs-number">0</span>x0800), length <span class="hljs-number">98</span>: <span class="hljs-number">1.1.1.2</span> &gt; <span class="hljs-number">1.1.1.3</span>: ICMP echo request, id <span class="hljs-number">15134</span>, seq <span class="hljs-number">33158</span>, length <span class="hljs-number">64</span><br><span class="hljs-attribute">18</span>:<span class="hljs-number">27</span>:<span class="hljs-number">50</span>.<span class="hljs-number">857020</span> f6:f4:f8:<span class="hljs-number">0</span>c:<span class="hljs-number">17</span>:ea &gt; <span class="hljs-number">82</span>:<span class="hljs-number">40</span>:<span class="hljs-number">26</span>:<span class="hljs-number">88</span>:ee:<span class="hljs-number">93</span>, ethertype IPv4 (<span class="hljs-number">0</span>x0800), length <span class="hljs-number">98</span>: <span class="hljs-number">1.1.1.3</span> &gt; <span class="hljs-number">1.1.1.2</span>: ICMP echo reply, id <span class="hljs-number">15134</span>, seq <span class="hljs-number">33158</span>, length <span class="hljs-number">64</span><br><span class="hljs-attribute">4</span> packets captured<br><span class="hljs-attribute">4</span> packets received by filter<br><span class="hljs-attribute">0</span> packets dropped by kernel<br><span class="hljs-attribute">root</span>@martin-HOST:/home/martin#<br></code></pre></td></tr></table></figure>
+
+<p>其中：</p>
+<ul>
+<li><strong>【VLAN报文】</strong> vlan ID 是333。IP 地址：3.3.3.2 到 3.3.3.3 的 ping(ICMP)流量</li>
+<li><strong>【非VLAN报文】</strong> IP 地址：1.1.1.2 &gt; 1.1.1.3 的 ping 流量</li>
+</ul>
+<p>使用tcpdump命令将报文保存到pcap文件：</p>
+<figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs ruby">root<span class="hljs-variable">@martin</span>-<span class="hljs-variable constant_">HOST</span><span class="hljs-symbol">:/home/martin</span><span class="hljs-comment"># tcpdump  -n -i veth3 icmp -ne -c 4 -w veth3.pcap</span><br><span class="hljs-symbol">tcpdump:</span> listening on veth3, link-type <span class="hljs-variable constant_">EN10MB</span> (<span class="hljs-title class_">Ethernet</span>), snapshot length <span class="hljs-number">262144</span> bytes<br><span class="hljs-number">4</span> packets captured<br><span class="hljs-number">8</span> packets received by filter<br><span class="hljs-number">0</span> packets dropped by kernel<br></code></pre></td></tr></table></figure>
+
+<p>重新读取pcap文件中的报文。vlan 和非 vlan 报文各两个，都是 icmp 报文：</p>
+<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs apache"><span class="hljs-attribute">root</span>@martin-HOST:/home/martin# tcpdump  -n -r veth3.pcap -e<br><span class="hljs-attribute">reading</span> from file veth3.pcap, link-type EN10MB (Ethernet), snapshot length <span class="hljs-number">262144</span><br><span class="hljs-attribute">18</span>:<span class="hljs-number">31</span>:<span class="hljs-number">01</span>.<span class="hljs-number">801424</span> <span class="hljs-number">82</span>:<span class="hljs-number">40</span>:<span class="hljs-number">26</span>:<span class="hljs-number">88</span>:ee:<span class="hljs-number">93</span> &gt; f6:f4:f8:<span class="hljs-number">0</span>c:<span class="hljs-number">17</span>:ea, ethertype IPv4 (<span class="hljs-number">0</span>x0800), length <span class="hljs-number">98</span>: <span class="hljs-number">1.1.1.2</span> &gt; <span class="hljs-number">1.1.1.3</span>: ICMP echo request, id <span class="hljs-number">1341</span>, seq <span class="hljs-number">43049</span>, length <span class="hljs-number">64</span><br><span class="hljs-attribute">18</span>:<span class="hljs-number">31</span>:<span class="hljs-number">01</span>.<span class="hljs-number">801482</span> f6:f4:f8:<span class="hljs-number">0</span>c:<span class="hljs-number">17</span>:ea &gt; <span class="hljs-number">82</span>:<span class="hljs-number">40</span>:<span class="hljs-number">26</span>:<span class="hljs-number">88</span>:ee:<span class="hljs-number">93</span>, ethertype IPv4 (<span class="hljs-number">0</span>x0800), length <span class="hljs-number">98</span>: <span class="hljs-number">1.1.1.3</span> &gt; <span class="hljs-number">1.1.1.2</span>: ICMP echo reply, id <span class="hljs-number">1341</span>, seq <span class="hljs-number">43049</span>, length <span class="hljs-number">64</span><br><span class="hljs-attribute">18</span>:<span class="hljs-number">31</span>:<span class="hljs-number">01</span>.<span class="hljs-number">865407</span> <span class="hljs-number">82</span>:<span class="hljs-number">40</span>:<span class="hljs-number">26</span>:<span class="hljs-number">88</span>:ee:<span class="hljs-number">93</span> &gt; f6:f4:f8:<span class="hljs-number">0</span>c:<span class="hljs-number">17</span>:ea, ethertype <span class="hljs-number">802</span>.<span class="hljs-number">1</span>Q (<span class="hljs-number">0</span>x8100), length <span class="hljs-number">102</span>: vlan <span class="hljs-number">333</span>, p <span class="hljs-number">0</span>, ethertype IPv4 (<span class="hljs-number">0</span>x0800), <span class="hljs-number">3.3.3.2</span> &gt; <span class="hljs-number">3.3.3.3</span>: ICMP echo request, id <span class="hljs-number">43947</span>, seq <span class="hljs-number">43034</span>, length <span class="hljs-number">64</span><br><span class="hljs-attribute">18</span>:<span class="hljs-number">31</span>:<span class="hljs-number">01</span>.<span class="hljs-number">865468</span> f6:f4:f8:<span class="hljs-number">0</span>c:<span class="hljs-number">17</span>:ea &gt; <span class="hljs-number">82</span>:<span class="hljs-number">40</span>:<span class="hljs-number">26</span>:<span class="hljs-number">88</span>:ee:<span class="hljs-number">93</span>, ethertype <span class="hljs-number">802</span>.<span class="hljs-number">1</span>Q (<span class="hljs-number">0</span>x8100), length <span class="hljs-number">102</span>: vlan <span class="hljs-number">333</span>, p <span class="hljs-number">0</span>, ethertype IPv4 (<span class="hljs-number">0</span>x0800), <span class="hljs-number">3.3.3.3</span> &gt; <span class="hljs-number">3.3.3.2</span>: ICMP echo reply, id <span class="hljs-number">43947</span>, seq <span class="hljs-number">43034</span>, length <span class="hljs-number">64</span><br><span class="hljs-attribute">root</span>@martin-HOST:/home/martin#<br></code></pre></td></tr></table></figure>
+
+<p>再次读取 pcap 文件，并增加过滤条件<code>icmp</code>，结果里只有非vlan的报文，vlan 报文被过滤掉了：</p>
+<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs apache"><span class="hljs-attribute">root</span>@martin-HOST:/home/martin# tcpdump  -n -r veth3.pcap -e icmp<br><span class="hljs-attribute">reading</span> from file veth3.pcap, link-type EN10MB (Ethernet), snapshot length <span class="hljs-number">262144</span><br><span class="hljs-attribute">18</span>:<span class="hljs-number">31</span>:<span class="hljs-number">01</span>.<span class="hljs-number">801424</span> <span class="hljs-number">82</span>:<span class="hljs-number">40</span>:<span class="hljs-number">26</span>:<span class="hljs-number">88</span>:ee:<span class="hljs-number">93</span> &gt; f6:f4:f8:<span class="hljs-number">0</span>c:<span class="hljs-number">17</span>:ea, ethertype IPv4 (<span class="hljs-number">0</span>x0800), length <span class="hljs-number">98</span>: <span class="hljs-number">1.1.1.2</span> &gt; <span class="hljs-number">1.1.1.3</span>: ICMP echo request, id <span class="hljs-number">1341</span>, seq <span class="hljs-number">43049</span>, length <span class="hljs-number">64</span><br><span class="hljs-attribute">18</span>:<span class="hljs-number">31</span>:<span class="hljs-number">01</span>.<span class="hljs-number">801482</span> f6:f4:f8:<span class="hljs-number">0</span>c:<span class="hljs-number">17</span>:ea &gt; <span class="hljs-number">82</span>:<span class="hljs-number">40</span>:<span class="hljs-number">26</span>:<span class="hljs-number">88</span>:ee:<span class="hljs-number">93</span>, ethertype IPv4 (<span class="hljs-number">0</span>x0800), length <span class="hljs-number">98</span>: <span class="hljs-number">1.1.1.3</span> &gt; <span class="hljs-number">1.1.1.2</span>: ICMP echo reply, id <span class="hljs-number">1341</span>, seq <span class="hljs-number">43049</span>, length <span class="hljs-number">64</span><br><span class="hljs-attribute">root</span>@martin-HOST:/home/martin#<br></code></pre></td></tr></table></figure>
+
+<p>vlan 封装的icmp报文只能通过<code>vlan and icmp</code>这个过滤条件才能读取出来：</p>
+<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs apache"><span class="hljs-attribute">root</span>@martin-HOST:/home/martin# tcpdump  -n -r veth3.pcap -e vlan and icmp<br><span class="hljs-attribute">reading</span> from file veth3.pcap, link-type EN10MB (Ethernet), snapshot length <span class="hljs-number">262144</span><br><span class="hljs-attribute">18</span>:<span class="hljs-number">31</span>:<span class="hljs-number">01</span>.<span class="hljs-number">865407</span> <span class="hljs-number">82</span>:<span class="hljs-number">40</span>:<span class="hljs-number">26</span>:<span class="hljs-number">88</span>:ee:<span class="hljs-number">93</span> &gt; f6:f4:f8:<span class="hljs-number">0</span>c:<span class="hljs-number">17</span>:ea, ethertype <span class="hljs-number">802</span>.<span class="hljs-number">1</span>Q (<span class="hljs-number">0</span>x8100), length <span class="hljs-number">102</span>: vlan <span class="hljs-number">333</span>, p <span class="hljs-number">0</span>, ethertype IPv4 (<span class="hljs-number">0</span>x0800), <span class="hljs-number">3.3.3.2</span> &gt; <span class="hljs-number">3.3.3.3</span>: ICMP echo request, id <span class="hljs-number">43947</span>, seq <span class="hljs-number">43034</span>, length <span class="hljs-number">64</span><br><span class="hljs-attribute">18</span>:<span class="hljs-number">31</span>:<span class="hljs-number">01</span>.<span class="hljs-number">865468</span> f6:f4:f8:<span class="hljs-number">0</span>c:<span class="hljs-number">17</span>:ea &gt; <span class="hljs-number">82</span>:<span class="hljs-number">40</span>:<span class="hljs-number">26</span>:<span class="hljs-number">88</span>:ee:<span class="hljs-number">93</span>, ethertype <span class="hljs-number">802</span>.<span class="hljs-number">1</span>Q (<span class="hljs-number">0</span>x8100), length <span class="hljs-number">102</span>: vlan <span class="hljs-number">333</span>, p <span class="hljs-number">0</span>, ethertype IPv4 (<span class="hljs-number">0</span>x0800), <span class="hljs-number">3.3.3.3</span> &gt; <span class="hljs-number">3.3.3.2</span>: ICMP echo reply, id <span class="hljs-number">43947</span>, seq <span class="hljs-number">43034</span>, length <span class="hljs-number">64</span><br><span class="hljs-attribute">root</span>@martin-HOST:/home/martin#<br></code></pre></td></tr></table></figure>
+
+<h2 id="详细分析">0.4. 详细分析</h2><h3 id="ebpf指令-filter-icmp">0.4.1. ebpf指令: filter icmp</h3><p>通过dump bpf指令，我们可以看到严格按照ETH+IP+ICMP的格式过滤的。因此读取 pcap 文件时候，没有 vlan 报文，这也是符合ebpf 指令的预期结果。</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs dns">root@martin-HOST:/home/martin# tcpdump  -r veth3.pcap -n -e -d  icmp<br>reading from file veth3.pcap, link-type EN10MB <span class="hljs-punctuation">(</span>Ethernet<span class="hljs-punctuation">)</span>, snapshot length <span class="hljs-number">262144</span><br><span class="hljs-punctuation">(</span><span class="hljs-number">000</span><span class="hljs-punctuation">)</span> ldh      [<span class="hljs-number">12</span>]                                          &lt;=== eth头的type类型<br><span class="hljs-punctuation">(</span><span class="hljs-number">001</span><span class="hljs-punctuation">)</span> jeq      #<span class="hljs-number">0</span>x800           jt <span class="hljs-number">2</span>    jf <span class="hljs-number">5</span>                 &lt;=== 如果是IP协议（<span class="hljs-number">0</span>x0800）<br><span class="hljs-punctuation">(</span><span class="hljs-number">002</span><span class="hljs-punctuation">)</span> ldb      [<span class="hljs-number">23</span>]                                          &lt;=== 加载IP头里的protocol字段<br><span class="hljs-punctuation">(</span><span class="hljs-number">003</span><span class="hljs-punctuation">)</span> jeq      #<span class="hljs-number">0</span>x1             jt <span class="hljs-number">4</span>    jf <span class="hljs-number">5</span>                 &lt;=== 如果是ICMP协议（<span class="hljs-number">0</span>x01）, 返回true（<span class="hljs-number">004</span>）<br><span class="hljs-punctuation">(</span><span class="hljs-number">004</span><span class="hljs-punctuation">)</span> ret      #<span class="hljs-number">262144</span>                                       &lt;=== True<br><span class="hljs-punctuation">(</span><span class="hljs-number">005</span><span class="hljs-punctuation">)</span> ret      #<span class="hljs-number">0</span><br></code></pre></td></tr></table></figure>
+
+<p>而在网口上抓包时候，传递给内核的bpf指令也是严格按照ETH+IP+ICMP过滤的。所以两者的bpf指令是完全相同的。</p>
+<figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs ruby">root<span class="hljs-variable">@martin</span>-<span class="hljs-variable constant_">HOST</span><span class="hljs-symbol">:/home/martin</span><span class="hljs-comment"># tcpdump  -i veth3 -n -e -d  icmp</span><br>(<span class="hljs-number">000</span>) ldh      [<span class="hljs-number">12</span>]<br>(<span class="hljs-number">001</span>) jeq      <span class="hljs-comment">#0x800           jt 2    jf 5</span><br>(<span class="hljs-number">002</span>) ldb      [<span class="hljs-number">23</span>]<br>(<span class="hljs-number">003</span>) jeq      <span class="hljs-comment">#0x1             jt 4    jf 5</span><br>(<span class="hljs-number">004</span>) ret      <span class="hljs-comment">#262144</span><br>(<span class="hljs-number">005</span>) ret      <span class="hljs-comment">#0</span><br>root<span class="hljs-variable">@martin</span>-<span class="hljs-variable constant_">HOST</span><span class="hljs-symbol">:/home/martin</span><span class="hljs-comment">#</span><br></code></pre></td></tr></table></figure>
+
+<p>相同的 ebpf 指令，为什么内核处理报文时候，就能够把 vlan 报文也匹配进来呢？下面我们通过内核协议栈的源码分析下原因。</p>
+<h3 id="内核协议栈：vlan报文头">0.4.2. 内核协议栈：vlan报文头</h3><p>为什么相同的指令在内核和libpcap读取文件时候执行，产生了不同的效果呢。这里有两个原因：</p>
+<ol>
+<li>部分网卡可以直接在硬件层面就卸载vlan报文头，这样协议栈收到的报文就没有vlan了，而vlan信息是通过驱动读取到后，转化为skb的meta信息传递给协议栈的。</li>
+<li>协议栈入口时候，会主动解析并剥离vlan头，等运行到ptype_all并进行af_packet抓包时候，报文已经没有vlan头了。</li>
+</ol>
+<p>这两种情况，虽然处理位置不一样，但是效果是一样的，都会导致内核运行ebpf指令时候，看到的是一个eth+ip+icmp报文。报文真正的vlan头已经转化为skb的metadata信息了。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">5749</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> __netif_receive_skb_core(<span class="hljs-keyword">struct</span> sk_buff **pskb, <span class="hljs-type">bool</span> pfmemalloc,<br><span class="hljs-number">5750</span>                                     <span class="hljs-keyword">struct</span> packet_type **ppt_prev)<br><span class="hljs-number">5751</span> &#123;<br>...<br><span class="hljs-number">5798</span>         <span class="hljs-keyword">if</span> (eth_type_vlan(skb-&gt;protocol)) &#123;<br><span class="hljs-number">5799</span>                 skb = skb_vlan_untag(skb);             <span class="hljs-comment">// &lt;=== 此处已经剥离了 vlan tag</span><br><span class="hljs-number">5800</span>                 <span class="hljs-keyword">if</span> (unlikely(!skb))<br><span class="hljs-number">5801</span>                         <span class="hljs-keyword">goto</span> out;<br><span class="hljs-number">5802</span>         &#125;<br>...<br><span class="hljs-number">5810</span>         list_for_each_entry_rcu(ptype, &amp;dev_net_rcu(skb-&gt;dev)-&gt;ptype_all,<br><span class="hljs-number">5811</span>                                 <span class="hljs-built_in">list</span>) &#123;                <span class="hljs-comment">// &lt;=== 这里开始tcpdump</span><br><span class="hljs-number">5812</span>                 <span class="hljs-keyword">if</span> (pt_prev)<br><span class="hljs-number">5813</span>                         ret = deliver_skb(skb, pt_prev, orig_dev);<br><span class="hljs-number">5814</span>                 pt_prev = ptype;<br><span class="hljs-number">5815</span>         &#125;<br><span class="hljs-number">5816</span><br><span class="hljs-number">5817</span>         list_for_each_entry_rcu(ptype, &amp;skb-&gt;dev-&gt;ptype_all, <span class="hljs-built_in">list</span>) &#123;<br><span class="hljs-number">5818</span>                 <span class="hljs-keyword">if</span> (pt_prev)                            <span class="hljs-comment">// &lt;=== 这里tcpdump</span><br><span class="hljs-number">5819</span>                         ret = deliver_skb(skb, pt_prev, orig_dev);<br><span class="hljs-number">5820</span>                 pt_prev = ptype;<br><span class="hljs-number">5821</span>         &#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="ebpf指令-filter-vlan">0.4.3. ebpf指令: filter vlan</h3><p>那自然就有一个疑问了，当内核需要<code>vlan</code>这个过滤条件时，bpf指令怎么处理呢？</p>
+<p>首先我们看下读取 pcap 文件场景下，过滤条件<code>vlan</code>展开的 ebpf 指令：</p>
+<figure class="highlight ruby"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs ruby">root<span class="hljs-variable">@martin</span>-<span class="hljs-variable constant_">HOST</span><span class="hljs-symbol">:/home/martin</span><span class="hljs-comment"># tcpdump  -n -r veth3.pcap -e vlan -d</span><br>reading from file veth3.pcap, link-type <span class="hljs-variable constant_">EN10MB</span> (<span class="hljs-title class_">Ethernet</span>), snapshot length <span class="hljs-number">262144</span><br>(<span class="hljs-number">000</span>) ldh      [<span class="hljs-number">12</span>]<br>(<span class="hljs-number">001</span>) jeq      <span class="hljs-comment">#0x8100          jt 4    jf 2</span><br>(<span class="hljs-number">002</span>) jeq      <span class="hljs-comment">#0x88a8          jt 4    jf 3</span><br>(<span class="hljs-number">003</span>) jeq      <span class="hljs-comment">#0x9100          jt 4    jf 5</span><br>(<span class="hljs-number">004</span>) ret      <span class="hljs-comment">#262144</span><br>(<span class="hljs-number">005</span>) ret      <span class="hljs-comment">#0</span><br>root<span class="hljs-variable">@martin</span>-<span class="hljs-variable constant_">HOST</span><span class="hljs-symbol">:/home/martin</span><span class="hljs-comment">#</span><br></code></pre></td></tr></table></figure>
+
+<p>在网口直接抓包场景下，过滤条件<code>vlan</code>展开的 ebpf 指令：</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs dns">root@martin-HOST:/home/martin# tcpdump  -n -i veth3 vlan -d<br><span class="hljs-punctuation">(</span><span class="hljs-number">000</span><span class="hljs-punctuation">)</span> ldb      [vlanp]<br><span class="hljs-punctuation">(</span><span class="hljs-number">001</span><span class="hljs-punctuation">)</span> jeq      #<span class="hljs-number">0</span>x1             jt <span class="hljs-number">6</span>    jf <span class="hljs-number">2</span><br><span class="hljs-punctuation">(</span><span class="hljs-number">002</span><span class="hljs-punctuation">)</span> ldh      [<span class="hljs-number">12</span>]<br><span class="hljs-punctuation">(</span><span class="hljs-number">003</span><span class="hljs-punctuation">)</span> jeq      #<span class="hljs-number">0</span>x8100          jt <span class="hljs-number">6</span>    jf <span class="hljs-number">4</span><br><span class="hljs-punctuation">(</span><span class="hljs-number">004</span><span class="hljs-punctuation">)</span> jeq      #<span class="hljs-number">0</span>x88a8          jt <span class="hljs-number">6</span>    jf <span class="hljs-number">5</span><br><span class="hljs-punctuation">(</span><span class="hljs-number">005</span><span class="hljs-punctuation">)</span> jeq      #<span class="hljs-number">0</span>x9100          jt <span class="hljs-number">6</span>    jf <span class="hljs-number">7</span><br><span class="hljs-punctuation">(</span><span class="hljs-number">006</span><span class="hljs-punctuation">)</span> ret      #<span class="hljs-number">262144</span><br><span class="hljs-punctuation">(</span><span class="hljs-number">007</span><span class="hljs-punctuation">)</span> ret      #<span class="hljs-number">0</span><br></code></pre></td></tr></table></figure>
+
+<p>对比读libpcap的指令，我们发现不同之处就在于内核独立了一个判断条件：</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-punctuation">(</span><span class="hljs-number">000</span><span class="hljs-punctuation">)</span> ldb      [vlanp]<br><span class="hljs-punctuation">(</span><span class="hljs-number">001</span><span class="hljs-punctuation">)</span> jeq      #<span class="hljs-number">0</span>x1             jt <span class="hljs-number">6</span>    jf <span class="hljs-number">2</span><br></code></pre></td></tr></table></figure>
+
+<p>dump结果里的<code>(000) ldb [vlanp]</code>指令，接下来我们看下这个条件对应的内核代码。</p>
+<h3 id="内核代码">0.4.4. 内核代码</h3><p>这里的演进历史比较长，从最早的bpf到最新的ebpf扩展，这里只讨论一下最新代码，更老的渊源，看一下：</p>
+<ul>
+<li><a target="_blank" rel="noopener" href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?h=v6.5&id=f3335031b">net: filter: add vlan tag access</a></li>
+<li><a target="_blank" rel="noopener" href="https://linux.kernel.narkive.com/mfgIPZOV/patch-net-next-1-2-bpf-allow-extended-bpf-programs-access-skb-fields">bpf: allow extended BPF programs</a></li>
+</ul>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Tcpdump/" class="category-chain-item">Tcpdump</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/Tcpdump/" class="print-no-link">#Tcpdump</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>how tcpdump work with vlan filter</div>
+      <div>https://martinbj2008.github.io/2019/10/09/how-tcpdump-work-with-vlan-filter/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>October 9, 2019</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2019/10/26/how-load-xdp-into-kernel/" title="xdp 是如何加载到内核并运行的">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">xdp 是如何加载到内核并运行的</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2019/10/08/tcpdump-and-ebpf/" title="tcpdump and ebpf">
+                        <span class="hidden-mobile">tcpdump and ebpf</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

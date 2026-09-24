@@ -1,0 +1,1247 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. 场景 用户在 SONiC 设备上执行 sudo config interface mtu eth0 2000，把 eth0 端口的 MTU 改为 2000。 本文从 CLI 一路追踪到 ASIC 硬件寄存器写入，覆盖每一层涉及的进程、Redis 数据库变化、消息通道、关键代码与时间顺序。 本文中所有代码引用均基于本机 &#x2F;Users&#x2F;martinzhang&#x2F;git&#x2F;sonic&#x2F; 目录下的真">
+<meta property="og:type" content="article">
+<meta property="og:title" content="SONiC Port MTU 更新流程详解（以 Tofino 芯片为例）">
+<meta property="og:url" content="https://martinbj2008.github.io/2026/06/30/2026-06-30-sonic-port-mtu-flow.ai/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. 场景 用户在 SONiC 设备上执行 sudo config interface mtu eth0 2000，把 eth0 端口的 MTU 改为 2000。 本文从 CLI 一路追踪到 ASIC 硬件寄存器写入，覆盖每一层涉及的进程、Redis 数据库变化、消息通道、关键代码与时间顺序。 本文中所有代码引用均基于本机 &#x2F;Users&#x2F;martinzhang&#x2F;git&#x2F;sonic&#x2F; 目录下的真">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-06-30T03:38:28.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.753Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="ai">
+<meta property="article:tag" content="sai">
+<meta property="article:tag" content="sonic">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>SONiC Port MTU 更新流程详解（以 Tofino 芯片为例） - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="SONiC Port MTU 更新流程详解（以 Tofino 芯片为例）"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2026-06-30 11:38" pubdate>
+          June 30, 2026 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          21k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          179 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">SONiC Port MTU 更新流程详解（以 Tofino 芯片为例）</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="场景">0.1. 场景</h2><blockquote>
+<p>用户在 SONiC 设备上执行 <code>sudo config interface mtu eth0 2000</code>，把 <code>eth0</code> 端口的 MTU 改为 2000。</p>
+<p>本文从 CLI 一路追踪到 ASIC 硬件寄存器写入，覆盖每一层涉及的进程、Redis 数据库变化、消息通道、关键代码与时间顺序。</p>
+<p>本文中所有代码引用均基于本机 <code>/Users/martinzhang/git/sonic/</code> 目录下的真实代码。</p>
+</blockquote>
+<hr>
+<h2 id="一、整体架构与角色">0.2. 一、整体架构与角色</h2><h3 id="1-1-涉及的-Redis-数据库">0.2.1. 1.1 涉及的 Redis 数据库</h3><table>
+<thead>
+<tr>
+<th>DB 编号</th>
+<th>名称</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>DB 4</td>
+<td><code>CONFIG_DB</code></td>
+<td>用户的目标配置（CLI&#x2F;REST&#x2F;gNMI 写入此处）</td>
+</tr>
+<tr>
+<td>DB 0</td>
+<td><code>APPL_DB</code></td>
+<td>各 mgrd 写入的”期望态”，供 orchagent 消费</td>
+</tr>
+<tr>
+<td>DB 1</td>
+<td><code>ASIC_DB</code></td>
+<td>SAI 对象的下发态，供 syncd 消费</td>
+</tr>
+<tr>
+<td>DB 6</td>
+<td><code>STATE_DB</code></td>
+<td>实际运行态（端口 oper_status、能力等）</td>
+</tr>
+</tbody></table>
+<h3 id="1-2-涉及的进程-容器">0.2.2. 1.2 涉及的进程 &#x2F; 容器</h3><table>
+<thead>
+<tr>
+<th>容器</th>
+<th>进程</th>
+<th>角色</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>database</code></td>
+<td><code>redis-server</code></td>
+<td>持有 6 个逻辑 DB</td>
+</tr>
+<tr>
+<td>host</td>
+<td><code>config</code>(Python click) → <code>portconfig</code>(Python)</td>
+<td>CLI 入口</td>
+</tr>
+<tr>
+<td><code>swss</code></td>
+<td><code>portmgrd</code></td>
+<td>订阅 <code>CONFIG_DB.PORT</code>，写 kernel + APPL_DB</td>
+</tr>
+<tr>
+<td><code>swss</code></td>
+<td><code>orchagent</code></td>
+<td>订阅 <code>APPL_DB.PORT_TABLE</code>，写 ASIC_DB</td>
+</tr>
+<tr>
+<td><code>syncd-bfn</code>（TF 平台对应容器）</td>
+<td><code>syncd</code></td>
+<td>订阅 <code>ASIC_DB</code>，调用 <code>libsai_tofino.so</code></td>
+</tr>
+<tr>
+<td>同 syncd 容器</td>
+<td><code>bf_switchd</code></td>
+<td>Tofino SDE 主进程，被 libsai 通过 IPC&#x2F;直链调用</td>
+</tr>
+</tbody></table>
+<span id="more"></span>
+
+<h3 id="1-3-整体数据流">0.2.3. 1.3 整体数据流</h3><figure class="highlight dart"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br></pre></td><td class="code"><pre><code class="hljs dart">用户 ──CLI──▶ config/main.py ──exec──▶ portconfig 脚本<br>                                          │ (<span class="hljs-title class_">Python</span> 写 CONFIG_DB)<br>                                          ▼<br>   ┌──────────────────────────────────────────────────────────┐<br>   │   <span class="hljs-title class_">Redis</span> 实例（多 DB）                                      │<br>   │   DB <span class="hljs-number">4</span> = CONFIG_DB    DB <span class="hljs-number">0</span> = APPL_DB    DB <span class="hljs-number">1</span> = ASIC_DB    │<br>   │   DB <span class="hljs-number">6</span> = STATE_DB                                          │<br>   └──────────────┬───────────────────────────────────────────┘<br>                  │ keyspace notify <span class="hljs-string">&quot;PORT|eth0&quot;</span><br>                  ▼<br>        portmgrd  (swss 容器)<br>        - ip link <span class="hljs-keyword">set</span> dev eth0 mtu <span class="hljs-number">2000</span>   → <span class="hljs-title class_">Linux</span> kernel<br>        - 写 APPL_DB:_PORT_TABLE:eth0 mtu=<span class="hljs-number">2000</span><br>                  │<br>                  │  <span class="hljs-title class_">ProducerStateTable</span> channel<br>                  ▼<br>        APPL_DB 的 _PORT_TABLE: 临时表 + channel 通知<br>                  │<br>                  ▼<br>  ┌─────────── 上半部：orchagent 进程（厂商无关） ───────────┐<br>  │                                                         │<br>  │   <span class="hljs-title class_">PortsOrch</span>::<span class="hljs-title function_">doPortTask</span>()                                │<br>  │   - 调用 sai_port_api-&gt;<span class="hljs-title function_">set_port_attribute</span>(...)           │<br>  │     （SAI 标准接口，函数指针由 libsairedis 填充）           │<br>  │   - 实际跳到 <span class="hljs-title class_">RedisRemoteSaiInterface</span>::<span class="hljs-keyword">set</span>                 │<br>  │   - 序列化属性 → 写 ASIC_DB → PUBLISH 通知                │<br>  │                                                         │<br>  └────────────────────────┬────────────────────────────────┘<br>                           ▼<br>         ASIC_DB: ASIC_STATE:SAI_OBJECT_TYPE_PORT:oid:0xXXXX  mtu=<span class="hljs-number">2022</span><br>                  │  (channel REDIS_ASIC_STATE_COMMAND_SET)<br>                  │  ★ 进程间通过 <span class="hljs-title class_">Redis</span> pub/sub 解耦<br>                  ▼<br>  ┌─────────── 下半部：syncd 进程（厂商相关） ──────────────┐<br>  │                                                         │<br>  │   <span class="hljs-title class_">Syncd</span>::processQuadEvent → processOidSet                │<br>  │   - VID → RID 翻译                                       │<br>  │   - 调用 m_vendorSai-&gt;<span class="hljs-title function_">set</span>(objectType, rid, attr)         │<br>  │     （<span class="hljs-title class_">VendorSai</span> 类成员方法，不是 sai_port_api 调用）       │<br>  │   - <span class="hljs-title class_">VendorSai</span> 内部按 objectType 派发到厂商 SAI 表          │<br>  │     m_apis.port_api-&gt;<span class="hljs-title function_">set_port_attribute</span>(rid, attr)       │<br>  │     （函数指针由厂商 libsai_xxx.so 填充）                  │<br>  │                                                         │<br>  │   <span class="hljs-title class_">Tofino</span> SDE (bf_switchd)                                │<br>  │   - <span class="hljs-title function_">bf_pal_port_mtu_set</span>()                                │<br>  │   - 通过 <span class="hljs-title class_">PCIe</span> 写 <span class="hljs-title class_">Tofino</span> TM/<span class="hljs-title class_">EBuf</span> 寄存器                    │<br>  │                                                         │<br>  └────────────────────────┬────────────────────────────────┘<br>                           ▼<br>                ASIC 硬件 MTU 立即生效<br></code></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="二、时间轴（t0-→-t12）">0.3. 二、时间轴（t0 → t12）</h2><hr>
+<h2 id="四、时间轴一览（压缩版）">0.4. 四、时间轴一览（压缩版）</h2><figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br></pre></td><td class="code"><pre><code class="hljs dns">t0  CLI:  config interface mtu eth0 <span class="hljs-number">2000</span><br>t1  config/main.py.mtu<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span>  → exec portconfig -p eth0 -m <span class="hljs-number">2000</span><br>t2  portconfig.set_mtu<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span>  → CONFIG_DB: HSET PORT|eth0 mtu <span class="hljs-number">2000</span><br>t3  Redis pub keyspace event → portmgrd 被唤醒<br>t4  PortMgr<span class="hljs-number">::d</span>oTask 取出 <span class="hljs-punctuation">(</span>eth0, SET, mtu=<span class="hljs-number">2000</span><span class="hljs-punctuation">)</span><br>t5  PortMgr<span class="hljs-number">::</span>setPortMtu:<br>        ├─ exec <span class="hljs-string">&quot;ip link set dev eth0 mtu 2000&quot;</span>   → Linux netdev MTU=<span class="hljs-number">2000</span><br>        └─ writeConfigToAppDb<span class="hljs-punctuation">(</span>eth0, mtu, <span class="hljs-number">2000</span><span class="hljs-punctuation">)</span>    → APPL_DB._PORT_TABLE<br>t6  ProducerStateTable channel → ConsumerStateTable <span class="hljs-type">in</span> orchagent<br>        临时表合并到 PORT_TABLE，事件入 m_toSync<br>t7  PortsOrch<span class="hljs-number">::d</span>oPortTask 处理 mtu 字段（如有 RIF 联动 setRouterIntfsMtu）<br>t8  PortsOrch<span class="hljs-number">::</span>setPortMtu <span class="hljs-punctuation">(</span>orchagent 进程<span class="hljs-punctuation">)</span>:<br>        mtu+<span class="hljs-number">22</span> = <span class="hljs-number">2022</span><br>        调 sai_port_api-&gt;set_port_attribute  ← SAI 标准接口（指向 sairedis 实现）<br>t9  RedisRemoteSaiInter<span class="hljs-number">face::</span>set <span class="hljs-punctuation">(</span>orchagent 进程，厂商无关<span class="hljs-punctuation">)</span>:<br>        → ASIC_DB: ASIC_STATE:SAI_OBJECT_TYPE_PORT:oid:... SAI_PORT_ATTR_MTU=<span class="hljs-number">2022</span><br>        → PUBLISH <span class="hljs-string">&quot;set&quot;</span> 到 ASIC_STATE_CHANNEL<br>        ★ 上半部到此结束，进程间通过 Redis 解耦<br>t10 syncd 进程 <span class="hljs-punctuation">(</span>厂商相关<span class="hljs-punctuation">)</span>:<br>        processEvent → processSingleEvent → processQuadEvent → processOidSet<br>        → VID→RID 翻译<br>        → m_vendorSai-&gt;set<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span>  ← VendorSai 类成员方法（不是 sai_port_api）<br>        → 内部派发到 m_apis.port_api-&gt;set_port_attribute（厂商 libsai_tofino.so 填充）<br>t11 libsai_tofino → bf_switchd → bf_pal_port_mtu_set<br>        → 写 Tofino TM 寄存器 max_frame_size<br>        → 硬件 MTU 立即生效<br>t12 syncd 把 SAI 返回值通过 GETRESPONSE 通道回给 orchagent<br>        orchagent 把日志 <span class="hljs-string">&quot;Set port eth0 MTU to 2000&quot;</span> 写入 syslog<br></code></pre></td></tr></table></figure>
+
+
+<h3 id="t0-—-用户敲命令">0.4.1. t0 — 用户敲命令</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs bash"><span class="hljs-built_in">sudo</span> config interface mtu eth0 2000<br></code></pre></td></tr></table></figure>
+
+<hr>
+<h3 id="t1-—-sonic-utilities-入口">0.4.2. t1 — sonic-utilities 入口</h3><p>文件: <code>sonic-utilities/config/main.py</code> | 行号: 5728-5750 | 函数: <code>mtu</code></p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><code class="hljs python"><span class="hljs-meta">@interface.command()</span><br><span class="hljs-meta">@click.pass_context</span><br><span class="hljs-meta">@click.argument(<span class="hljs-params"><span class="hljs-string">&#x27;interface_name&#x27;</span>, metavar=<span class="hljs-string">&#x27;&lt;interface_name&gt;&#x27;</span>, required=<span class="hljs-literal">True</span></span>)</span><br><span class="hljs-meta">@click.argument(<span class="hljs-params"><span class="hljs-string">&#x27;interface_mtu&#x27;</span>, metavar=<span class="hljs-string">&#x27;&lt;interface_mtu&gt;&#x27;</span>, required=<span class="hljs-literal">True</span>,</span></span><br><span class="hljs-params"><span class="hljs-meta">                <span class="hljs-built_in">type</span>=click.IntRange(<span class="hljs-params"><span class="hljs-number">68</span>, <span class="hljs-number">9216</span></span>)</span>)</span><br><span class="hljs-meta">@click.option(<span class="hljs-params"><span class="hljs-string">&#x27;-v&#x27;</span>, <span class="hljs-string">&#x27;--verbose&#x27;</span>, is_flag=<span class="hljs-literal">True</span>, <span class="hljs-built_in">help</span>=<span class="hljs-string">&quot;Enable verbose output&quot;</span></span>)</span><br><span class="hljs-keyword">def</span> <span class="hljs-title function_">mtu</span>(<span class="hljs-params">ctx, interface_name, interface_mtu, verbose</span>):<br>    <span class="hljs-string">&quot;&quot;&quot;Set interface mtu&quot;&quot;&quot;</span><br>    config_db = ctx.obj[<span class="hljs-string">&#x27;config_db&#x27;</span>]<br>    <span class="hljs-keyword">if</span> clicommon.get_interface_naming_mode() == <span class="hljs-string">&quot;alias&quot;</span>:<br>        interface_name = interface_alias_to_name(config_db, interface_name)<br>        <span class="hljs-keyword">if</span> interface_name <span class="hljs-keyword">is</span> <span class="hljs-literal">None</span>:<br>            ctx.fail(<span class="hljs-string">&quot;&#x27;interface_name&#x27; is None!&quot;</span>)<br><br>    portchannel_member_table = config_db.get_table(<span class="hljs-string">&#x27;PORTCHANNEL_MEMBER&#x27;</span>)<br>    <span class="hljs-keyword">if</span> interface_is_in_portchannel(portchannel_member_table, interface_name):<br>        ctx.fail(<span class="hljs-string">&quot;&#x27;interface_name&#x27; is in portchannel!&quot;</span>)<br><br>    <span class="hljs-keyword">if</span> ctx.obj[<span class="hljs-string">&#x27;namespace&#x27;</span>] <span class="hljs-keyword">is</span> DEFAULT_NAMESPACE:<br>        command = [<span class="hljs-string">&#x27;portconfig&#x27;</span>, <span class="hljs-string">&#x27;-p&#x27;</span>, <span class="hljs-built_in">str</span>(interface_name), <span class="hljs-string">&#x27;-m&#x27;</span>, <span class="hljs-built_in">str</span>(interface_mtu)]<br>    <span class="hljs-keyword">else</span>:<br>        command = [<span class="hljs-string">&#x27;portconfig&#x27;</span>, <span class="hljs-string">&#x27;-p&#x27;</span>, <span class="hljs-built_in">str</span>(interface_name), <span class="hljs-string">&#x27;-m&#x27;</span>,<br>                   <span class="hljs-built_in">str</span>(interface_mtu), <span class="hljs-string">&#x27;-n&#x27;</span>, <span class="hljs-built_in">str</span>(ctx.obj[<span class="hljs-string">&#x27;namespace&#x27;</span>])]<br>    ...<br>    clicommon.run_command(command, display_cmd=verbose)<br></code></pre></td></tr></table></figure>
+
+<p><strong>关键动作</strong>：</p>
+<ul>
+<li>校验 MTU 范围 <code>[68, 9216]</code></li>
+<li>校验该 port 不在 PortChannel 成员里</li>
+<li>fork 子进程 <code>portconfig -p eth0 -m 2000</code></li>
+</ul>
+<hr>
+<h3 id="t2-—-portconfig-脚本写入-CONFIG-DB">0.4.3. t2 — portconfig 脚本写入 CONFIG_DB</h3><p>文件: <code>sonic-utilities/scripts/portconfig</code> | 行号: 152-158 | 函数: <code>portconfig.set_mtu</code></p>
+<figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs python"><span class="hljs-keyword">def</span> <span class="hljs-title function_">set_mtu</span>(<span class="hljs-params">self, port, mtu</span>):<br>    <span class="hljs-keyword">if</span> <span class="hljs-variable language_">self</span>.is_lag:<br>        <span class="hljs-keyword">raise</span> Exception(<span class="hljs-string">&quot;Invalid port %s&quot;</span> % (port))<br>    <span class="hljs-keyword">if</span> <span class="hljs-variable language_">self</span>.verbose:<br>        <span class="hljs-built_in">print</span>(<span class="hljs-string">&quot;Setting mtu %s on port %s&quot;</span> % (mtu, port))<br>    <span class="hljs-variable language_">self</span>.db.mod_entry(PORT_TABLE_NAME, port, &#123;PORT_MTU_CONFIG_FIELD_NAME: mtu&#125;)<br></code></pre></td></tr></table></figure>
+
+<p><code>mod_entry(&#39;PORT&#39;, &#39;eth0&#39;, {&#39;mtu&#39;: &#39;2000&#39;})</code> 等价于 Redis 命令：</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs dns">HSET <span class="hljs-string">&quot;PORT|eth0&quot;</span> mtu <span class="hljs-number">2000</span>               <span class="hljs-punctuation">(</span>CONFIG_DB / DB4<span class="hljs-punctuation">)</span><br>PUBLISH __keyspace@<span class="hljs-number">4</span>__:PORT|eth0 hset   <span class="hljs-punctuation">(</span>Redis 自动发出<span class="hljs-punctuation">)</span><br></code></pre></td></tr></table></figure>
+
+<p><strong>此时 CONFIG_DB 状态</strong>：</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">127.0.0.1</span>:<span class="hljs-number">6379</span>[<span class="hljs-number">4</span>]&gt; HGETALL <span class="hljs-string">&quot;PORT|eth0&quot;</span><br><span class="hljs-number">1</span><span class="hljs-punctuation">)</span> <span class="hljs-string">&quot;admin_status&quot;</span>  <span class="hljs-number">2</span><span class="hljs-punctuation">)</span> <span class="hljs-string">&quot;up&quot;</span><br><span class="hljs-number">3</span><span class="hljs-punctuation">)</span> <span class="hljs-string">&quot;alias&quot;</span>         <span class="hljs-number">4</span><span class="hljs-punctuation">)</span> <span class="hljs-string">&quot;eth0&quot;</span><br><span class="hljs-number">5</span><span class="hljs-punctuation">)</span> <span class="hljs-string">&quot;lanes&quot;</span>         <span class="hljs-number">6</span><span class="hljs-punctuation">)</span> <span class="hljs-string">&quot;65,66,67,68&quot;</span><br><span class="hljs-number">7</span><span class="hljs-punctuation">)</span> <span class="hljs-string">&quot;mtu&quot;</span>           <span class="hljs-number">8</span><span class="hljs-punctuation">)</span> <span class="hljs-string">&quot;2000&quot;</span>        ← 新值<br><span class="hljs-number">9</span><span class="hljs-punctuation">)</span> <span class="hljs-string">&quot;speed&quot;</span>         <span class="hljs-number">10</span><span class="hljs-punctuation">)</span> <span class="hljs-string">&quot;100000&quot;</span><br></code></pre></td></tr></table></figure>
+
+<hr>
+<h3 id="t3-—-Redis-keyspace-通知触发-portmgrd">0.4.4. t3 — Redis keyspace 通知触发 portmgrd</h3><p><code>portmgrd</code> 启动时订阅了 <code>CONFIG_DB</code> 的 <code>PORT</code> 表：</p>
+<p>文件: <code>sonic-swss/cfgmgr/portmgrd.cpp</code> | 行号: 27-40 | 函数: <code>main</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><code class="hljs cpp">vector&lt;string&gt; cfg_port_tables = &#123;<br>    CFG_PORT_TABLE_NAME,<br>    CFG_SEND_TO_INGRESS_PORT_TABLE_NAME,<br>&#125;;<br><br><span class="hljs-function">DBConnector <span class="hljs-title">cfgDb</span><span class="hljs-params">(<span class="hljs-string">&quot;CONFIG_DB&quot;</span>, <span class="hljs-number">0</span>)</span></span>;<br><span class="hljs-function">DBConnector <span class="hljs-title">appDb</span><span class="hljs-params">(<span class="hljs-string">&quot;APPL_DB&quot;</span>, <span class="hljs-number">0</span>)</span></span>;<br><span class="hljs-function">DBConnector <span class="hljs-title">stateDb</span><span class="hljs-params">(<span class="hljs-string">&quot;STATE_DB&quot;</span>, <span class="hljs-number">0</span>)</span></span>;<br><br><span class="hljs-function">PortMgr <span class="hljs-title">portmgr</span><span class="hljs-params">(&amp;cfgDb, &amp;appDb, &amp;stateDb, cfg_port_tables)</span></span>;<br>vector&lt;Orch *&gt; cfgOrchList = &#123;&amp;portmgr&#125;;<br><br>swss::Select s;<br><span class="hljs-keyword">for</span> (Orch *o : cfgOrchList)<br>&#123;<br>    s.<span class="hljs-built_in">addSelectables</span>(o-&gt;<span class="hljs-built_in">getSelectables</span>());<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p><code>PortMgr</code> 内部创建 <code>SubscriberStateTable(&quot;PORT&quot;)</code>，挂在 epoll 上。Redis 一发布 keyspace event，<code>select()</code> 立刻返回，调到 <code>PortMgr::doTask</code>。</p>
+<hr>
+<h3 id="t4-—-PortMgr-doTask-取出变更">0.4.5. t4 — PortMgr::doTask 取出变更</h3><p>文件: <code>sonic-swss/cfgmgr/portmgr.cpp</code> | 行号: 134-225 | 函数: <code>PortMgr::doTask</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-function"><span class="hljs-type">void</span> <span class="hljs-title">PortMgr::doTask</span><span class="hljs-params">(Consumer &amp;consumer)</span></span><br><span class="hljs-function"></span>&#123;<br>    ...<br>    <span class="hljs-keyword">while</span> (it != consumer.m_toSync.<span class="hljs-built_in">end</span>())<br>    &#123;<br>        KeyOpFieldsValuesTuple t = it-&gt;second;<br>        string alias = <span class="hljs-built_in">kfvKey</span>(t);              <span class="hljs-comment">// &quot;eth0&quot;</span><br>        string op = <span class="hljs-built_in">kfvOp</span>(t);                  <span class="hljs-comment">// &quot;SET&quot;</span><br>        ...<br>        <span class="hljs-type">bool</span> portOk = <span class="hljs-built_in">isPortStateOk</span>(alias);    <span class="hljs-comment">// 检查 STATE_DB:PORT_TABLE:eth0</span><br>        ...<br>        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">auto</span> i : <span class="hljs-built_in">kfvFieldsValues</span>(t))<br>        &#123;<br>            <span class="hljs-keyword">if</span> (<span class="hljs-built_in">fvField</span>(i) == <span class="hljs-string">&quot;mtu&quot;</span>)<br>            &#123;<br>                mtu = <span class="hljs-built_in">fvValue</span>(i);              <span class="hljs-comment">// &quot;2000&quot;</span><br>            &#125;<br>            <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (<span class="hljs-built_in">fvField</span>(i) == <span class="hljs-string">&quot;admin_status&quot;</span>) &#123; ... &#125;<br>            <span class="hljs-keyword">else</span> &#123; field_values.<span class="hljs-built_in">emplace_back</span>(i); &#125;<br>        &#125;<br>        ...<br>        <span class="hljs-keyword">if</span> (field_values.<span class="hljs-built_in">size</span>())<br>            <span class="hljs-built_in">writeConfigToAppDb</span>(alias, field_values);<br>        ...<br>        <span class="hljs-keyword">if</span> (!mtu.<span class="hljs-built_in">empty</span>())<br>        &#123;<br>            <span class="hljs-built_in">setPortMtu</span>(alias, mtu);<br>            <span class="hljs-built_in">SWSS_LOG_NOTICE</span>(<span class="hljs-string">&quot;Configure %s MTU to %s&quot;</span>, alias.<span class="hljs-built_in">c_str</span>(), mtu.<span class="hljs-built_in">c_str</span>());<br>        &#125;<br><br>        <span class="hljs-keyword">if</span> (!admin_status.<span class="hljs-built_in">empty</span>())<br>        &#123;<br>            <span class="hljs-built_in">setPortAdminStatus</span>(alias, admin_status == <span class="hljs-string">&quot;up&quot;</span>);<br>            ...<br>        &#125;<br>    &#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p><code>isPortStateOk</code> 要求 <code>STATE_DB.PORT_TABLE:eth0.state = ok</code>，即 portsyncd 已经创建对应的 netdev 并标记完成。</p>
+<hr>
+<h3 id="t5-—-setPortMtu：先内核，再-APPL-DB">0.4.6. t5 — setPortMtu：先内核，再 APPL_DB</h3><p>文件: <code>sonic-swss/cfgmgr/portmgr.cpp</code> | 行号: 25-58 | 函数: <code>PortMgr::setPortMtu</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-function"><span class="hljs-type">bool</span> <span class="hljs-title">PortMgr::setPortMtu</span><span class="hljs-params">(<span class="hljs-type">const</span> string &amp;alias, <span class="hljs-type">const</span> string &amp;mtu)</span></span><br><span class="hljs-function"></span>&#123;<br>    stringstream cmd;<br>    string res, cmd_str;<br><br>    <span class="hljs-comment">// ip link set dev &lt;port_name&gt; mtu &lt;mtu&gt;</span><br>    cmd &lt;&lt; IP_CMD &lt;&lt; <span class="hljs-string">&quot; link set dev &quot;</span> &lt;&lt; <span class="hljs-built_in">shellquote</span>(alias) &lt;&lt; <span class="hljs-string">&quot; mtu &quot;</span> &lt;&lt; <span class="hljs-built_in">shellquote</span>(mtu);<br>    cmd_str = cmd.<span class="hljs-built_in">str</span>();<br>    <span class="hljs-type">int</span> ret = swss::<span class="hljs-built_in">exec</span>(cmd_str, res);<br>    <span class="hljs-keyword">if</span> (!ret)<br>    &#123;<br>        <span class="hljs-comment">// Set the port MTU in application database to update both</span><br>        <span class="hljs-comment">// the port MTU and possibly the port based router interface MTU</span><br>        <span class="hljs-keyword">return</span> <span class="hljs-built_in">writeConfigToAppDb</span>(alias, <span class="hljs-string">&quot;mtu&quot;</span>, mtu);<br>    &#125;<br>    ...<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p><strong>这一步串行做两件事</strong>：</p>
+<ol>
+<li><strong>同步配置到 Linux 内核</strong>（<code>/sbin/ip link set dev eth0 mtu 2000</code>）<ul>
+<li>底层是 RTNETLINK，更新该 netdev 的 <code>dev-&gt;mtu</code></li>
+<li>影响内核协议栈的 ARP&#x2F;IPv4&#x2F;IPv6&#x2F;ICMP&#x2F;socket 分片决策</li>
+<li>这就是 host 网络（BGP、SSH、ping、tcpdump）能立刻”看到”新 MTU 的原因</li>
+</ul>
+</li>
+<li><strong>如果 ip 命令成功</strong>，再写 APPL_DB：<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs apache"><span class="hljs-attribute">SET</span> <span class="hljs-string">&quot;_PORT_TABLE:eth0&quot;</span> mtu <span class="hljs-number">2000</span>   (DB <span class="hljs-number">0</span>)<br><span class="hljs-attribute">PUBLISH</span> PORT_TABLE_CHANNEL@<span class="hljs-number">0</span> ...<br></code></pre></td></tr></table></figure>
+背后是 <strong>ProducerStateTable</strong>，写到的是带下划线前缀的”临时表”，并发通道事件给 orchagent。</li>
+</ol>
+<blockquote>
+<p><strong>关于”是否要先 down 再 up”</strong>：不需要。从 iproute2（<code>ip/iplink.c:939-946</code>，<code>addattr_l(IFLA_MTU, ...)</code> 透传）到内核核心层（<code>net/core/dev.c:9892</code>，<code>netif_set_mtu_ext</code> 不检查 <code>IFF_UP</code>），任何一层都不强制要求接口先 down。是否需要 down 完全是各驱动 <code>ndo_change_mtu</code> 的私有决定。SONiC 的 <code>eth0</code> 是 SAI hostif 创建的虚拟 netdev（类似 tun&#x2F;veth），没有 ring buffer，<code>ndo_change_mtu</code> 直接 <code>dev-&gt;mtu = new_mtu</code>，零副作用。</p>
+</blockquote>
+<hr>
+<h3 id="t6-—-ProducerStateTable-ConsumerStateTable-机制">0.4.7. t6 — ProducerStateTable &#x2F; ConsumerStateTable 机制</h3><p><code>ProducerStateTable.set()</code> 写入大致做：</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">1</span><span class="hljs-punctuation">)</span> 把 fields 临时写到 _PORT_TABLE:eth0<br><span class="hljs-number">2</span><span class="hljs-punctuation">)</span> PUBLISH 一个 op=<span class="hljs-string">&quot;set&quot;</span> 到 PORT_TABLE_CHANNEL<br></code></pre></td></tr></table></figure>
+
+<p><code>orchagent</code> 的 <code>ConsumerStateTable(&quot;PORT_TABLE&quot;)</code> 收到 channel 事件后：</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">1</span><span class="hljs-punctuation">)</span> 用 lua 脚本把 _PORT_TABLE:eth0 字段合并到 PORT_TABLE:eth0<br><span class="hljs-number">2</span><span class="hljs-punctuation">)</span> 把 <span class="hljs-punctuation">(</span><span class="hljs-keyword">key</span>, op, fvs<span class="hljs-punctuation">)</span> 推到 m_toSync 队列<br><span class="hljs-number">3</span><span class="hljs-punctuation">)</span> 回到 epoll 主循环，触发 Orch<span class="hljs-number">::d</span>oTask<br></code></pre></td></tr></table></figure>
+
+<p>这套机制保证了 <strong>多次写入合并、orchagent 看到的是一致的字段全集</strong>，避免普通 hash + keyspace notify 的”丢事件&#x2F;丢字段”问题。</p>
+<hr>
+<h3 id="t7-—-PortsOrch-doPortTask-处理-mtu-字段">0.4.8. t7 — PortsOrch::doPortTask 处理 mtu 字段</h3><p>文件: <code>sonic-swss/orchagent/portsorch.cpp</code> | 行号: 5375-5407 | 函数: <code>PortsOrch::doPortTask</code>（mtu 分支）</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-keyword">if</span> (pCfg.mtu.is_set)<br>&#123;<br>    <span class="hljs-keyword">if</span> (p.m_mtu != pCfg.mtu.value)<br>    &#123;<br>        <span class="hljs-keyword">if</span> (!<span class="hljs-built_in">setPortMtu</span>(p, pCfg.mtu.value))<br>        &#123;<br>            <span class="hljs-built_in">SWSS_LOG_ERROR</span>(<span class="hljs-string">&quot;Failed to set port %s MTU to %u&quot;</span>,<br>                p.m_alias.<span class="hljs-built_in">c_str</span>(), pCfg.mtu.value);<br>            it++;<br>            <span class="hljs-keyword">continue</span>;<br>        &#125;<br><br>        p.m_mtu = pCfg.mtu.value;<br>        m_portList[p.m_alias] = p;<br><br>        <span class="hljs-keyword">if</span> (p.m_rif_id)<br>        &#123;<br>            gIntfsOrch-&gt;<span class="hljs-built_in">setRouterIntfsMtu</span>(p);   <span class="hljs-comment">// 联动 RIF MTU</span><br>        &#125;<br>        <span class="hljs-keyword">if</span> (gP4Orch)<br>        &#123;<br>            gP4Orch-&gt;<span class="hljs-built_in">setRouterIntfsMtu</span>(p.m_alias, p.m_mtu);<br>        &#125;<br>        <span class="hljs-comment">// 子接口（如 eth0.10）继承父口</span><br>        <span class="hljs-built_in">updateChildPortsMtu</span>(p, pCfg.mtu.value);<br><br>        <span class="hljs-built_in">SWSS_LOG_NOTICE</span>(<span class="hljs-string">&quot;Set port %s MTU to %u&quot;</span>,<br>            p.m_alias.<span class="hljs-built_in">c_str</span>(), pCfg.mtu.value);<br>    &#125;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>如果 <code>eth0</code> 已经配过 IP（即有 RIF），还会调 <code>IntfsOrch::setRouterIntfsMtu</code> 联动更新三层接口 MTU：</p>
+<p>文件: <code>sonic-swss/orchagent/intfsorch.cpp</code> | 行号: 222-246 | 函数: <code>IntfsOrch::setRouterIntfsMtu</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-function"><span class="hljs-type">bool</span> <span class="hljs-title">IntfsOrch::setRouterIntfsMtu</span><span class="hljs-params">(<span class="hljs-type">const</span> Port &amp;port)</span></span><br><span class="hljs-function"></span>&#123;<br>    <span class="hljs-built_in">SWSS_LOG_ENTER</span>();<br><br>    <span class="hljs-type">sai_attribute_t</span> attr;<br>    attr.id = SAI_ROUTER_INTERFACE_ATTR_MTU;<br>    attr.value.u32 = port.m_mtu;<br><br>    <span class="hljs-type">sai_status_t</span> status = sai_router_intfs_api-&gt;<br>            <span class="hljs-built_in">set_router_interface_attribute</span>(port.m_rif_id, &amp;attr);<br>    ...<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>这条会再走一次 <code>sairedis → ASIC_DB → syncd → libsai_tofino.so</code>，把 RIF 对象的 MTU 也改成 2000，影响<strong>三层转发的 too-big drop &#x2F; ICMP unreachable</strong> 行为。</p>
+<hr>
+<h3 id="t8-—-PortsOrch-setPortMtu：调-SAI">0.4.9. t8 — PortsOrch::setPortMtu：调 SAI</h3><p>文件: <code>sonic-swss/orchagent/portsorch.cpp</code> | 行号: 2385-2419 | 函数: <code>PortsOrch::setPortMtu</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-function"><span class="hljs-type">bool</span> <span class="hljs-title">PortsOrch::setPortMtu</span><span class="hljs-params">(<span class="hljs-type">const</span> Port&amp; port, <span class="hljs-type">sai_uint32_t</span> mtu)</span></span><br><span class="hljs-function"></span>&#123;<br>    <span class="hljs-built_in">SWSS_LOG_ENTER</span>();<br><br>    <span class="hljs-type">sai_attribute_t</span> attr;<br>    attr.id = SAI_PORT_ATTR_MTU;<br>    <span class="hljs-comment">/* mtu + 14 + 4 + 4 = 22 bytes */</span><br>    mtu += (<span class="hljs-type">uint32_t</span>)(<span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> ether_header) + FCS_LEN + VLAN_TAG_LEN);<br>    attr.value.u32 = mtu;          <span class="hljs-comment">// 2000 + 22 = 2022</span><br><br>    <span class="hljs-keyword">if</span> (<span class="hljs-built_in">isMACsecPort</span>(port.m_port_id))<br>        attr.value.u32 += MAX_MACSEC_SECTAG_SIZE;<br><br>    <span class="hljs-type">sai_status_t</span> status = sai_port_api-&gt;<span class="hljs-built_in">set_port_attribute</span>(port.m_port_id, &amp;attr);<br>    ...<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<blockquote>
+<p>⚠️ <strong>单位差异</strong>：用户配 <code>mtu 2000</code> 是 <strong>L3 payload 长度</strong>，但下到 ASIC 的是 <strong>L2 帧总长</strong>（要再加 14 字节 Ethernet header + 4 字节 FCS + 4 字节 VLAN tag &#x3D; 22 字节）。所以 ASIC 实际写的是 <strong>2022</strong>。MACsec 口还要再加 32 字节 SecTag。</p>
+<p>在 <code>redis-cli -n 1</code> 看到 ASIC_DB MTU &#x3D; 2022 不是 bug。</p>
+</blockquote>
+<hr>
+<h3 id="t9-—-sairedis-把-SAI-调用编码进-ASIC-DB">0.4.10. t9 — sairedis 把 SAI 调用编码进 ASIC_DB</h3><p>文件: <code>sonic-sairedis/lib/RedisRemoteSaiInterface.cpp</code> | 行号: 994-1022 | 函数: <code>RedisRemoteSaiInterface::set</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-function"><span class="hljs-type">sai_status_t</span> <span class="hljs-title">RedisRemoteSaiInterface::set</span><span class="hljs-params">(</span></span><br><span class="hljs-params"><span class="hljs-function">        _In_ <span class="hljs-type">sai_object_type_t</span> objectType,</span></span><br><span class="hljs-params"><span class="hljs-function">        _In_ <span class="hljs-type">const</span> std::string &amp;serializedObjectId,</span></span><br><span class="hljs-params"><span class="hljs-function">        _In_ <span class="hljs-type">const</span> <span class="hljs-type">sai_attribute_t</span> *attr)</span></span><br><span class="hljs-function"></span>&#123;<br>    <span class="hljs-built_in">SWSS_LOG_ENTER</span>();<br><br>    <span class="hljs-keyword">auto</span> entry = SaiAttributeList::<span class="hljs-built_in">serialize_attr_list</span>(<br>            objectType, <span class="hljs-number">1</span>, attr, <span class="hljs-literal">false</span>);<br><br>    <span class="hljs-keyword">auto</span> serializedObjectType = <span class="hljs-built_in">sai_serialize_object_type</span>(objectType);<br><br>    std::string key = serializedObjectType + <span class="hljs-string">&quot;:&quot;</span> + serializedObjectId;<br>    <span class="hljs-comment">// 例如: &quot;SAI_OBJECT_TYPE_PORT:oid:0x1000000000016&quot;</span><br><br>    <span class="hljs-built_in">SWSS_LOG_DEBUG</span>(<span class="hljs-string">&quot;generic set key: %s, fields: %lu&quot;</span>, key.<span class="hljs-built_in">c_str</span>(), entry.<span class="hljs-built_in">size</span>());<br><br>    m_recorder-&gt;<span class="hljs-built_in">recordGenericSet</span>(key, entry);<br><br>    m_communicationChannel-&gt;<span class="hljs-built_in">set</span>(key, entry, REDIS_ASIC_STATE_COMMAND_SET);<br>    <span class="hljs-comment">//                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span><br>    <span class="hljs-comment">//                                       字符串 &quot;set&quot;</span><br>    <span class="hljs-keyword">auto</span> status = <span class="hljs-built_in">waitForResponse</span>(SAI_COMMON_API_SET);<br>    ...<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p><code>m_communicationChannel</code>（默认是 <code>RedisChannel</code>）会：</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">1</span><span class="hljs-punctuation">)</span> 在 ASIC_DB 写 <span class="hljs-keyword">key</span> <span class="hljs-string">&quot;ASIC_STATE:SAI_OBJECT_TYPE_PORT:oid:0x1000000000016&quot;</span><br>   字段 SAI_PORT_ATTR_MTU = <span class="hljs-number">2022</span><br><span class="hljs-number">2</span><span class="hljs-punctuation">)</span> PUBLISH 一条 <span class="hljs-string">&quot;set&quot;</span> 消息到 ASIC_STATE_CHANNEL<br></code></pre></td></tr></table></figure>
+
+<p><strong>此时 ASIC_DB 状态</strong>：</p>
+<figure class="highlight accesslog"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs accesslog"><span class="hljs-number">127.0.0.1:6379</span><span class="hljs-string">[1]</span>&gt; HGETALL <span class="hljs-string">&quot;ASIC_STATE:SAI_OBJECT_TYPE_PORT:oid:0x1000000000016&quot;</span><br><span class="hljs-string">&quot;SAI_PORT_ATTR_MTU&quot;</span>   <span class="hljs-string">&quot;2022&quot;</span><br></code></pre></td></tr></table></figure>
+
+<p>注意这里的 <code>oid:0x1000000000016</code> 是 <strong>VID（Virtual ID）</strong>，由 orchagent 侧的 sairedis 生成；它和真正给到 SDK 的硬件 RID（Real ID）不是同一个，需要 syncd 来翻译。</p>
+<hr>
+<h3 id="t10-—-syncd-接收事件并调真正的-vendor-SAI">0.4.11. t10 — syncd 接收事件并调真正的 vendor SAI</h3><h4 id="10-1-syncd-启动时订阅-ASIC-STATE-channel">0.4.11.1. 10.1 syncd 启动时订阅 ASIC_STATE channel</h4><p>文件: <code>sonic-sairedis/syncd/Syncd.cpp</code> | 行号: 163-176 | 函数: <code>Syncd::Syncd</code>（构造函数）</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs cpp">m_selectableChannel = std::<span class="hljs-built_in">make_shared</span>&lt;sairedis::RedisSelectableChannel&gt;(<br>        m_dbAsic,<br>        ASIC_STATE_TABLE,            <span class="hljs-comment">// ★ &quot;ASIC_STATE&quot;</span><br>        REDIS_TABLE_GETRESPONSE,<br>        TEMP_PREFIX,<br>        modifyRedis);<br></code></pre></td></tr></table></figure>
+
+<p>文件: <code>sonic-sairedis/meta/RedisSelectableChannel.cpp</code> | 行号: 7-32 | 函数: <code>RedisSelectableChannel::RedisSelectableChannel</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs cpp">m_asicState = std::<span class="hljs-built_in">make_shared</span>&lt;swss::ConsumerTable&gt;(m_dbAsic.<span class="hljs-built_in">get</span>(), asicStateTable);<br></code></pre></td></tr></table></figure>
+
+<p>文件: <code>sonic-swss-common/common/consumertable.cpp</code> | 行号: 17-39 | 函数: <code>ConsumerTable::ConsumerTable</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-built_in">subscribe</span>(m_db, <span class="hljs-built_in">getChannelName</span>(m_db-&gt;<span class="hljs-built_in">getDbId</span>()));   <span class="hljs-comment">// ★ Redis SUBSCRIBE</span><br></code></pre></td></tr></table></figure>
+
+<p>构造期就发出了 Redis <code>SUBSCRIBE ASIC_STATE_CHANNEL@1</code> 命令。</p>
+<h4 id="10-2-主循环-select-触发">0.4.11.2. 10.2 主循环 select 触发</h4><p>文件: <code>sonic-sairedis/syncd/Syncd.cpp</code> | 行号: 6694-6697 | 函数: <code>Syncd::run</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs cpp">s-&gt;<span class="hljs-built_in">addSelectable</span>(m_selectableChannel.<span class="hljs-built_in">get</span>());     <span class="hljs-comment">// ★ 加入 epoll</span><br>s-&gt;<span class="hljs-built_in">addSelectable</span>(m_restartQuery.<span class="hljs-built_in">get</span>());<br>s-&gt;<span class="hljs-built_in">addSelectable</span>(m_flexCounter.<span class="hljs-built_in">get</span>());<br>s-&gt;<span class="hljs-built_in">addSelectable</span>(m_flexCounterGroup.<span class="hljs-built_in">get</span>());<br></code></pre></td></tr></table></figure>
+
+<p>文件: <code>sonic-sairedis/syncd/Syncd.cpp</code> | 行号: 6724-6824 | 函数: <code>Syncd::run</code>（主循环）</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-keyword">while</span> (runMainLoop)<br>&#123;<br>    swss::Selectable *sel = <span class="hljs-literal">NULL</span>;<br>    <span class="hljs-type">int</span> result = s-&gt;<span class="hljs-built_in">select</span>(&amp;sel, <span class="hljs-number">1000</span>);<br>    ...<br>    <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (sel == m_selectableChannel.<span class="hljs-built_in">get</span>())<br>    &#123;<br>        <span class="hljs-built_in">processEvent</span>(*m_selectableChannel.<span class="hljs-built_in">get</span>());      <span class="hljs-comment">// ★ 收到 ASIC_STATE 事件</span><br>    &#125;<br>    ...<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<h4 id="10-3-processEvent-→-processSingleEvent-→-processQuadEvent">0.4.11.3. 10.3 processEvent → processSingleEvent → processQuadEvent</h4><p>文件: <code>sonic-sairedis/syncd/Syncd.cpp</code> | 行号: 377-399 | 函数: <code>Syncd::processEvent</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-function"><span class="hljs-type">void</span> <span class="hljs-title">Syncd::processEvent</span><span class="hljs-params">(_In_ sairedis::SelectableChannel&amp; consumer)</span></span><br><span class="hljs-function"></span>&#123;<br>    <span class="hljs-built_in">SWSS_LOG_ENTER</span>();<br>    <span class="hljs-function">std::lock_guard&lt;std::mutex&gt; <span class="hljs-title">lock</span><span class="hljs-params">(m_mutex)</span></span>;<br><br>    <span class="hljs-keyword">do</span><br>    &#123;<br>        swss::KeyOpFieldsValuesTuple kco;<br>        consumer.<span class="hljs-built_in">pop</span>(kco, <span class="hljs-built_in">isInitViewMode</span>());      <span class="hljs-comment">// ★ 从 channel 取一条</span><br>        <span class="hljs-built_in">processSingleEvent</span>(kco);                  <span class="hljs-comment">// ★ 分发处理</span><br>    &#125;<br>    <span class="hljs-keyword">while</span> (!consumer.<span class="hljs-built_in">empty</span>());<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>文件: <code>sonic-sairedis/syncd/Syncd.cpp</code> | 行号: 434-462 | 函数: <code>Syncd::processSingleEvent</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-keyword">if</span> (op == REDIS_ASIC_STATE_COMMAND_CREATE)<br>    <span class="hljs-keyword">return</span> <span class="hljs-built_in">processQuadEvent</span>(SAI_COMMON_API_CREATE, kco);<br><br><span class="hljs-keyword">if</span> (op == REDIS_ASIC_STATE_COMMAND_REMOVE)<br>    <span class="hljs-keyword">return</span> <span class="hljs-built_in">processQuadEvent</span>(SAI_COMMON_API_REMOVE, kco);<br><br><span class="hljs-keyword">if</span> (op == REDIS_ASIC_STATE_COMMAND_SET)                      <span class="hljs-comment">// ★ &quot;set&quot; 命中</span><br>    <span class="hljs-keyword">return</span> <span class="hljs-built_in">processQuadEvent</span>(SAI_COMMON_API_SET, kco);<br><br><span class="hljs-keyword">if</span> (op == REDIS_ASIC_STATE_COMMAND_GET)<br>    <span class="hljs-keyword">return</span> <span class="hljs-built_in">processQuadEvent</span>(SAI_COMMON_API_GET, kco);<br></code></pre></td></tr></table></figure>
+
+<h4 id="10-4-processOidSet：VID→RID-调-vendor-SAI">0.4.11.4. 10.4 processOidSet：VID→RID + 调 vendor SAI</h4><p>文件: <code>sonic-sairedis/syncd/Syncd.cpp</code> | 行号: 4520-4540 | 函数: <code>Syncd::processOid</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-keyword">switch</span> (api)<br>&#123;<br>    <span class="hljs-keyword">case</span> SAI_COMMON_API_CREATE:<br>        <span class="hljs-keyword">return</span> <span class="hljs-built_in">processOidCreate</span>(objectType, strObjectId, attr_count, attr_list);<br>    <span class="hljs-keyword">case</span> SAI_COMMON_API_REMOVE:<br>        <span class="hljs-keyword">return</span> <span class="hljs-built_in">processOidRemove</span>(objectType, strObjectId);<br>    <span class="hljs-keyword">case</span> SAI_COMMON_API_SET:<br>        <span class="hljs-keyword">return</span> <span class="hljs-built_in">processOidSet</span>(objectType, strObjectId, attr_list);     <span class="hljs-comment">// ← 我们走这里</span><br>    <span class="hljs-keyword">case</span> SAI_COMMON_API_GET:<br>        <span class="hljs-keyword">return</span> <span class="hljs-built_in">processOidGet</span>(objectType, strObjectId, attr_count, attr_list);<br>    ...<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>文件: <code>sonic-sairedis/syncd/Syncd.cpp</code> | 行号: 4702-4723 | 函数: <code>Syncd::processOidSet</code></p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-function"><span class="hljs-type">sai_status_t</span> <span class="hljs-title">Syncd::processOidSet</span><span class="hljs-params">(</span></span><br><span class="hljs-params"><span class="hljs-function">        _In_ <span class="hljs-type">sai_object_type_t</span> objectType,</span></span><br><span class="hljs-params"><span class="hljs-function">        _In_ <span class="hljs-type">const</span> std::string &amp;strObjectId,</span></span><br><span class="hljs-params"><span class="hljs-function">        _In_ <span class="hljs-type">sai_attribute_t</span> *attr)</span></span><br><span class="hljs-function"></span>&#123;<br>    <span class="hljs-built_in">SWSS_LOG_ENTER</span>();<br><br>    <span class="hljs-type">sai_object_id_t</span> objectVid;<br>    <span class="hljs-built_in">sai_deserialize_object_id</span>(strObjectId, objectVid);          <span class="hljs-comment">// 解析 VID</span><br><br>    <span class="hljs-type">sai_object_id_t</span> rid = m_translator-&gt;<span class="hljs-built_in">translateVidToRid</span>(objectVid);   <span class="hljs-comment">// VID→RID</span><br><br>    <span class="hljs-type">sai_status_t</span> status = m_vendorSai-&gt;<span class="hljs-built_in">set</span>(objectType, rid, attr);      <span class="hljs-comment">// ★ 调厂商 SAI</span><br><br>    <span class="hljs-keyword">if</span> (Workaround::<span class="hljs-built_in">isSetAttributeWorkaround</span>(objectType, attr-&gt;id, status))<br>        <span class="hljs-keyword">return</span> SAI_STATUS_SUCCESS;<br><br>    <span class="hljs-keyword">return</span> status;<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p><strong>关键澄清</strong>：syncd 进程<strong>没有调用</strong> <code>sai_port_api-&gt;set_port_attribute()</code>，它调用的是 <code>VendorSai</code> 类的成员方法 <code>m_vendorSai-&gt;set(objectType, rid, attr)</code>。</p>
+<p><code>VendorSai::set</code> 内部根据 <code>objectType</code> 派发到对应的厂商 SAI 函数表——对于 PORT 对象，等价于 <code>m_apis.port_api-&gt;set_port_attribute(rid, attr)</code>。这里的 <code>m_apis.port_api</code> 是 syncd 启动时通过厂商 <code>libsai_xxx.so</code> 的 <code>sai_api_query()</code> 拿到的函数指针表（在 Tofino 平台是 <code>libsai_tofino.so</code>）。<strong>这一步才真正进入厂商代码</strong>。</p>
+<hr>
+<h3 id="t11-—-Tofino-这一段：libsai-tofino-→-bf-switchd-→-ASIC">0.4.12. t11 — Tofino 这一段：libsai_tofino → bf_switchd → ASIC</h3><p>到这里就进入<strong>厂商私有代码</strong>，公开仓库里没有完整源码（在 Intel&#x2F;Barefoot 的 SDE 里，构建成 <code>libsai_tofino.so</code> 和 <code>bf_switchd</code>）。但内部走向是公开的：</p>
+<figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><code class="hljs stylus">libsai_tofino<span class="hljs-selector-class">.so</span> : sai_port_api_t::<span class="hljs-built_in">set_port_attribute</span>(rid, SAI_PORT_ATTR_MTU)<br>        │<br>        ▼  通过 thrift / 直链 IPC 跨到同一容器中的 bf_switchd<br>bf_switchd (TF SDE 主进程)<br>        │<br>        ▼<br><span class="hljs-function"><span class="hljs-title">bf_pal_port_mtu_set</span><span class="hljs-params">(dev_id, dev_port, mtu)</span></span><br>        │<br>        ├──▶ MAC block 配置（TM/EBuf 的 max_frame_size 寄存器）<br>        │       通过 PCIe BAR0 写到 Tofino MAU/TM 寄存器<br>        │       具体寄存器:<br>        │         Tofino-<span class="hljs-number">1</span>: tm_top<span class="hljs-selector-class">.tm_ebuf</span><span class="hljs-selector-class">.epb_disp_port_regs</span><br>        │                       <span class="hljs-selector-class">.epb_pipe_port_regs</span><span class="hljs-selector-attr">[N]</span><span class="hljs-selector-class">.max_frame_size</span><br>        │         Tofino-<span class="hljs-number">2</span>: 类似命名<br>        ▼<br>ASIC 硬件<br>   - 入端口超过 MTU 的帧 → drop（counter: PORT_OVER_MTU_DISCARD）<br>   - 出端口 TM 计数 → 不再切分<br></code></pre></td></tr></table></figure>
+
+<p><strong>说明</strong>：Tofino 不像内核那样做 IP 分片——这不是 ASIC 的工作；超长帧直接计入 <code>PORT_OVER_MTU_DISCARD</code> 计数器丢弃。MTU 是 hot change，不需要 disable port。</p>
+<hr>
+<h3 id="t12-—-返回响应-syslog-记录">0.4.13. t12 — 返回响应 + syslog 记录</h3><p>syncd 把 SAI 返回值通过 <code>GETRESPONSE</code> 通道回送给 orchagent：</p>
+<ul>
+<li><strong>同步模式</strong>（<code>SAI_REDIS_COMMUNICATION_MODE_REDIS_SYNC</code>）：orchagent 在 <code>RedisRemoteSaiInterface::waitForResponse</code> 阻塞等待。</li>
+<li><strong>异步模式</strong>（默认）：orchagent 不等响应。</li>
+</ul>
+<p>orchagent 把日志写入 syslog：</p>
+<figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs routeros">NOTICE swss#orchagent: :- setPortMtu: <span class="hljs-built_in">Set</span><span class="hljs-built_in"> port </span>eth0 MTU <span class="hljs-keyword">to</span> 2000<br></code></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="三、Redis-三个数据库的最终状态">0.5. 三、Redis 三个数据库的最终状态</h2><h3 id="CONFIG-DB-DB-4">0.5.1. CONFIG_DB (DB 4)</h3><figure class="highlight erlang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs erlang">HGETALL <span class="hljs-string">&quot;PORT|eth0&quot;</span><br>   ...<br>   mtu  <span class="hljs-number">2000</span><br></code></pre></td></tr></table></figure>
+
+<h3 id="APPL-DB-DB-0">0.5.2. APPL_DB (DB 0)</h3><figure class="highlight erlang"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs erlang">HGETALL <span class="hljs-string">&quot;PORT_TABLE:eth0&quot;</span><br>   ...<br>   mtu  <span class="hljs-number">2000</span><br></code></pre></td></tr></table></figure>
+
+<h3 id="ASIC-DB-DB-1">0.5.3. ASIC_DB (DB 1)</h3><figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs apache"><span class="hljs-attribute">HGETALL</span> <span class="hljs-string">&quot;ASIC_STATE:SAI_OBJECT_TYPE_PORT:oid:0x1000000000016&quot;</span><br>   <span class="hljs-attribute">SAI_PORT_ATTR_MTU</span>  <span class="hljs-number">2022</span>     # 加了 <span class="hljs-number">22</span> 字节 L2 头开销<br></code></pre></td></tr></table></figure>
+
+<p>如果端口配过 IP（有 RIF）还会有：</p>
+<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs apache"><span class="hljs-attribute">HGETALL</span> <span class="hljs-string">&quot;ASIC_STATE:SAI_OBJECT_TYPE_ROUTER_INTERFACE:oid:0x6000000000093&quot;</span><br>   <span class="hljs-attribute">SAI_ROUTER_INTERFACE_ATTR_MTU</span>  <span class="hljs-number">2000</span><br></code></pre></td></tr></table></figure>
+
+<h3 id="STATE-DB-DB-6">0.5.4. STATE_DB (DB 6)</h3><figure class="highlight pf"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs pf">HGETALL <span class="hljs-string">&quot;PORT_TABLE|eth0&quot;</span><br>   <span class="hljs-keyword">state</span>  ok      <span class="hljs-comment"># 仅记录 oper 状态，不会因 mtu 变化主动更新</span><br></code></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="五、几个值得关注的设计细节">0.6. 五、几个值得关注的设计细节</h2><h3 id="5-1-portmgrd-是”双写者”">0.6.1. 5.1 portmgrd 是”双写者”</h3><p>同时写内核和 APPL_DB，但顺序是 <strong>先内核，后 APPL_DB</strong>。如果内核失败，根本不会写 APPL_DB，因此<strong>永远不会出现”硬件配了但内核没配”</strong>。这就是 SONiC 选择”先内核再 ASIC”的核心原因之一。</p>
+<h3 id="5-2-MTU-单位换算只在一处">0.6.2. 5.2 MTU 单位换算只在一处</h3><p><code>PortsOrch::setPortMtu</code> 是唯一加 22 字节（+ 32 字节 MACsec 可选）的位置。Linux 内核里 <code>dev-&gt;mtu = 2000</code> 表示 IP payload 长度，到 ASIC 是帧长。这点和 SAI 抽象层”语义不一致需要 SONiC 来翻译”对得上。</p>
+<h3 id="5-3-ProducerStateTable-保证字段完整性">0.6.3. 5.3 ProducerStateTable 保证字段完整性</h3><p><code>_PORT_TABLE</code> 临时表 + channel 通知机制保证了 <strong>orchagent 看到的是合并后的字段全集</strong>，不会一次只看到 mtu 而看不到 admin_status。</p>
+<h3 id="5-4-VID↔RID-隔离">0.6.4. 5.4 VID↔RID 隔离</h3><p>orchagent 完全不需要知道真实硬件对象编号——orchagent 只面向”逻辑 OID”，真实硬件 OID 由 syncd 启动时通过 <code>objectTypeQuery</code> &#x2F; <code>SaiSwitch</code> 探测得到。</p>
+<h3 id="5-5-TF-平台的特殊性">0.6.5. 5.5 TF 平台的特殊性</h3><p><code>bf_switchd</code> 习惯独占进程跑 SDE，所以 SONiC 的 Barefoot syncd 容器里 <code>syncd</code> 进程会通过 thrift&#x2F;IPC 与 <code>bf_switchd</code> 通信；这与 Broadcom（直接 dlopen <code>libsai_xgs.so</code> 跑在 syncd 同进程）不同——但<strong>对 ASIC_DB 之上的所有逻辑都是透明的</strong>。这正是 SAI 抽象的价值。</p>
+<h3 id="5-6-上半部-vs-下半部：两段平行，不是包含关系">0.6.6. 5.6 上半部 vs 下半部：两段平行，不是包含关系</h3><p>这是理解 SONiC 架构最容易出错的点。orchagent 和 syncd <strong>不是上下游调用关系，而是平行的两段独立处理</strong>，通过 ASIC_DB 解耦：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>上半部（orchagent 进程）</th>
+<th>下半部（syncd 进程）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>处理阶段</strong></td>
+<td>APPL_DB → ASIC_DB</td>
+<td>ASIC_DB → 硬件</td>
+</tr>
+<tr>
+<td><strong>调用入口</strong></td>
+<td><code>sai_port_api-&gt;set_port_attribute(oid, &amp;attr)</code></td>
+<td><code>m_vendorSai-&gt;set(objectType, rid, &amp;attr)</code></td>
+</tr>
+<tr>
+<td><strong>接口性质</strong></td>
+<td>SAI 标准接口（全局函数指针表）</td>
+<td><code>VendorSai</code> 类的成员方法</td>
+</tr>
+<tr>
+<td><strong>指针来源</strong></td>
+<td>libsairedis 填充</td>
+<td>厂商 <code>libsai_xxx.so</code> 通过 <code>sai_api_query</code> 填充</td>
+</tr>
+<tr>
+<td><strong>实际跳到</strong></td>
+<td><code>RedisRemoteSaiInterface::set</code></td>
+<td>厂商私有函数（如 <code>bf_pal_port_mtu_set</code>）</td>
+</tr>
+<tr>
+<td><strong>作用</strong></td>
+<td>写 ASIC_DB + PUBLISH</td>
+<td>调 SDK 写硬件寄存器</td>
+</tr>
+<tr>
+<td><strong>厂商相关性</strong></td>
+<td>❌ 完全无关</td>
+<td>🔴 紧密相关</td>
+</tr>
+<tr>
+<td><strong>链接的库</strong></td>
+<td><code>libsairedis.so</code></td>
+<td><code>libsai_tofino.so</code> &#x2F; <code>libsai_brcm.so</code> &#x2F; …</td>
+</tr>
+<tr>
+<td><strong>所在容器</strong></td>
+<td><code>swss</code>（通用，编一次跑遍所有 ASIC）</td>
+<td><code>syncd-bfn</code> &#x2F; <code>syncd-brcm</code> &#x2F; …（按厂商打包）</td>
+</tr>
+</tbody></table>
+<p><strong>关键点</strong>：</p>
+<ol>
+<li><p><strong><code>sai_port_api-&gt;set_port_attribute()</code> 只在 orchagent 进程中被调用</strong>，整个过程与厂商无关。它是 SAI 标准接口，但在这里的实现是 sairedis 提供的 “假 SAI”——把调用序列化为 ASIC_DB 操作，并不真正写硬件。</p>
+</li>
+<li><p><strong>syncd 进程根本不调用 <code>sai_port_api-&gt;set_port_attribute()</code></strong>。syncd 调用的是 <code>m_vendorSai-&gt;set()</code>（<code>VendorSai</code> 类的成员方法），由 VendorSai 内部派发到厂商 SAI 表，最终进入厂商 <code>libsai_xxx.so</code> 实现。</p>
+</li>
+<li><p><strong>两段通过 ASIC_DB 完全解耦</strong>：可以独立重启（warm reboot）、独立替换（换通信方式只动上半部，换厂商只动下半部）、独立调试（<code>saiplayer</code> 录制回放）。</p>
+</li>
+<li><p>ASIC_DB 作为”标准化交换格式”，<strong>所有厂商内容完全一致</strong>——这是这种解耦设计能成立的基础。</p>
+</li>
+</ol>
+<h3 id="5-7-改-MTU-不需要-down-接口">0.6.7. 5.7 改 MTU 不需要 down 接口</h3><ul>
+<li><strong>iproute2 用户态</strong>：<code>ip/iplink.c:939-946</code> 仅 <code>addattr_l(IFLA_MTU, ...)</code> 透传，不检查 <code>IFF_UP</code>。</li>
+<li><strong>内核 netlink 入口</strong>：<code>net/core/rtnetlink.c:3143</code> 不检查 <code>IFF_UP</code>。</li>
+<li><strong>内核核心层</strong>：<code>net/core/dev.c:9892</code> 的 <code>netif_set_mtu_ext</code> 仅做范围校验和 <code>netif_device_present</code> 校验。</li>
+<li><strong>驱动层</strong>：是否需要 down 由具体驱动决定（如 <code>e1000_change_mtu</code> 在 <code>netif_running</code> 时会内部 <code>e1000_down/e1000_up</code>，但 <code>IFF_UP</code> flag 不变，对协议栈透明）。</li>
+<li><strong>SONiC 的 eth0 是 SAI hostif 虚拟 netdev</strong>（类似 tun&#x2F;veth），没有 ring buffer，零副作用。</li>
+</ul>
+<hr>
+<h2 id="六、关键代码索引">0.7. 六、关键代码索引</h2><table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>文件</th>
+<th>行号</th>
+<th>函数</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>t1</td>
+<td><code>sonic-utilities/config/main.py</code></td>
+<td>5728-5750</td>
+<td><code>mtu</code></td>
+</tr>
+<tr>
+<td>t2</td>
+<td><code>sonic-utilities/scripts/portconfig</code></td>
+<td>152-158</td>
+<td><code>portconfig.set_mtu</code></td>
+</tr>
+<tr>
+<td>t3</td>
+<td><code>sonic-swss/cfgmgr/portmgrd.cpp</code></td>
+<td>27-40</td>
+<td><code>main</code></td>
+</tr>
+<tr>
+<td>t4</td>
+<td><code>sonic-swss/cfgmgr/portmgr.cpp</code></td>
+<td>134-225</td>
+<td><code>PortMgr::doTask</code></td>
+</tr>
+<tr>
+<td>t5</td>
+<td><code>sonic-swss/cfgmgr/portmgr.cpp</code></td>
+<td>25-58</td>
+<td><code>PortMgr::setPortMtu</code></td>
+</tr>
+<tr>
+<td>t7</td>
+<td><code>sonic-swss/orchagent/portsorch.cpp</code></td>
+<td>5375-5407</td>
+<td><code>PortsOrch::doPortTask</code></td>
+</tr>
+<tr>
+<td>t7</td>
+<td><code>sonic-swss/orchagent/intfsorch.cpp</code></td>
+<td>222-246</td>
+<td><code>IntfsOrch::setRouterIntfsMtu</code></td>
+</tr>
+<tr>
+<td>t8</td>
+<td><code>sonic-swss/orchagent/portsorch.cpp</code></td>
+<td>2385-2419</td>
+<td><code>PortsOrch::setPortMtu</code></td>
+</tr>
+<tr>
+<td>t9</td>
+<td><code>sonic-sairedis/lib/RedisRemoteSaiInterface.cpp</code></td>
+<td>994-1022</td>
+<td><code>RedisRemoteSaiInterface::set</code></td>
+</tr>
+<tr>
+<td>t10</td>
+<td><code>sonic-sairedis/syncd/Syncd.cpp</code></td>
+<td>163-176</td>
+<td><code>Syncd::Syncd</code>（构造）</td>
+</tr>
+<tr>
+<td>t10</td>
+<td><code>sonic-sairedis/meta/RedisSelectableChannel.cpp</code></td>
+<td>7-32</td>
+<td><code>RedisSelectableChannel::RedisSelectableChannel</code></td>
+</tr>
+<tr>
+<td>t10</td>
+<td><code>sonic-swss-common/common/consumertable.cpp</code></td>
+<td>17-39</td>
+<td><code>ConsumerTable::ConsumerTable</code></td>
+</tr>
+<tr>
+<td>t10</td>
+<td><code>sonic-sairedis/syncd/Syncd.cpp</code></td>
+<td>6694-6697</td>
+<td><code>Syncd::run</code>（addSelectable）</td>
+</tr>
+<tr>
+<td>t10</td>
+<td><code>sonic-sairedis/syncd/Syncd.cpp</code></td>
+<td>377-399</td>
+<td><code>Syncd::processEvent</code></td>
+</tr>
+<tr>
+<td>t10</td>
+<td><code>sonic-sairedis/syncd/Syncd.cpp</code></td>
+<td>434-462</td>
+<td><code>Syncd::processSingleEvent</code></td>
+</tr>
+<tr>
+<td>t10</td>
+<td><code>sonic-sairedis/syncd/Syncd.cpp</code></td>
+<td>4702-4723</td>
+<td><code>Syncd::processOidSet</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2 id="七、调试与验证">0.8. 七、调试与验证</h2><h3 id="7-1-命令行实操">0.8.1. 7.1 命令行实操</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><code class="hljs bash"><span class="hljs-comment"># 1. 改 MTU</span><br><span class="hljs-built_in">sudo</span> config interface mtu eth0 2000<br><br><span class="hljs-comment"># 2. 看 CONFIG_DB</span><br>redis-cli -n 4 HGETALL <span class="hljs-string">&quot;PORT|eth0&quot;</span><br><br><span class="hljs-comment"># 3. 看 APPL_DB</span><br>redis-cli -n 0 HGETALL <span class="hljs-string">&quot;PORT_TABLE:eth0&quot;</span><br><br><span class="hljs-comment"># 4. 看 ASIC_DB（注意 oid 是动态生成的）</span><br>redis-cli -n 1 KEYS <span class="hljs-string">&quot;ASIC_STATE:SAI_OBJECT_TYPE_PORT:*&quot;</span><br>redis-cli -n 1 HGETALL <span class="hljs-string">&quot;ASIC_STATE:SAI_OBJECT_TYPE_PORT:oid:0x1000000000016&quot;</span><br><br><span class="hljs-comment"># 5. 看内核 netdev</span><br>ip <span class="hljs-built_in">link</span> show eth0<br><br><span class="hljs-comment"># 6. 看 STATE_DB</span><br>redis-cli -n 6 HGETALL <span class="hljs-string">&quot;PORT_TABLE|eth0&quot;</span><br><br><span class="hljs-comment"># 7. 看 syslog</span><br><span class="hljs-built_in">sudo</span> grep -E <span class="hljs-string">&quot;(portmgrd|orchagent|syncd)&quot;</span> /var/log/syslog | <span class="hljs-built_in">tail</span> -50<br></code></pre></td></tr></table></figure>
+
+<h3 id="7-2-验证-hot-change-不影响协议">0.8.2. 7.2 验证 hot change 不影响协议</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs bash"><span class="hljs-comment"># 改 MTU 前看接口和 BGP 邻居状态</span><br>ip -s <span class="hljs-built_in">link</span> show eth0<br>show ip bgp summary<br><br><span class="hljs-built_in">sudo</span> config interface mtu eth0 9100<br><br><span class="hljs-comment"># 改完后再看：oper_status 不会变 DOWN，BGP 不会闪</span><br>ip -s <span class="hljs-built_in">link</span> show eth0<br>show ip bgp summary<br>dmesg | <span class="hljs-built_in">tail</span><br></code></pre></td></tr></table></figure>
+
+<hr>
+<h2 id="八、扩展阅读">0.9. 八、扩展阅读</h2><ul>
+<li>对比 <code>intfmgrd</code>（IP 地址）和 <code>portmgrd</code>（mtu&#x2F;admin_status）的双写差异</li>
+<li>看 <code>platform/barefoot/</code> 里 SONiC 怎么打包 TF SDE，理解 <code>docker-syncd-bfn</code> 容器内 <code>bf_switchd</code> 与 <code>syncd</code> 的协作（<code>supervisord.conf</code>）</li>
+<li>看 <code>consumer_table_pops.lua</code>：理解 ConsumerTable 用 lua 脚本”批量+原子+把临时 hash 搬到正式 hash”的设计</li>
+<li>看 <code>Syncd::processQuadEvent</code> 4338-4540：OID 对象 vs Entry 对象（route_entry &#x2F; fdb_entry）的处理分歧</li>
+</ul>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/AI/" class="category-chain-item">AI</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/ai/" class="print-no-link">#ai</a>
+      
+        <a href="/tags/sonic/" class="print-no-link">#sonic</a>
+      
+        <a href="/tags/sai/" class="print-no-link">#sai</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>SONiC Port MTU 更新流程详解（以 Tofino 芯片为例）</div>
+      <div>https://martinbj2008.github.io/2026/06/30/2026-06-30-sonic-port-mtu-flow.ai/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>June 30, 2026</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2026/07/09/2026-07-09-pcie-ari-why-and-how.ai/" title="PCIe ARI（Alternative Routing-ID Interpretation）：为什么需要 &amp; 如何工作">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">PCIe ARI（Alternative Routing-ID Interpretation）：为什么需要 &amp; 如何工作</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2026/06/26/2026-06-26-nftables-set-fastpath.ai/" title="nftables Set：用 O(1) 哈希查找替代 O(N) 链表遍历">
+                        <span class="hidden-mobile">nftables Set：用 O(1) 哈希查找替代 O(N) 链表遍历</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

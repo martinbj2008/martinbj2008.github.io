@@ -1,0 +1,866 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.0.1. 接上部如上半部分析，导致rx drop值增加的报文有三类  IPv6 STP LLDP  至此，为什么drop统计值增加，能够解释清楚了。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="net rx drop(续)">
+<meta property="og:url" content="https://martinbj2008.github.io/2020/03/15/2020-03-15-net-rx-drop-1/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.0.1. 接上部如上半部分析，导致rx drop值增加的报文有三类  IPv6 STP LLDP  至此，为什么drop统计值增加，能够解释清楚了。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2020-03-14T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.752Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IRQ">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>net rx drop(续) - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="net rx drop(续)"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2020-03-15 00:00" pubdate>
+          March 15, 2020 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          2.5k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          21 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">net rx drop(续)</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h3 id="接上部">0.0.1. 接上部</h3><p>如上半部分析，导致rx drop值增加的报文有三类</p>
+<ul>
+<li>IPv6</li>
+<li>STP</li>
+<li>LLDP</li>
+</ul>
+<p>至此，为什么drop统计值增加，能够解释清楚了。</p>
+<span id="more"></span>
+
+<p>扫描业务同学的机器列表这些drop异常机器都是浪潮的服务器，且机器网卡信息如下：</p>
+<figure class="highlight makefile"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs makefile">[root@localhost ~]<span class="hljs-comment"># ethtool -i em1</span><br><span class="hljs-section">driver: ixgbe</span><br><span class="hljs-section">version: 4.4.0-k-rh7.3</span><br><span class="hljs-section">firmware-version: 0x800007f4</span><br>...<br></code></pre></td></tr></table></figure>
+
+<p>跟网络和服务器的同学勾兑后，发现还有几个问题未解释清楚：</p>
+<ul>
+<li>Q1: centos6上未发现此类问题</li>
+<li>Q2: STP报文线上所有交换机都是打开的，但只有部分centos7的机器上部分机器出现这个问题。</li>
+<li>Q3: 软硬件（内核版本，网卡，驱动，firmware-version）完全相同的浪潮服务器的机器，一台有drop统计，另外一台没有</li>
+<li>Q4: tcpudmp命令执行的时候，drop统计值停止增长。</li>
+</ul>
+<p>接下来要依次排查并解释以上几个问题。</p>
+<h2 id="Q1-为啥Centos6上drop没有异常">0.1. Q1: 为啥Centos6上drop没有异常</h2><p>centos6(<code>rhel-2.6.32-573.el6</code>)的代码如下，<br>原因：没有统计这种错误。</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs yaml"><span class="hljs-number">3268 </span><span class="hljs-string">int</span> <span class="hljs-string">__netif_receive_skb(struct</span> <span class="hljs-string">sk_buff</span> <span class="hljs-string">*skb)</span><br><span class="hljs-number">3269</span> &#123;<br><span class="hljs-string">...</span><br><span class="hljs-number">3386         </span><span class="hljs-string">if</span> <span class="hljs-string">(pt_prev)</span> &#123;<br><span class="hljs-number">3387                 </span><span class="hljs-string">ret</span> <span class="hljs-string">=</span> <span class="hljs-string">pt_prev-&gt;func(skb</span>, <span class="hljs-string">skb-&gt;dev</span>, <span class="hljs-string">pt_prev</span>, <span class="hljs-string">orig_dev);</span><br><span class="hljs-number">3388</span>         &#125; <span class="hljs-string">else</span> &#123;<br><span class="hljs-number">3389                 </span><span class="hljs-string">kfree_skb(skb);</span><br><span class="hljs-number">3390</span>                 <span class="hljs-string">/*</span> <span class="hljs-string">Jamal</span>, <span class="hljs-string">now</span> <span class="hljs-string">you</span> <span class="hljs-string">will</span> <span class="hljs-string">not</span> <span class="hljs-string">able</span> <span class="hljs-string">to</span> <span class="hljs-string">escape</span> <span class="hljs-string">explaining</span><br><span class="hljs-number">3391</span>                  <span class="hljs-string">*</span> <span class="hljs-string">me</span> <span class="hljs-string">how</span> <span class="hljs-string">you</span> <span class="hljs-string">were</span> <span class="hljs-string">going</span> <span class="hljs-string">to</span> <span class="hljs-string">use</span> <span class="hljs-string">this.</span> <span class="hljs-string">:-)</span><br><span class="hljs-number">3392</span>                  <span class="hljs-string">*/</span><br><span class="hljs-number">3393                 </span><span class="hljs-string">ret</span> <span class="hljs-string">=</span> <span class="hljs-string">NET_RX_DROP;</span><br><span class="hljs-number">3394</span>         &#125;<br></code></pre></td></tr></table></figure>
+
+<h2 id="Q2-为啥只有部分centos7的机器上部分机器出现这个问题">0.2. Q2: 为啥只有部分centos7的机器上部分机器出现这个问题</h2><p>答案：因为STP报文被部分网卡drop掉，所以统计值没有异常。出问题的机器上STP报文被转发给内核了。</p>
+<p>我们进行3个测试：</p>
+<h3 id="测试1：使用热升级调试模块">0.2.1. 测试1：使用热升级调试模块</h3><p>因为我们之前使用该模块定位了STP导致drop值增加，所以又在没有增加的机器加载调试模块。<br>结果发现，没有任何打印输出，确认内核协议栈没有收到STP报文。</p>
+<h3 id="测试2：查看网卡报文统计，没有组播报文">0.2.2. 测试2：查看网卡报文统计，没有组播报文</h3><figure class="highlight elixir"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs elixir">root<span class="hljs-variable">@XXXX</span><span class="hljs-symbol">:~</span><span class="hljs-variable">$ </span>ethtool  -S eth0|grep multicast<br>     <span class="hljs-symbol">multicast:</span> <span class="hljs-number">140</span><br></code></pre></td></tr></table></figure>
+<p>该统计值不会增加<br>注：<br>    这里非零是因为我们这台机器上做了后续的试验导致的。</p>
+<h3 id="测试3：网卡设置为混杂模式">0.2.3. 测试3：网卡设置为混杂模式</h3><p>打开网卡混杂模式，原本net rx drop没有变化的机器， 统计值也开始增加了。<br>关闭网卡混杂模式， 统计值不再变化。</p>
+<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs apache"><span class="hljs-attribute">root</span>@XXXX:~$ ip link set dev eth0 promisc <span class="hljs-literal">on</span><br><br><span class="hljs-attribute">root</span>@XXXX:~$ cat /proc/net/dev;sleep <span class="hljs-number">10</span>; !cat<br><span class="hljs-attribute">cat</span> /proc/net/dev;sleep <span class="hljs-number">10</span>; cat /proc/net/dev<br><span class="hljs-attribute">Inter</span>-|   Receive                                                |  Transmit<br> <span class="hljs-attribute">face</span> |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed<br>  <span class="hljs-attribute">eth0</span>: <span class="hljs-number">1890541692760</span> <span class="hljs-number">3759090874</span>    <span class="hljs-number">0</span>   <span class="hljs-number">26</span>    <span class="hljs-number">0</span>     <span class="hljs-number">0</span>          <span class="hljs-number">0</span>       <span class="hljs-number">102</span> <span class="hljs-number">1702993907316</span> <span class="hljs-number">3031053938</span>    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>     <span class="hljs-number">0</span>       <span class="hljs-number">0</span>          <span class="hljs-number">0</span><br><br><span class="hljs-comment">## 10s后（26--&gt;32)  </span><br> <span class="hljs-attribute">eth0</span>: <span class="hljs-number">1890543854444</span> <span class="hljs-number">3759103725</span>    <span class="hljs-number">0</span>   <span class="hljs-number">32</span>    <span class="hljs-number">0</span>     <span class="hljs-number">0</span>          <span class="hljs-number">0</span>       <span class="hljs-number">108</span> <span class="hljs-number">1702995106816</span> <span class="hljs-number">3031063115</span>    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>    <span class="hljs-number">0</span>     <span class="hljs-number">0</span>       <span class="hljs-number">0</span>          <span class="hljs-number">0</span><br> <span class="hljs-attribute">root</span>@XXXX:~$<br></code></pre></td></tr></table></figure>
+
+<p>通过上面的几个试验：</p>
+<ul>
+<li>测试1：可以确认网络协议栈没有收到stp报文。</li>
+<li>测试2：可以确认网卡没处理STP报文</li>
+<li>测试3：使用混杂模式，强制使STP报文发到协议栈后，统计值就增加了。</li>
+</ul>
+<p>注：不要通过tcpdump去设置混杂模式，tcpdump可以让网卡处于混杂模式，但会导致net rx drop不变。<br>具体原因后续分析。</p>
+<h2 id="Q3-软硬件相同的机器，一台有drop统计，另外一台没有">0.3. Q3: 软硬件相同的机器，一台有drop统计，另外一台没有</h2><p>在没有问题的机器上，查看<code>ptype</code>信息我们发现，内核的<code>ptype_all</code>被加载了一个的<br>处理函数<code>tpacket_rcv</code>.</p>
+<figure class="highlight tcl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs tcl">root@YYYYY:~$ cat /<span class="hljs-keyword">proc</span>/net/ptype<span class="hljs-title"></span><br><span class="hljs-title">Type</span> Device<span class="hljs-title">      Function</span><br>ALL<span class="hljs-title">           tpacket_rcv</span><br>0800<span class="hljs-title">          ip_rcv</span><br>0806<span class="hljs-title">          arp_rcv</span><br></code></pre></td></tr></table></figure>
+<p><code>tpacket_rcv</code>有的同学可能不了解，但是tcpdump&#x2F;libpcap，我们经常是经常使用的。<br>他们会依赖内核的的<code>tpacket_rcv</code>。<br>当我们需要从内核抓取全量或者特定类型的报文时候，<code>tpacket_rcv</code>经常被用到。</p>
+<h3 id="ptype-all-vs-ptype-base">0.3.1. ptype_all vs ptype_base</h3><p>Linux内核维护了两个函数指针数组（不严谨，类比），<code>ptype_all</code> vs <code>ptype_base</code><br><code>ptype_base</code>： 相对比较容易理解。 当需要处理某种ethernet报文的时候，我们就注册一个<br>钩子函数到<code>ptype_base</code>。比如，</p>
+<ul>
+<li>内核使用<code>ip_rcv</code>处理IPv4报文。</li>
+<li><code>arp_rcv</code>处理ARP报文</li>
+<li><code>ipv6_rcv</code>处理IPv6报文。</li>
+</ul>
+<p><code>ptype_all</code>：是用来做报文分流镜像的， 比如我们使用tcpudmp命令，附加特定过滤条件，<br>抓取内核协议栈收到的报文。<br>这时候会在<code>ptype_all</code>里注册一个钩子函数，将报文导入到对应的<code>af_pack</code>模块里进行<br>处理（tcpdump的部分filter功能就在这个模块里执行）。</p>
+<p><code>ptype_base</code>是针对特定的协议，而<code>ptype_all</code>不做区分具体协议类型。<br>这样也就可以解释了Q4关于tcpudmp的问题了。</p>
+<h2 id="Q4-tcpudmp命令执行的时候，drop统计值停止增长。">0.4. Q4: tcpudmp命令执行的时候，drop统计值停止增长。</h2><p>见Q3.</p>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/IRQ/" class="category-chain-item">IRQ</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/IRQ/" class="print-no-link">#IRQ</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>net rx drop(续)</div>
+      <div>https://martinbj2008.github.io/2020/03/15/2020-03-15-net-rx-drop-1/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>March 15, 2020</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2020/03/25/2020-03-25-kern-ovs-data-struct/" title="内核OVS的学习总结">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">内核OVS的学习总结</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2020/03/15/2020-03-15-net-rx-drop/" title="net rx drop">
+                        <span class="hidden-mobile">net rx drop</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

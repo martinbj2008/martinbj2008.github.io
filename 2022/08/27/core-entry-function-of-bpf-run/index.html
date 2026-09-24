@@ -1,0 +1,857 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. bpf prog内核运行核心入口函数0.1.1. 总结：___bpf_prog_runbfp 在内核运行的核心入口函数:___bpf_prog_run___bpf_prog_run是bfp的核心函数入口，该函数被多个不同stack size的函数调用。函数指针数组interpreters这把上面的这些函数汇集到一起。当bpf程序被加载到内核时候，内核创建为它一个bpf_prog结构体，根">
+<meta property="og:type" content="article">
+<meta property="og:title" content="bfp 在内核运行的核心入口函数及其变形">
+<meta property="og:url" content="https://martinbj2008.github.io/2022/08/27/core-entry-function-of-bpf-run/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. bpf prog内核运行核心入口函数0.1.1. 总结：___bpf_prog_runbfp 在内核运行的核心入口函数:___bpf_prog_run___bpf_prog_run是bfp的核心函数入口，该函数被多个不同stack size的函数调用。函数指针数组interpreters这把上面的这些函数汇集到一起。当bpf程序被加载到内核时候，内核创建为它一个bpf_prog结构体，根">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2022-08-26T17:38:45.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.753Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="BPF">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>bfp 在内核运行的核心入口函数及其变形 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="bfp 在内核运行的核心入口函数及其变形"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2022-08-27 01:38" pubdate>
+          August 27, 2022 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          4.7k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          40 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">bfp 在内核运行的核心入口函数及其变形</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="bpf-prog内核运行核心入口函数">0.1. bpf prog内核运行核心入口函数</h2><h3 id="总结：-bpf-prog-run">0.1.1. 总结：___bpf_prog_run</h3><p>bfp 在内核运行的核心入口函数:<code>___bpf_prog_run</code><br><code>___bpf_prog_run</code>是bfp的核心函数入口，该函数被多个不同stack size的函数调用。<br>函数指针数组interpreters这把上面的这些函数汇集到一起。<br>当bpf程序被加载到内核时候，内核创建为它一个bpf_prog结构体，根据prog的stacksize，选择对应的interpreters里的对应的<br>函数，并保存到bpf_prog里的bpf_func上。<br>这样后续hook点运行bpf_prog程序时候，就使用bpf_func运行。</p>
+<span id="more"></span>
+
+<p>对应patch： <code>https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?h=v6.6-rc2&amp;id=b870aa</code></p>
+<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs apache"><span class="hljs-attribute">bpf</span>: use different interpreter depending <span class="hljs-literal">on</span> required stack size<br><br><span class="hljs-attribute">Author</span>: Alexei Starovoitov &lt;ast@kernel.org&gt;<br><span class="hljs-attribute">Date</span>:   Tue May <span class="hljs-number">30</span> <span class="hljs-number">13</span>:<span class="hljs-number">31</span>:<span class="hljs-number">33</span> <span class="hljs-number">2017</span> -<span class="hljs-number">0700</span><br><br>    <span class="hljs-attribute">bpf</span>: use different interpreter depending <span class="hljs-literal">on</span> required stack size<br><br>    <span class="hljs-attribute">16</span> __bpf_prog_run() interpreters for various stack sizes add .text<br>    <span class="hljs-attribute">but</span> not a lot comparing to run-time stack savings<br><br>       <span class="hljs-attribute">text</span>    data     bss     dec     hex filename<br>      <span class="hljs-attribute">26350</span>   <span class="hljs-number">10328</span>     <span class="hljs-number">624</span>   <span class="hljs-number">37302</span>    <span class="hljs-number">91</span>b6 kernel/bpf/core.o.before_split<br>      <span class="hljs-attribute">25777</span>   <span class="hljs-number">10328</span>     <span class="hljs-number">624</span>   <span class="hljs-number">36729</span>    <span class="hljs-number">8</span>f79 kernel/bpf/core.o.after_split<br>      <span class="hljs-attribute">26970</span>   <span class="hljs-number">10328</span>     <span class="hljs-number">624</span>   <span class="hljs-number">37922</span>    <span class="hljs-number">9422</span> kernel/bpf/core.o.now<br></code></pre></td></tr></table></figure>
+
+<h3 id="函数定义">0.1.2. 函数定义</h3><h4 id="先看下函数定义：">0.1.2.1. 先看下函数定义：</h4><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">2049 </span>EVAL6(DEFINE_BPF_PROG_RUN, <span class="hljs-number">32</span>, <span class="hljs-number">64</span>, <span class="hljs-number">96</span>, <span class="hljs-number">128</span>, <span class="hljs-number">160</span>, <span class="hljs-number">192</span>);<br><span class="hljs-symbol">2050 </span>EVAL6(DEFINE_BPF_PROG_RUN, <span class="hljs-number">224</span>, <span class="hljs-number">256</span>, <span class="hljs-number">288</span>, <span class="hljs-number">320</span>, <span class="hljs-number">352</span>, <span class="hljs-number">384</span>);<br><span class="hljs-symbol">2051 </span>EVAL4(DEFINE_BPF_PROG_RUN, <span class="hljs-number">416</span>, <span class="hljs-number">448</span>, <span class="hljs-number">480</span>, <span class="hljs-number">512</span>);<br></code></pre></td></tr></table></figure>
+<h4 id="展开宏EVAL：">0.1.2.2. 展开宏EVAL：</h4><p> EVAL宏定义：</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">2042 </span>#define EVAL1(FN, X) FN(X)<br><span class="hljs-symbol">2043 </span>#define EVAL2(FN, X, Y...) FN(X) EVAL1(FN, Y)<br><span class="hljs-symbol">2051 </span>EVAL4(DEFINE_BPF_PROG_RUN, <span class="hljs-number">416</span>, <span class="hljs-number">448</span>, <span class="hljs-number">480</span>, <span class="hljs-number">512</span>);<br></code></pre></td></tr></table></figure>
+<p>为了便于理解，我们人肉展开宏后,效果相当于</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs dns">DEFINE_BPF_PROG_RUN<span class="hljs-punctuation">(</span><span class="hljs-number">416</span>） DEFINE_BPF_PROG_RUN<span class="hljs-punctuation">(</span><span class="hljs-number">448</span>）DEFINE_BPF_PROG_RUN<span class="hljs-punctuation">(</span><span class="hljs-number">480</span>）DEFINE_BPF_PROG_RUN<span class="hljs-punctuation">(</span><span class="hljs-number">512</span><span class="hljs-punctuation">)</span><br></code></pre></td></tr></table></figure>
+
+<h4 id="展开宏DEFINE-BPF-PROG-RUN">0.1.2.3. 展开宏DEFINE_BPF_PROG_RUN:</h4><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">2013 </span>#define PROG_NAME(stack_size) __bpf_prog_run##stack_size<br><span class="hljs-symbol">2014 </span>#define DEFINE_BPF_PROG_RUN(stack_size) \<br><span class="hljs-symbol">2015 </span>static unsigned <span class="hljs-keyword">int</span> PROG_NAME(stack_size)(const void *ctx, const struct bpf_insn *insn) \<br><span class="hljs-symbol">2016 </span>&#123; \<br><span class="hljs-symbol">2017 </span>        u64 stack[stack_size / sizeof(u64)]; \<br><span class="hljs-symbol">2018 </span>        u64 regs[MAX_BPF_EXT_REG] = &#123;&#125;; \<br><span class="hljs-symbol">2019 </span>\<br><span class="hljs-symbol">2020 </span>        FP = (u64) (unsigned long) &amp;stack[ARRAY_SIZE(stack)]; \<br><span class="hljs-symbol">2021 </span>        ARG1 = (u64) (unsigned long) ctx; \<br><span class="hljs-symbol">2022 </span>        <span class="hljs-keyword">return</span> ___bpf_prog_run(regs, insn); \<br><span class="hljs-symbol">2023 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<p><code>DEFINE_BPF_PROG_RUN</code>定义了一个以<code>__bpf_prog_run</code>开头加<code>satcksize</code>的函数。<br>比如<code>DEFINE_BPF_PROG_RUN(416</code>）展开后</p>
+<figure class="highlight objectivec"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs objectivec"><span class="hljs-keyword">static</span> <span class="hljs-type">unsigned</span> int__bpf_prog_run416(stack_size)(<span class="hljs-keyword">const</span> <span class="hljs-type">void</span> *ctx, <span class="hljs-keyword">const</span> <span class="hljs-keyword">struct</span> bpf_insn *insn) \<br></code></pre></td></tr></table></figure>
+<p>其中函数里面的<code>FP</code>和<code>ARG1</code>都是BPF机制里使用的寄存器</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">60 </span>#define FP      regs[BPF_REG_FP]<br><span class="hljs-symbol">61 </span>#define AX      regs[BPF_REG_AX]<br><span class="hljs-symbol">62 </span>#define ARG1    regs[BPF_REG_ARG1]<br><span class="hljs-symbol">63 </span>#define CTX     regs[BPF_REG_CTX]<br></code></pre></td></tr></table></figure>
+
+<h3 id="函数指针数组interpreters">0.1.3. 函数指针数组interpreters</h3><h4 id="函数指针数组interpreters-1">0.1.3.1. 函数指针数组interpreters</h4><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">2057 </span>#define PROG_NAME_LIST(stack_size) PROG_NAME(stack_size),<br><span class="hljs-number">2058</span><br><span class="hljs-symbol">2059 </span>static unsigned <span class="hljs-keyword">int</span> (*interpreters[])(const void *ctx,<br><span class="hljs-symbol">2060 </span>                                      const struct bpf_insn *insn) = &#123;<br><span class="hljs-symbol">2061 </span>EVAL6(PROG_NAME_LIST, <span class="hljs-number">32</span>, <span class="hljs-number">64</span>, <span class="hljs-number">96</span>, <span class="hljs-number">128</span>, <span class="hljs-number">160</span>, <span class="hljs-number">192</span>)<br><span class="hljs-symbol">2062 </span>EVAL6(PROG_NAME_LIST, <span class="hljs-number">224</span>, <span class="hljs-number">256</span>, <span class="hljs-number">288</span>, <span class="hljs-number">320</span>, <span class="hljs-number">352</span>, <span class="hljs-number">384</span>)<br><span class="hljs-symbol">2063 </span>EVAL4(PROG_NAME_LIST, <span class="hljs-number">416</span>, <span class="hljs-number">448</span>, <span class="hljs-number">480</span>, <span class="hljs-number">512</span>)<br><span class="hljs-symbol">2064 </span>&#125;;<br><span class="hljs-symbol">2065 </span>#undef PROG_NAME_LIST<br></code></pre></td></tr></table></figure>
+<h4 id="展开EVAL宏：">0.1.3.2. 展开EVAL宏：</h4><p> EVAL宏定义：</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">2042 </span>#define EVAL1(FN, X) FN(X)<br><span class="hljs-symbol">2043 </span>#define EVAL2(FN, X, Y...) FN(X) EVAL1(FN, Y)<br></code></pre></td></tr></table></figure>
+<p>以<code>EVAL4(PROG_NAME_LIST, 416, 448, 480, 512)</code> 为例，<br>展开宏后： </p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs dns">PROG_NAME_LIST<span class="hljs-punctuation">(</span><span class="hljs-number">416</span>）  PROG_NAME_LIST<span class="hljs-punctuation">(</span><span class="hljs-number">448</span>）PROG_NAME_LIST<span class="hljs-punctuation">(</span><span class="hljs-number">480</span>） PROG_NAME_LIST<span class="hljs-punctuation">(</span><span class="hljs-number">512</span><span class="hljs-punctuation">)</span><br></code></pre></td></tr></table></figure>
+<h4 id="展开PROG-NAME-LIST宏：">0.1.3.3. 展开PROG_NAME_LIST宏：</h4><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">2057 </span>#define PROG_NAME_LIST(stack_size) PROG_NAME(stack_size),<br><span class="hljs-symbol">2013 </span>#define PROG_NAME(stack_size) __bpf_prog_run##stack_size<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight abnf"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs abnf">PROG_NAME_LIST(<span class="hljs-number">416</span>) <br> <span class="hljs-operator">=</span><span class="hljs-operator">=</span>&gt; 展开：PROG_NAME(<span class="hljs-number">416</span>)<br> <span class="hljs-operator">=</span><span class="hljs-operator">=</span>&gt; <span class="hljs-operator">=</span><span class="hljs-operator">=</span>&gt; 再展开：__bpf_prog_run416<br></code></pre></td></tr></table></figure>
+
+
+<h3 id="相比之下，老代码更直观且容易理解">0.1.4. 相比之下，老代码更直观且容易理解</h3><p>对比下老代码，更便于理解，先看一下老代码,commit（b870aa901f4be）之前代码是这样的。<br>在<code>bpf_prog_select_runtime</code>函数中，直接把<code>bpf_func</code>赋值为<code>__bpf_prog_run</code></p>
+<figure class="highlight mipsasm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><code class="hljs mipsasm">struct <span class="hljs-keyword">bpf_prog </span>*<span class="hljs-keyword">bpf_prog_select_runtime(struct </span><span class="hljs-keyword">bpf_prog </span>*<span class="hljs-built_in">fp</span>, int *err)<br> &#123;<br>     <span class="hljs-built_in">fp</span>-&gt;<span class="hljs-keyword">bpf_func </span>= (void *) __bpf_prog_run;<br><br><br>     <span class="hljs-comment">/* eBPF JITs can rewrite the program in case constant</span><br><span class="hljs-comment">      * blinding is active. However, in case of error during</span><br><span class="hljs-comment">      * blinding, bpf_int_jit_compile() must always return a</span><br><span class="hljs-comment">      * valid program, which in this case would simply not</span><br><span class="hljs-comment">      * be JITed, but falls back to the interpreter.</span><br><span class="hljs-comment">      */</span><br>     <span class="hljs-built_in">fp</span> = <span class="hljs-keyword">bpf_int_jit_compile(fp);</span><br><span class="hljs-keyword"></span>     <span class="hljs-keyword">bpf_prog_lock_ro(fp);</span><br><span class="hljs-keyword"></span><br><br>     <span class="hljs-comment">/* The tail call compatibility check can only be done at</span><br><span class="hljs-comment">      * this late stage as we need to determine, if we deal</span><br><span class="hljs-comment">      * with JITed or non JITed program concatenations and not</span><br><span class="hljs-comment">      * all eBPF JITs might immediately support all features.</span><br><span class="hljs-comment">      */</span><br>     *err = <span class="hljs-keyword">bpf_check_tail_call(fp);</span><br><span class="hljs-keyword"></span><br><br>     return <span class="hljs-built_in">fp</span>;<br> &#125;<br> EXPORT_SYMBOL_GPL(<span class="hljs-keyword">bpf_prog_select_runtime);</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-type">static</span> <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> __bpf_prog_run(<span class="hljs-type">void</span> *ctx, <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> bpf_insn *insn)<br> &#123;<br>     u64 stack[MAX_BPF_STACK / <span class="hljs-keyword">sizeof</span>(u64)];<br>     u64 regs[MAX_BPF_REG];<br><br><br>     FP = (u64) (<span class="hljs-type">unsigned</span> <span class="hljs-type">long</span>) &amp;stack[<span class="hljs-built_in">ARRAY_SIZE</span>(stack)];<br>     ARG1 = (u64) (<span class="hljs-type">unsigned</span> <span class="hljs-type">long</span>) ctx;<br>     <span class="hljs-keyword">return</span> ___bpf_prog_run(regs, insn, stack);<br> &#125;<br></code></pre></td></tr></table></figure>
+
+<h2 id="BPF如何调用">0.2. . BPF如何调用</h2><h3 id="初始化bpf-func">0.2.1. 初始化bpf_func</h3><p>当bpf程序被加载到内核时候，内核创建为它一个bpf_prog结构体，根据prog的stacksize，选择interpreters里的对应的<br>函数，并选中的函数地址保存到bpf_prog里的bpf_func这个函数指针上。<br>这样后续hook点运行bpf_prog程序时候，就使用bpf_func运行</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-number">2550</span> <span class="hljs-function"><span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title">bpf_prog_load</span><span class="hljs-params">(<span class="hljs-keyword">union</span> bpf_attr *attr, <span class="hljs-type">bpfptr_t</span> uattr, u32 uattr_size)</span></span><br><span class="hljs-function">2551 </span>&#123;<br>...<br><span class="hljs-number">2711</span>         prog = <span class="hljs-built_in">bpf_prog_select_runtime</span>(prog, &amp;err);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">2179</span> struct bpf_prog *bpf_prog_select_runtime<span class="hljs-punctuation">(</span>struct bpf_prog *fp, int *err<span class="hljs-punctuation">)</span><br>...<br><span class="hljs-number">2193</span>         bpf_prog_select_func<span class="hljs-punctuation">(</span>fp<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">2157 </span>static void bpf_prog_select_func(struct bpf_prog *fp)<br><span class="hljs-symbol">2158 </span>&#123;<br><span class="hljs-symbol">2159 </span>#ifndef CONFIG_BPF_JIT_ALWAYS_ON<br><span class="hljs-symbol">2160 </span>        u32 stack_depth = max_t(u32, fp-&gt;aux-&gt;stack_depth, <span class="hljs-number">1</span>);<br><span class="hljs-number">2161</span><br><span class="hljs-symbol">2162 </span>        fp-&gt;bpf_func = interpreters[(round_up(stack_depth, <span class="hljs-number">32</span>) / <span class="hljs-number">32</span>) - <span class="hljs-number">1</span>];<br><span class="hljs-symbol">2163 </span>#<span class="hljs-keyword">else</span><br><span class="hljs-symbol">2164 </span>        fp-&gt;bpf_func = __bpf_prog_ret0_warn;<br><span class="hljs-symbol">2165 </span>#endif<br><span class="hljs-symbol">2166 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/BPF/" class="category-chain-item">BPF</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/BPF/" class="print-no-link">#BPF</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>bfp 在内核运行的核心入口函数及其变形</div>
+      <div>https://martinbj2008.github.io/2022/08/27/core-entry-function-of-bpf-run/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>August 27, 2022</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2024/05/03/ifconfig-alias-nic/" title="内核如何管理同网口下多个ip地址(网口别名）">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">内核如何管理同网口下多个ip地址(网口别名）</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2021/10/24/how-to-run-hexo-with-docker-image/" title="aws上部署hexo步骤记录">
+                        <span class="hidden-mobile">aws上部署hexo步骤记录</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

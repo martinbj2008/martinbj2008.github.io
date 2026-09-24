@@ -1,0 +1,943 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. 问题现象tcpdump&#x2F;iproute2 是很多网络问题下的调试工具，大家也都很熟他的一些特性。比如，  执行tcpdump命令后，如果没有使用-p参数, 网口会进入PROMISC状态。 通过ip link命令可以查看网口状态，其中状态位里有个PROMISC标志。但是，后台执行一个在 eth0 口上抓包的tcpdump命令，就会发现一个问题：   当tcpdump命令在后台运">
+<meta property="og:type" content="article">
+<meta property="og:title" content="tcpdump命令与网口&#96;PROMISC&#96;状态标志位">
+<meta property="og:url" content="https://martinbj2008.github.io/2025/06/22/tcpdump-and-promisc-state-label/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. 问题现象tcpdump&#x2F;iproute2 是很多网络问题下的调试工具，大家也都很熟他的一些特性。比如，  执行tcpdump命令后，如果没有使用-p参数, 网口会进入PROMISC状态。 通过ip link命令可以查看网口状态，其中状态位里有个PROMISC标志。但是，后台执行一个在 eth0 口上抓包的tcpdump命令，就会发现一个问题：   当tcpdump命令在后台运">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/tcpdump/promisc.tcpdump.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/tcpdump/promisc.iplink.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/tcpdump/pormisc.kernel.flags.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/tcpdump/promisc.iplink.bit.flags">
+<meta property="article:published_time" content="2025-06-21T18:07:07.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.755Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="Tcpdump">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/tcpdump/promisc.tcpdump.png">
+  
+  
+  
+  <title>tcpdump命令与网口`PROMISC`状态标志位 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="tcpdump命令与网口`PROMISC`状态标志位"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2025-06-22 02:07" pubdate>
+          June 22, 2025 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          11k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          96 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">tcpdump命令与网口`PROMISC`状态标志位</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <!-- TOC -->
+<h2 id="问题现象">0.1. 问题现象</h2><p>tcpdump&#x2F;iproute2 是很多网络问题下的调试工具，大家也都很熟他的一些特性。比如，</p>
+<ul>
+<li>执行tcpdump命令后，如果没有使用<code>-p</code>参数, 网口会进入PROMISC状态。</li>
+<li>通过ip link命令可以查看网口状态，其中状态位里有个<code>PROMISC</code>标志。<br>但是，后台执行一个在 eth0 口上抓包的tcpdump命令，就会发现一个问题：</li>
+</ul>
+<ol>
+<li>当tcpdump命令在后台运行时，通过查看<code>ip link</code>结果，对应网口的状态标志位没有<code>PROMISC</code>标志位，也没有其他变化。<br><img src="/images/tcpdump/promisc.tcpdump.png" srcset="/img/loading.gif" lazyload alt="tcpdump 执行时， 网口标志位里没有PROMiSC"><br>为了避免干扰，关闭tcpdump 后，我们又做了另外一个验证操作。</li>
+</ol>
+<ul>
+<li>执行<code>ip link set dev eth0 promisc on</code>命令，设置网口混杂模式。这时，网口的<code>PROMISC</code>标志位能正常显示出来。<br><img src="/images/tcpdump/promisc.iplink.png" srcset="/img/loading.gif" lazyload alt="ip link设置网口标志位PROMiSC"><br>这样看来，<code>PROMISC</code>标志位只受 <code>ip link</code>命令控制，与在网口上是否运行tcpdump无关。</li>
+</ul>
+<p>看到这里，不免就有疑问了</p>
+<ul>
+<li>Q1： tcpdump执行时候，对应网口到底进没进入<code>PROMISC</code>混杂模式呢？<br>A：进入<code>PROMISC</code>状态了。  因为对应时间段里，<code>dmesg</code>内核日志有明确的记录。</li>
+</ul>
+ <figure class="highlight excel"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs excel">[<span class="hljs-number">5828194.373058</span>] virtio_net virtio0 e<span class="hljs-symbol">th0:</span> entered promiscuous <span class="hljs-built_in">mode</span><br>[<span class="hljs-number">5828198.130489</span>] virtio_net virtio0 e<span class="hljs-symbol">th0:</span> <span class="hljs-built_in">left</span> promiscuous <span class="hljs-built_in">mode</span><br></code></pre></td></tr></table></figure>
+<p> 注意，ip link 命令设置 on 的时候，网口也会进入<code>PROMISC</code>混杂模式。</p>
+<ul>
+<li>Q2:  既然tcpdump和 iplink都能使网口进入混杂模式，这两个命令又可以独立执行。运行tcpdump命令抓包时，被ip link命令设置了<code>promisc off</code>, 网卡会退出混杂模式，会不会对tcdpump抓包造成影响？<br> A：命令可以并发执行，不会相互干扰。这个场景下，ip link不会让网口退出混杂模式，也不会影响后续的 tcpdump 抓包。<code>promisc off</code> 命令只会让 ip link 显示的网口的状态标志位里的<code>PROMISC</code>被清除掉。</li>
+<li>Q3:  多个tcpdum并行抓包，退出有先后，会不会相互影响？<br>A： 并行tcpdump执行，不会影响网口<code>PROMISC</code>。内核有引用计数机制，保证最后一个 tcpdump 退出时候，网口也跟着关闭混杂模式。</li>
+</ul>
+<span id="more"></span>
+
+<h2 id="原理">0.2. 原理</h2><p>在内核里，针对每个网口上，会维护3 个标志位，来相应上层命令，并控制并记录网口的<code>PROMISC</code>状态。</p>
+<ul>
+<li>gflags</li>
+<li>promiscuity</li>
+<li>flags<br><img src="/images/tcpdump/pormisc.kernel.flags.png" srcset="/img/loading.gif" lazyload alt="状态标志位PROMISC的实现原理"></li>
+</ul>
+<p><em><strong>net_device：gflags</strong></em><br>	+ 其中有一个bit 被用作<code>PROMISC</code>标志位，是一个promisc开关(标志位)。<br>	+ 跟ip link命令里设置<code>promisc on/off</code>对应，跟网口状态直接关联。每当ip link命令设置<code>promisc on</code>时候，就设置标志位。同理，off时候就清除标志位。<br>	+  ip link命令的结果中，在网口状态中的<code>PROMISC</code>标记是这个bit的状态。 <img src="/images/tcpdump/promisc.iplink.bit.flags" srcset="/img/loading.gif" lazyload><br>	+ 连续重复的on命令，等同一次on命令。同理，off也是。+ 只有on&#x2F;off状态切换时候，才会操作下面的<code>promiscuity</code>。<br>	<br> <em><strong>net_device: promiscuity</strong></em></p>
+<ul>
+<li>这是个引用计数值，默认值0，对应网口处在非<code>PROMISC</code>模式。<ul>
+<li>每次有上层命令（tcpdump，gflags切换）才会增加和减少。</li>
+<li><pre><code class="hljs">+ 如果promiscuity 从正整数变为0，则网口退出混杂模式。相反则进入混杂模式。负数就麻烦了，吃出BUG了 :(
+</code></pre>
+</li>
+<li>引用计数+1的操作场景：<ul>
+<li><pre><code class="hljs">gflags从 off 变为 on
+</code></pre>
+</li>
+<li>tcpdump 开始执行时</li>
+</ul>
+</li>
+<li><pre><code class="hljs">引用计数+1的操作场景：
+</code></pre>
+<ul>
+<li><pre><code class="hljs">gflags从 on 变为 off
+</code></pre>
+</li>
+<li>tcpdump  退出时</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<p> <em><strong>net_device: flags</strong></em></p>
+<ul>
+<li>flags：这里也有一个bit 被用作<code>PROMISC</code>标志位。并且位置是跟前面的gflags位置相同。这个<code>PROMISC</code>状态标志位，与物理网口的<code>PROMISC</code>状态是保持一致的，是真正的网口混杂模式的标志。驱动代码里根据这个标志位，来决定设置&#x2F;清除硬件寄存器，进而打开或者关闭网口的混杂模式。</li>
+</ul>
+<h2 id="ip-link代码分析">0.3. ip link代码分析</h2><p>命令<code>ip link set promisc on</code>的函数调用栈</p>
+<figure class="highlight gherkin"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs gherkin">int main(int argc, char **argv)<br>    |<span class="hljs-string">-&gt; do_cmd(basename+2, argc, argv, false);</span><br>          |<span class="hljs-string">-&gt; c-&gt;func(argc-1, argv+1)); //相当于 do_iplink  </span><br>               do_iplink<br>               |<span class="hljs-string">-&gt; iplink_modify(RTM_NEWLINK, 0, argc-1, argv+1);</span><br>                    |<span class="hljs-string">-&gt; iplink_parse(argc, argv, &amp;req, &amp;type); </span><br>                        |<span class="hljs-string">-&gt; if (strcmp(*argv, &quot;promisc&quot;) == 0) &#123;</span><br>                            |<span class="hljs-string">-&gt; req-&gt;i.ifi_change </span>|<span class="hljs-string">= IFF_PROMISC;  </span><br>                            |<span class="hljs-string">-&gt; req-&gt;i.ifi_flags </span>|<span class="hljs-string">= IFF_PROMISC;</span><br>                    |<span class="hljs-string">-&gt; .n.nlmsg_type = cmd; //RTM_SETLINK        </span><br>                    |<span class="hljs-string">-&gt; rtnl_talk(&amp;rth, &amp;req.n, NULL);</span><br></code></pre></td></tr></table></figure>
+<p>这里有几点需要关注：</p>
+<ul>
+<li>netlink 命令类型是<code>RTM_SETLINK </code>, 这决定了内核处理请求时候，对应的消息处理函数。</li>
+<li><code>req-&gt;i.ifi_flags</code>：保存了需要设置或清除的标志位的预期值。比如<code>IFF_PROMISC</code>标志位。</li>
+<li>req-&gt;i.ifi_change：需要设置或清除的标志位的掩码。</li>
+</ul>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">693 </span>                &#125; <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (strcmp(*argv, <span class="hljs-string">&quot;promisc&quot;</span>) == <span class="hljs-number">0</span>) &#123;<br><span class="hljs-symbol">694 </span>                        NEXT_ARG();<br><span class="hljs-symbol">695 </span>                        req-&gt;i.ifi_change |= IFF_PROMISC;   //设置掩码<br><span class="hljs-number">696</span><br><span class="hljs-symbol">697 </span>                        <span class="hljs-keyword">if</span> (strcmp(*argv, <span class="hljs-string">&quot;on&quot;</span>) == <span class="hljs-number">0</span>)<br><span class="hljs-symbol">698 </span>                                req-&gt;i.ifi_flags |= IFF_PROMISC;    //如果是 <span class="hljs-keyword">on</span>，则设置标志位<br><span class="hljs-symbol">699 </span>                        <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (strcmp(*argv, <span class="hljs-string">&quot;off&quot;</span>) == <span class="hljs-number">0</span>)<br><span class="hljs-symbol">700 </span>                                req-&gt;i.ifi_flags &amp;= ~IFF_PROMISC;      //如果是 <span class="hljs-keyword">off</span>，则清除标志位<br></code></pre></td></tr></table></figure>
+<h2 id="ip-link的内核实现">0.4. ip link的内核实现</h2><h3 id="数据结构">0.4.1. 数据结构</h3><p><code>struct net_device</code>里有3个跟 <code>PROMISC</code> 相关的变量</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-number">2084</span> <span class="hljs-keyword">struct</span> <span class="hljs-title class_">net_device</span> &#123;<br>...<br><span class="hljs-number">2133</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span>            flags;<br>...<br><span class="hljs-number">2192</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">short</span>          gflags;<br>...<br><span class="hljs-number">2268</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span>            promiscuity;<br></code></pre></td></tr></table></figure>
+<p>如前原理所述，ip link打印的<code>PROMISC</code>标记是来自于<code>dev-&gt;gflags</code>。<br><code>promiscuity</code>是个计数器，决定了<code>flags</code>里的<code>PROMISC</code>标记，<code>flags</code>跟物理网口混杂模式相对应。<br> <figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">93 </span>        IFF_PROMISC                     = <span class="hljs-number">1</span>&lt;&lt;<span class="hljs-number">8</span>,  /* sysfs */<br></code></pre></td></tr></table></figure></p>
+<h3 id="函数调用栈">0.4.2. 函数调用栈</h3><figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs dns">int rtnl_newlink<span class="hljs-punctuation">(</span>struct sk_buff *skb, struct nlmsghdr *nlh, struct netlink_ext_ack *extack<span class="hljs-punctuation">)</span><br>     |-&gt; __rtnl_newlink<span class="hljs-punctuation">(</span>skb, nlh, ops, tgt_net, link_net, peer_net, tbs, data, extack<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>          |-&gt; rtnl_changelink<span class="hljs-punctuation">(</span>skb, nlh, ops, dev, tgt_net, tbs, data, extack<span class="hljs-punctuation">)</span><span class="hljs-comment">;     </span><br>               |-&gt; do_setlink<span class="hljs-punctuation">(</span>skb, dev, tgt_net, nlmsg_data<span class="hljs-punctuation">(</span>nlh<span class="hljs-punctuation">)</span>, extack, tb, status<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>                    |-&gt; if <span class="hljs-punctuation">(</span>ifm-&gt;ifi_flags || ifm-&gt;ifi_change<span class="hljs-punctuation">)</span> &#123;<br>                         |-&gt; netif_change_flags<span class="hljs-punctuation">(</span>dev, rtnl_dev_combine_flags<span class="hljs-punctuation">(</span>dev, ifm<span class="hljs-punctuation">)</span>, extack<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>                             |-&gt; __dev_change_flags<span class="hljs-punctuation">(</span>dev, flags, extack<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>                                 |-&gt;  inc = <span class="hljs-punctuation">(</span>flags &amp; IFF_PROMISC<span class="hljs-punctuation">)</span> ? <span class="hljs-number">1</span> : -<span class="hljs-number">1</span><span class="hljs-comment">;</span><br>                                 |-&gt;  __dev_set_promiscuity<span class="hljs-punctuation">(</span>dev, inc, false<span class="hljs-punctuation">)</span> <br>                             |-&gt; __dev_notify_flags<span class="hljs-punctuation">(</span>dev, old_flags, changes, <span class="hljs-number">0</span>, NULL<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+<p>备注1：这里真正改变网口标志位的函数是<code>__dev_change_flags</code>,<br>还有一个函数<code>__dev_notify_flags</code>是用来通知其他模块， 网口标志位变化的。如<code>UP</code>&#x2F;<code>DOWN</code>标志位对路由和IP地址模块会有影响。在<code>PROMISC</code>场景下，关联模块影响不大，不展开讨论。</p>
+<p>备注 2：<em><strong><code>rtnl_setlink</code></strong></em><br>对于<code>RTM_SETLINK</code>类型的命令请求，内核对应的处理函数是<code>rtnl_newlink</code><br>内核的 netlink详细处理机制， 先不展开。</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">7053 </span>        &#123;.msgtype = RTM_SETLINK, .doit = rtnl_setlink,<br></code></pre></td></tr></table></figure>
+<h3 id="函数-rtnl-dev-combine-flags">0.4.3. 函数 rtnl_dev_combine_flags</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1092 </span>static unsigned <span class="hljs-keyword">int</span> rtnl_dev_combine_flags(const struct net_device *dev,<br><span class="hljs-symbol">1093 </span>                                           const struct ifinfomsg *ifm)<br><span class="hljs-symbol">1094 </span>&#123;<br><span class="hljs-symbol">1095 </span>        unsigned <span class="hljs-keyword">int</span> flags = ifm-&gt;ifi_flags;<br><span class="hljs-number">1096</span><br><span class="hljs-symbol">1097 </span>        /* bugwards compatibility: ifi_change == <span class="hljs-number">0</span> is treated as ~<span class="hljs-number">0</span> */<br><span class="hljs-symbol">1098 </span>        <span class="hljs-keyword">if</span> (ifm-&gt;ifi_change)<br><span class="hljs-symbol">1099 </span>                flags = (flags &amp; ifm-&gt;ifi_change) |<br><span class="hljs-symbol">1100 </span>                        (rtnl_dev_get_flags(dev) &amp; ~ifm-&gt;ifi_change);<br><span class="hljs-number">1101</span><br><span class="hljs-symbol">1102 </span>        <span class="hljs-keyword">return</span> flags;<br><span class="hljs-symbol">1103 </span>&#125;<br></code></pre></td></tr></table></figure>
+<p>这里<code> ifm-&gt;ifi_flags</code>是<code>ip link</code>根据命令行解析，并传递给内核的。同样传递给内核的<code>ifm-&gt;ifi_change</code>，对应希望变化的那些标志位的掩码。<br>rtnl_dev_combine_flags根据掩码<code>ifm-&gt;ifi_change</code>，把这些标记位从将当前 netdev 的标志位上清除(与操作置零)，然后设置为上层应用期望设置的值(预期值放在ifm-&gt;ifi_flags)。</p>
+<h3 id="函数-rtnl-dev-get-flags">0.4.4. 函数 rtnl_dev_get_flags</h3><p>netdev设备对应的标志位不是存放在一个变量里，而是函数<code>dev_get_flags</code>拟合成的。</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1086 </span>static unsigned <span class="hljs-keyword">int</span> rtnl_dev_get_flags(const struct net_device *dev)<br><span class="hljs-symbol">1087 </span>&#123;<br><span class="hljs-symbol">1088 </span>        <span class="hljs-keyword">return</span> (dev-&gt;flags &amp; ~(IFF_PROMISC | IFF_ALLMULTI)) |<br><span class="hljs-symbol">1089 </span>               (dev-&gt;gflags &amp; (IFF_PROMISC | IFF_ALLMULTI));<br><span class="hljs-symbol">1090 </span>&#125;<br></code></pre></td></tr></table></figure>
+<h3 id="函数-dev-change-flags">0.4.5. 函数 __dev_change_flags</h3><p><em><strong><code>PROMISC</code>不是更新到<code>dev-&gt;flags</code>，而是更新到<code>dev-&gt;gflags</code>.</strong></em></p>
+<p>参数<code>flags</code>存放着期望的标志位。</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs dns"> <span class="hljs-number">9420</span> int __dev_change_flags<span class="hljs-punctuation">(</span>struct net_device *dev, unsigned int flags,<br> <span class="hljs-number">9421</span>                        struct netlink_ext_ack *extack<span class="hljs-punctuation">)</span><br> <span class="hljs-number">9422</span> &#123;<br> ...<br> <span class="hljs-number">9461</span>         if <span class="hljs-punctuation">(</span><span class="hljs-punctuation">(</span>flags ^ dev-&gt;gflags<span class="hljs-punctuation">)</span> &amp; IFF_PROMISC<span class="hljs-punctuation">)</span> &#123;    // 判读PROMISC 位是否需要更新， 重复的 ON/OFF 也在这里被滤掉<br> <span class="hljs-number">9462</span>                 int inc = <span class="hljs-punctuation">(</span>flags &amp; IFF_PROMISC<span class="hljs-punctuation">)</span> ? <span class="hljs-number">1</span> : -<span class="hljs-number">1</span><span class="hljs-comment">;</span><br> <span class="hljs-number">9463</span>                 old_flags = dev-&gt;flags<span class="hljs-comment">;</span><br> <span class="hljs-number">9464</span><br> <span class="hljs-number">9465</span>                 dev-&gt;gflags ^= IFF_PROMISC<span class="hljs-comment">;		//更新IFF_PROMISC标志位，跟 flags 里的一致。</span><br> <span class="hljs-number">9466</span><br> <span class="hljs-number">9467</span>                 if <span class="hljs-punctuation">(</span>__dev_set_promiscuity<span class="hljs-punctuation">(</span>dev, inc, false<span class="hljs-punctuation">)</span> &gt;= <span class="hljs-number">0</span><span class="hljs-punctuation">)</span>   //更新promiscuity计数，和dev-&gt;flags的PROMISC<br> <span class="hljs-number">9468</span>                         if <span class="hljs-punctuation">(</span>dev-&gt;flags != old_flags<span class="hljs-punctuation">)</span>    //PROMISC位别修改了<br> <span class="hljs-number">9469</span>                                 dev_set_rx_mode<span class="hljs-punctuation">(</span>dev<span class="hljs-punctuation">)</span><span class="hljs-comment">;   </span><br> <span class="hljs-number">9470</span>         &#125;<br>... <br></code></pre></td></tr></table></figure>
+<p>注意__dev_set_promiscuity函数主要更新<code>promiscuity</code>, 只有 0 和非零切换时候，才会调整<code>dev-&gt;flags</code>里的<code>IFF_PROMISC</code>。<br>9468 这行的 <code>dev-&gt;flags != old_flags</code>, 针对的就是<code>dev-&gt;flags</code>更新了<code>IFF_PROMISC</code>标志位的场景。</p>
+<h3 id="函数-dev-set-promiscuity">0.4.6. 函数 __dev_set_promiscuity</h3><figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs yaml"> <span class="hljs-number">9244 </span><span class="hljs-string">static</span> <span class="hljs-string">int</span> <span class="hljs-string">__dev_set_promiscuity(struct</span> <span class="hljs-string">net_device</span> <span class="hljs-string">*dev,</span> <span class="hljs-string">int</span> <span class="hljs-string">inc,</span> <span class="hljs-string">bool</span> <span class="hljs-string">notify)</span><br> <span class="hljs-number">9245</span> &#123;<br><span class="hljs-string">...</span><br> <span class="hljs-number">9253         </span><span class="hljs-string">promiscuity</span> <span class="hljs-string">=</span> <span class="hljs-string">dev-&gt;promiscuity</span> <span class="hljs-string">+</span> <span class="hljs-string">inc;</span>  <span class="hljs-string">//根据调用要求更新引用计数，并更新IFF_PROMISC的标志位。</span><br> <span class="hljs-number">9254         </span><span class="hljs-string">if</span> <span class="hljs-string">(promiscuity</span> <span class="hljs-string">==</span> <span class="hljs-number">0</span><span class="hljs-string">)</span> &#123;<br><span class="hljs-string">...</span><br> <span class="hljs-number">9263                 </span><span class="hljs-string">flags</span> <span class="hljs-string">=</span> <span class="hljs-string">old_flags</span> <span class="hljs-string">&amp;</span> <span class="hljs-string">~IFF_PROMISC;</span>  <span class="hljs-string">//如果计数为0，</span> <span class="hljs-string">则是清除标志位。如果非0，设置标志位。最新的标志位会被更新到***`dev-&gt;flags`***。</span><br> <span class="hljs-number">9264</span>         &#125; <span class="hljs-string">else</span> &#123;<br> <span class="hljs-number">9265                 </span><span class="hljs-string">flags</span> <span class="hljs-string">=</span> <span class="hljs-string">old_flags</span> <span class="hljs-string">|</span> <span class="hljs-string">IFF_PROMISC;</span><br> <span class="hljs-number">9266</span>         &#125;<br> <span class="hljs-number">9267         </span><span class="hljs-string">WRITE_ONCE(dev-&gt;promiscuity</span>, <span class="hljs-string">promiscuity);</span><br> <span class="hljs-number">9268         </span><span class="hljs-string">if</span> <span class="hljs-string">(flags</span> <span class="hljs-type">!=</span> <span class="hljs-string">old_flags)</span> &#123;<br> <span class="hljs-number">9269                 </span><span class="hljs-string">WRITE_ONCE(dev-&gt;flags</span>, <span class="hljs-string">flags);</span>		<span class="hljs-string">//回写`IFF_PROMISC`位到`dev-&gt;flags`</span><br> <span class="hljs-string">...</span><br> <span class="hljs-number">9285                 </span><span class="hljs-string">dev_change_rx_flags(dev</span>, <span class="hljs-string">IFF_PROMISC);</span><br> <span class="hljs-number">9286</span>         &#125;<br></code></pre></td></tr></table></figure>
+<p>最后会调用<code> dev_change_rx_flags(dev, IFF_PROMISC);</code>， 但除了个别虚拟口（如 vlan）有动作，大部分网口，其实是在<code>__dev_change_flags</code>里，当<code>__dev_set_promiscuity</code>的成功返回后，调用<code>dev_set_rx_mode</code>去更新网口的<code>PROMISC</code>状态。</p>
+<p>注意：<br>这个函数是个基础函数， tcpdump时，最终也会调用到这个函数。</p>
+<h3 id="函数dev-set-rx-mode">0.4.7. 函数dev_set_rx_mode</h3><p>对于<code>PROMISC</code>标志，会去调用驱动的对应函数设置。<br> <figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">9382 </span>void dev_set_rx_mode(struct net_device *dev)<br><span class="hljs-symbol">9383 </span>&#123;<br><span class="hljs-symbol">9384 </span>        netif_addr_lock_bh(dev);<br><span class="hljs-symbol">9385 </span>        __dev_set_rx_mode(dev);<br><span class="hljs-symbol">9386 </span>        netif_addr_unlock_bh(dev);<br><span class="hljs-symbol">9387 </span>&#125;<br></code></pre></td></tr></table></figure></p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs dns"> <span class="hljs-number">9354</span> void __dev_set_rx_mode<span class="hljs-punctuation">(</span>struct net_device *dev<span class="hljs-punctuation">)</span><br> <span class="hljs-number">9355</span> &#123;<br>...<br> <span class="hljs-number">9378</span>         if <span class="hljs-punctuation">(</span>ops-&gt;ndo_set_rx_mode<span class="hljs-punctuation">)</span><br> <span class="hljs-number">9379</span>                 ops-&gt;ndo_set_rx_mode<span class="hljs-punctuation">(</span>dev<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br> <span class="hljs-number">9380</span> &#125;<br></code></pre></td></tr></table></figure>
+<h3 id="网口驱动的-ndo-set-rx-mode">0.4.8. 网口驱动的 ndo_set_rx_mode</h3><p>以e1000网卡驱动为例，如果网口<code>flags</code>里有<code>PROMISC</code>标志，设置对应网口的硬件寄存器标志位。<br>具体逻辑见 2254～2256。<br>这里涉及到网口支持多个单播的 MAC 地址，就不展开讨论代码实现。</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><code class="hljs yaml"><span class="hljs-number">2235 </span><span class="hljs-string">static</span> <span class="hljs-string">void</span> <span class="hljs-string">e1000_set_rx_mode(struct</span> <span class="hljs-string">net_device</span> <span class="hljs-string">*netdev)</span><br><span class="hljs-number">2236</span> &#123;<br><span class="hljs-string">...</span><br><span class="hljs-number">2252         </span><span class="hljs-string">rctl</span> <span class="hljs-string">=</span> <span class="hljs-string">er32(RCTL);</span><br><span class="hljs-number">2253</span><br><span class="hljs-number">2254         </span><span class="hljs-string">if</span> <span class="hljs-string">(netdev-&gt;flags</span> <span class="hljs-string">&amp;</span> <span class="hljs-string">IFF_PROMISC)</span> &#123;<br><span class="hljs-number">2255                 </span><span class="hljs-string">rctl</span> <span class="hljs-string">|=</span> <span class="hljs-string">(E1000_RCTL_UPE</span> <span class="hljs-string">|</span> <span class="hljs-string">E1000_RCTL_MPE);</span><br><span class="hljs-number">2256                 </span><span class="hljs-string">rctl</span> <span class="hljs-string">&amp;=</span> <span class="hljs-string">~E1000_RCTL_VFE;</span><br><span class="hljs-number">2257</span>         &#125; <span class="hljs-string">else</span> &#123;<br><span class="hljs-number">2258                 </span><span class="hljs-string">if</span> <span class="hljs-string">(netdev-&gt;flags</span> <span class="hljs-string">&amp;</span> <span class="hljs-string">IFF_ALLMULTI)</span><br><span class="hljs-number">2259                         </span><span class="hljs-string">rctl</span> <span class="hljs-string">|=</span> <span class="hljs-string">E1000_RCTL_MPE;</span><br><span class="hljs-number">2260                 </span><span class="hljs-string">else</span><br><span class="hljs-number">2261                         </span><span class="hljs-string">rctl</span> <span class="hljs-string">&amp;=</span> <span class="hljs-string">~E1000_RCTL_MPE;</span><br><span class="hljs-number">2262</span>                 <span class="hljs-string">/*</span> <span class="hljs-string">Enable</span> <span class="hljs-string">VLAN</span> <span class="hljs-string">filter</span> <span class="hljs-string">if</span> <span class="hljs-string">there</span> <span class="hljs-string">is</span> <span class="hljs-string">a</span> <span class="hljs-string">VLAN</span> <span class="hljs-string">*/</span><br><span class="hljs-number">2263                 </span><span class="hljs-string">if</span> <span class="hljs-string">(e1000_vlan_used(adapter))</span><br><span class="hljs-number">2264                         </span><span class="hljs-string">rctl</span> <span class="hljs-string">|=</span> <span class="hljs-string">E1000_RCTL_VFE;</span><br><span class="hljs-number">2265</span>         &#125;<br><span class="hljs-number">2266</span><br><span class="hljs-number">2267         </span><span class="hljs-string">if</span> <span class="hljs-string">(netdev_uc_count(netdev)</span> <span class="hljs-string">&gt;</span> <span class="hljs-string">rar_entries</span> <span class="hljs-bullet">-</span> <span class="hljs-number">1</span><span class="hljs-string">)</span> &#123;<br><span class="hljs-number">2268                 </span><span class="hljs-string">rctl</span> <span class="hljs-string">|=</span> <span class="hljs-string">E1000_RCTL_UPE;</span><br><span class="hljs-number">2269</span>         &#125; <span class="hljs-string">else</span> <span class="hljs-string">if</span> <span class="hljs-string">(!(netdev-&gt;flags</span> <span class="hljs-string">&amp;</span> <span class="hljs-string">IFF_PROMISC))</span> &#123;<br><span class="hljs-number">2270                 </span><span class="hljs-string">rctl</span> <span class="hljs-string">&amp;=</span> <span class="hljs-string">~E1000_RCTL_UPE;</span><br><span class="hljs-number">2271                 </span><span class="hljs-string">use_uc</span> <span class="hljs-string">=</span> <span class="hljs-literal">true</span><span class="hljs-string">;</span><br><span class="hljs-number">2272</span>         &#125;<br><span class="hljs-number">2273</span><br><span class="hljs-number">2274         </span><span class="hljs-string">ew32(RCTL</span>, <span class="hljs-string">rctl);</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1810 </span>#define E1000_RCTL_UPE            <span class="hljs-number">0</span>x00000008    /* unicast promiscuous enable */<br><span class="hljs-symbol">1811 </span>#define E1000_RCTL_MPE            <span class="hljs-number">0</span>x00000010    /* multicast promiscuous enab */<br><span class="hljs-symbol">1838 </span>#define E1000_RCTL_VFE            <span class="hljs-number">0</span>x00040000    /* vlan filter enable */<br></code></pre></td></tr></table></figure>
+
+<h3 id="函数dev-get-flags">0.4.9. 函数dev_get_flags</h3><p>ip link 读取网口状态时，<code>PROMISC</code>标志位是通过读写<code>dev-&gt;gflags</code>的，而不是<code>dev-&gt;flags</code>。<br>这个跟前面设置<code>PROMISC</code>相对应。</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">9395 </span>unsigned <span class="hljs-keyword">int</span> dev_get_flags(const struct net_device *dev)<br><span class="hljs-symbol">9396 </span>&#123;<br><span class="hljs-symbol">9397 </span>        unsigned <span class="hljs-keyword">int</span> flags;<br><span class="hljs-number">9398</span><br><span class="hljs-symbol">9399 </span>        flags = (READ_ONCE(dev-&gt;flags) &amp; ~(IFF_PROMISC |<br><span class="hljs-symbol">9400 </span>                                IFF_ALLMULTI |<br><span class="hljs-symbol">9401 </span>                                IFF_RUNNING |<br><span class="hljs-symbol">9402 </span>                                IFF_LOWER_UP |<br><span class="hljs-symbol">9403 </span>                                IFF_DORMANT)) |<br><span class="hljs-symbol">9404 </span>                (READ_ONCE(dev-&gt;gflags) &amp; (IFF_PROMISC |<br><span class="hljs-symbol">9405 </span>                                IFF_ALLMULTI));<br><span class="hljs-number">9406</span><br></code></pre></td></tr></table></figure>
+
+<h2 id="tcpdump-libpcap-代码分析">0.5. tcpdump&#x2F;libpcap 代码分析</h2><h3 id="函数调用栈-1">0.5.1. 函数调用栈</h3><figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs dns">main<br>|-&gt; pd = open_interface<span class="hljs-punctuation">(</span>device, ndo, ebuf<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>     |-&gt; status = pcap_activate<span class="hljs-punctuation">(</span>pc<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>            |-&gt; status = p-&gt;activate_op<span class="hljs-punctuation">(</span>p<span class="hljs-punctuation">)</span><span class="hljs-comment">;    // handle-&gt;activate_op = pcap_activate_linux;</span><br>            相当于 pcap_activate_linux<br>                  |-&gt; ret = setup_socket<span class="hljs-punctuation">(</span>handle, is_any_device<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>                       |-&gt; mr.mr_ifindex = handlep-&gt;ifindex<span class="hljs-comment">;</span><br>                       |-&gt; mr.mr_type    = PACKET_MR_PROMISC<span class="hljs-comment">;</span><br>                       |-&gt; if <span class="hljs-punctuation">(</span>setsockopt<span class="hljs-punctuation">(</span>sock_fd, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &amp;mr, sizeof<span class="hljs-punctuation">(</span>mr<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> == -<span class="hljs-number">1</span><span class="hljs-punctuation">)</span><br></code></pre></td></tr></table></figure>
+<h3 id="tcpdump抓包">0.5.2. tcpdump抓包</h3><p>命令行：<code>tcpdump -i eth0</code>， 这里没有<code>-p</code>参数。</p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs yaml"><span class="hljs-number">1493 </span><span class="hljs-string">main(int</span> <span class="hljs-string">argc,</span> <span class="hljs-string">char</span> <span class="hljs-string">**argv)</span><br><span class="hljs-number">1494</span> &#123;<br><span class="hljs-string">...</span><br><span class="hljs-number">1820                 </span><span class="hljs-string">case</span> <span class="hljs-attr">&#x27;p&#x27;:</span><br><span class="hljs-number">1821</span>                         <span class="hljs-string">++pflag;</span><br><span class="hljs-number">1822                         </span><span class="hljs-string">break;</span><br><span class="hljs-string">...</span><br><span class="hljs-number">2229                 </span><span class="hljs-string">pd</span> <span class="hljs-string">=</span> <span class="hljs-string">open_interface(device</span>, <span class="hljs-string">ndo</span>, <span class="hljs-string">ebuf);</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-number">1259</span> <span class="hljs-type">static</span> <span class="hljs-type">pcap_t</span> *<br><span class="hljs-number">1260</span> <span class="hljs-built_in">open_interface</span>(<span class="hljs-type">const</span> <span class="hljs-type">char</span> *device, netdissect_options *ndo, <span class="hljs-type">char</span> *ebuf)<br><span class="hljs-number">1261</span> &#123;<br>...<br><span class="hljs-number">1473</span>         pc = <span class="hljs-built_in">pcap_open_live</span>(device, ndo-&gt;ndo_snaplen, !pflag, timeout, ebuf);<br></code></pre></td></tr></table></figure>
+<p>默认 tcpdump 命令不会使用<code>-p</code>参数，因此打开网口抓包时候，需要把网口设置成混杂模式。<br>对应代码逻辑是，命令不使用<code>-p</code>参数，pflag保持初始值0，对应pcap_open_live的 &#96;&#96;参数 1，启用混杂模式.</p>
+<figure class="highlight arduino"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs arduino"><span class="hljs-built_in">pcap_open_live</span>(<span class="hljs-type">const</span> <span class="hljs-type">char</span> *device, <span class="hljs-type">int</span> snaplen, <span class="hljs-type">int</span> promisc, <span class="hljs-type">int</span> to_ms, <span class="hljs-type">char</span> *errbuf)<br></code></pre></td></tr></table></figure>
+<h3 id="libpcap代码分析">0.5.3. libpcap代码分析</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs basic"><br><span class="hljs-symbol">2874 </span>        status = pcap_set_promisc(p, promisc);<br><br></code></pre></td></tr></table></figure>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs yaml"><span class="hljs-number">2600 </span><span class="hljs-string">int</span><br><span class="hljs-number">2601 </span><span class="hljs-string">pcap_set_promisc(pcap_t</span> <span class="hljs-string">*p,</span> <span class="hljs-string">int</span> <span class="hljs-string">promisc)</span><br><span class="hljs-number">2602</span> &#123;<br><span class="hljs-string">...</span><br><span class="hljs-number">2605         </span><span class="hljs-string">p-&gt;opt.promisc</span> <span class="hljs-string">=</span> <span class="hljs-string">promisc;</span><br><span class="hljs-number">2606         </span><span class="hljs-string">return</span> <span class="hljs-string">(0);</span><br><span class="hljs-number">2607</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="函数setup-socket">0.5.4. 函数setup_socket</h3><p>如果指定了网口(is_any_device为0)抓包，并且有 PROMISC 要求，则通过 socketopt 设置网口进入 promisc 状态。</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">2324</span> static int<br><span class="hljs-number">2325</span> setup_socket<span class="hljs-punctuation">(</span>pcap_t *handle, int is_any_device<span class="hljs-punctuation">)</span><br><span class="hljs-number">2326</span> &#123;<br>...<br><span class="hljs-number">2595</span>         if <span class="hljs-punctuation">(</span>!is_any_device &amp;&amp; handle-&gt;opt.promisc<span class="hljs-punctuation">)</span> &#123;<br><span class="hljs-number">2596</span>                 memset<span class="hljs-punctuation">(</span>&amp;mr, <span class="hljs-number">0</span>, sizeof<span class="hljs-punctuation">(</span>mr<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">2597</span>                 mr.mr_ifindex = handlep-&gt;ifindex<span class="hljs-comment">;</span><br><span class="hljs-number">2598</span>                 mr.mr_type    = PACKET_MR_PROMISC<span class="hljs-comment">;</span><br><span class="hljs-number">2599</span>                 if <span class="hljs-punctuation">(</span>setsockopt<span class="hljs-punctuation">(</span>sock_fd, SOL_PACKET, PACKET_ADD_MEMBERSHIP,<br><span class="hljs-number">2600</span>                     &amp;mr, sizeof<span class="hljs-punctuation">(</span>mr<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> == -<span class="hljs-number">1</span><span class="hljs-punctuation">)</span> &#123;<br>...<br></code></pre></td></tr></table></figure>
+<h2 id="tcpdump的内核实现">0.6. tcpdump的内核实现</h2><h3 id="函数调用栈-2">0.6.1. 函数调用栈</h3><p>tcpdump 的内核实现比较复杂，这里只摘录跟设置<code>PROMISC</code>状态相关的代码。</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs dns">packet_setsockopt<br> |-&gt; packet_mc_add<span class="hljs-punctuation">(</span>sk, &amp;mreq<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>      |-&gt;  packet_dev_mc<span class="hljs-punctuation">(</span>dev, i, <span class="hljs-number">1</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>            |-&gt; dev_set_promiscuity<span class="hljs-punctuation">(</span>dev, what<span class="hljs-punctuation">)</span><span class="hljs-comment">; //what是上一行调用时的最后参数，`1`</span><br>                  |-&gt; netif_set_promiscuity<span class="hljs-punctuation">(</span>dev, inc<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+<h3 id="函数packet-setsockopt">0.6.2. 函数packet_setsockopt</h3><p>tcpdump 对应的 socket 类型是<code>af_packet</code>, 对应的 socket opt 的处理函数为<code>packet_setsockopt</code>。<br>对应<code>setsockopt</code>调用时候，传递的两个参数<code>SOL_PACKET</code> 和<code>PACKET_ADD_MEMBERSHIP</code>。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-number">3833</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span><br><span class="hljs-number">3834</span> <span class="hljs-built_in">packet_setsockopt</span>(<span class="hljs-keyword">struct</span> socket *sock, <span class="hljs-type">int</span> level, <span class="hljs-type">int</span> optname, <span class="hljs-type">sockptr_t</span> optval,<br><span class="hljs-number">3835</span>                   <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> optlen)<br><span class="hljs-number">3836</span> &#123;<br>...<br><span class="hljs-number">3859</span>                 <span class="hljs-keyword">if</span> (optname == PACKET_ADD_MEMBERSHIP)<br><span class="hljs-number">3860</span>                         ret = <span class="hljs-built_in">packet_mc_add</span>(sk, &amp;mreq);<br>...<br></code></pre></td></tr></table></figure>
+<h3 id="函数packet-mc-add">0.6.3. 函数packet_mc_add</h3><p>这里会把 tcpdump 传递下来的参数，网口index值<code>mr_ifindex</code>和类型<code>PACKET_MR_PROMISC</code>，<br>为后续打开网口混杂模式做准备。<br>这里最后一个参数是<code>1</code></p>
+<figure class="highlight ocaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs ocaml"><span class="hljs-number">3730</span> static <span class="hljs-built_in">int</span> packet_mc_add(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-keyword">struct</span> packet_mreq_max *mreq)<br><span class="hljs-number">3731</span> &#123;<br>...<br><span class="hljs-number">3766</span>         i-&gt;<span class="hljs-keyword">type</span> = mreq-&gt;mr_type;<br><span class="hljs-number">3767</span>         i-&gt;ifindex = mreq-&gt;mr_ifindex;<br>...<br><span class="hljs-number">3775</span>         err = packet_dev_mc(dev, i, <span class="hljs-number">1</span>);<br><br></code></pre></td></tr></table></figure>
+<h3 id="函数packet-dev-mc">0.6.4. 函数packet_dev_mc</h3><p>这个函数里会调用协议栈的基础<code>dev_set_promiscuity</code>函数设置网口进入混杂模式。<br>其他部分跟<code>PROMISC</code>无关，处理的是多个组播或者单播地址的场景。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-number">3685</span> <span class="hljs-function"><span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title">packet_dev_mc</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net_device *dev, <span class="hljs-keyword">struct</span> packet_mclist *i,</span></span><br><span class="hljs-params"><span class="hljs-function"><span class="hljs-number">3686</span>                          <span class="hljs-type">int</span> what)</span></span><br><span class="hljs-function">3687 </span>&#123;<br><span class="hljs-number">3688</span>         <span class="hljs-keyword">switch</span> (i-&gt;type) &#123;<br>...<br><span class="hljs-number">3697</span>         <span class="hljs-keyword">case</span> PACKET_MR_PROMISC:<br><span class="hljs-number">3698</span>                 <span class="hljs-keyword">return</span> <span class="hljs-built_in">dev_set_promiscuity</span>(dev, what);<br>...<br><span class="hljs-number">3713</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h3 id="函数dev-set-promiscuity">0.6.5. 函数dev_set_promiscuity</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">282 </span><span class="hljs-keyword">int</span> dev_set_promiscuity(struct net_device *dev, <span class="hljs-keyword">int</span> inc)<br><span class="hljs-symbol">283 </span>&#123;<br><span class="hljs-symbol">284 </span>        <span class="hljs-keyword">int</span> ret;<br><span class="hljs-number">285</span><br><span class="hljs-symbol">286 </span>        netdev_lock_ops(dev);<br><span class="hljs-symbol">287 </span>        ret = netif_set_promiscuity(dev, inc);<br><span class="hljs-symbol">288 </span>        netdev_unlock_ops(dev);<br><span class="hljs-number">289</span><br><span class="hljs-symbol">290 </span>        <span class="hljs-keyword">return</span> ret;<br><span class="hljs-symbol">291 </span>&#125;<br><span class="hljs-symbol">292 </span>EXPORT_SYMBOL(dev_set_promiscuity);<br></code></pre></td></tr></table></figure>
+
+<h3 id="函数netif-set-promiscuity">0.6.6. 函数netif_set_promiscuity</h3><p>注意__dev_set_promiscuity函数主要更新<code>promiscuity</code>, 只有 0 和非零切换时候，才会调整<code>dev-&gt;flags</code>里的<code>IFF_PROMISC</code>。如果更新了<code>IFF_PROMISC</code>标志位， 就会满足 if 判断条件， 调用dev_set_rx_mode(dev)。 由网口根据dev-&gt;flags里<code>IFF_PROMISC</code>标志位，状态去更新网口，进入或者退出混杂模式。</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">9300 </span><span class="hljs-keyword">int</span> netif_set_promiscuity(struct net_device *dev, <span class="hljs-keyword">int</span> inc)<br><span class="hljs-symbol">9301 </span>&#123;<br><br><span class="hljs-symbol">9305 </span>        <span class="hljs-keyword">err</span> = __dev_set_promiscuity(dev, inc, true);<br><span class="hljs-symbol">9306 </span>        <span class="hljs-keyword">if</span> (<span class="hljs-keyword">err</span> &lt; <span class="hljs-number">0</span>)<br><span class="hljs-symbol">9307 </span>                <span class="hljs-keyword">return</span> <span class="hljs-keyword">err</span>;<br><span class="hljs-symbol">9308 </span>        <span class="hljs-keyword">if</span> (dev-&gt;flags != old_flags)<br><span class="hljs-symbol">9309 </span>                dev_set_rx_mode(dev);<br><span class="hljs-symbol">9310 </span>        <span class="hljs-keyword">return</span> <span class="hljs-keyword">err</span>;<br><span class="hljs-symbol">9311 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Tcpdump/" class="category-chain-item">Tcpdump</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/Tcpdump/" class="print-no-link">#Tcpdump</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>tcpdump命令与网口`PROMISC`状态标志位</div>
+      <div>https://martinbj2008.github.io/2025/06/22/tcpdump-and-promisc-state-label/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>June 22, 2025</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2025/07/06/fib-lo-and-local-route-table/" title="lo口与local路由表">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">lo口与local路由表</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2025/05/07/tcp-paws-check/" title="PAWS 在tcp协议栈中的实现">
+                        <span class="hidden-mobile">PAWS 在tcp协议栈中的实现</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

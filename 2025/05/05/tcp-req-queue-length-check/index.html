@@ -1,0 +1,887 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.0.1. 创建半链接时的三个长度检查在处理TCP-SYN首包时候， tcp_conn_request函数里， 会有三个不同条件的长度检查。   inet_csk_reqsk_queue_is_full 半链接的个数超过sk_max_ack_backlog， 则丢包。 sk_acceptq_is_full： accept 队列长度超过sk_max_ack_backlog，则丢包。 sysctl_">
+<meta property="og:type" content="article">
+<meta property="og:title" content="创建req scoket时的三个长度检查">
+<meta property="og:url" content="https://martinbj2008.github.io/2025/05/05/tcp-req-queue-length-check/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.0.1. 创建半链接时的三个长度检查在处理TCP-SYN首包时候， tcp_conn_request函数里， 会有三个不同条件的长度检查。   inet_csk_reqsk_queue_is_full 半链接的个数超过sk_max_ack_backlog， 则丢包。 sk_acceptq_is_full： accept 队列长度超过sk_max_ack_backlog，则丢包。 sysctl_">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2025-05-05T15:45:58.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.754Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IPv4">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>创建req scoket时的三个长度检查 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="创建req scoket时的三个长度检查"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2025-05-05 23:45" pubdate>
+          May 5, 2025 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          5.5k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          46 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">创建req scoket时的三个长度检查</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h3 id="创建半链接时的三个长度检查">0.0.1. 创建半链接时的三个长度检查</h3><p>在处理TCP-SYN首包时候， <code>tcp_conn_request</code>函数里， 会有三个不同条件的长度检查。 </p>
+<ul>
+<li><code>inet_csk_reqsk_queue_is_full</code> 半链接的个数超过sk_max_ack_backlog， 则丢包。</li>
+<li><code>sk_acceptq_is_full</code>： accept 队列长度超过sk_max_ack_backlog，则丢包。</li>
+<li><code>sysctl_tcp_syncookies</code>禁用(值为0)时, <code>sysctl_max_syn_backlog</code> 与<code>inet_csk_reqsk_queue_len</code>： 队列长度如果超过sysctl_max_syn_backlog的3&#x2F;4则丢包</li>
+</ul>
+<p>其中，</p>
+<ul>
+<li><code>sysctl_max_syn_backlog</code>： 初始化时，最小 128。如果ehash_entries&#x2F;128比128大，取最大值。ehash_entries是 tcp 的 hash 桶个数。</li>
+<li><code>sysctl_tcp_syncookies</code>:  初始值为 1</li>
+</ul>
+<h4 id="判断1：-半链接队列是否溢出-inet-csk-reqsk-queue-is-full">0.0.1.1. 判断1： 半链接队列是否溢出 inet_csk_reqsk_queue_is_full</h4><p>虽然不再维护半链接队列了, 但是每次创建req socket后，这个统计值都是在增加的。<br>因此如果<code>半链接个数</code>超过了最大值<code>sk_max_ack_backlog</code>，则启用cookie(sysctl_tcp_syncookies为1或2)，如果不支持cookie，则丢弃。</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">278 </span>static inline <span class="hljs-keyword">int</span> inet_csk_reqsk_queue_len(const struct sock *sk)<br><span class="hljs-symbol">279 </span>&#123;<br><span class="hljs-symbol">280 </span>        <span class="hljs-keyword">return</span> reqsk_queue_len(&amp;inet_csk(sk)-&gt;icsk_accept_queue);<br><span class="hljs-symbol">281 </span>&#125;<br><span class="hljs-number">282</span><br><span class="hljs-symbol">283 </span>static inline <span class="hljs-keyword">int</span> inet_csk_reqsk_queue_is_full(const struct sock *sk)<br><span class="hljs-symbol">284 </span>&#123;<br><span class="hljs-symbol">285 </span>        <span class="hljs-keyword">return</span> inet_csk_reqsk_queue_len(sk) &gt; READ_ONCE(sk-&gt;sk_max_ack_backlog);<br><span class="hljs-symbol">286 </span>&#125;<br></code></pre></td></tr></table></figure>
+<p>当前内核默认启用syncookie机制(sysctl_tcp_syncookies为1)，队列溢出会触发synccookie 机制。<br>只有关闭了tcpcookie(0)后，才会在队列溢出时候丢弃syn报文。</p>
+<span id="more"></span>
+
+<h4 id="判断2：accept接队列溢出-sk-acceptq-is-full">0.0.1.2. 判断2：accept接队列溢出 sk_acceptq_is_full</h4><p>如果accept队列里的已经完成三次握手，等待被accept的socket数量超过了监听socket 的<code>sk_max_ack_backlog</code>，后续的 req socket 就会被丢弃。</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1034 </span>static inline bool sk_acceptq_is_full(const struct sock *sk)<br><span class="hljs-symbol">1035 </span>&#123;<br><span class="hljs-symbol">1036 </span>        <span class="hljs-keyword">return</span> READ_ONCE(sk-&gt;sk_ack_backlog) &gt; READ_ONCE(sk-&gt;sk_max_ack_backlog);<br><span class="hljs-symbol">1037 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>当因为accept 队列满，而被丢弃的SYN 请求，会被统计到<code>LINUX_MIB_LISTENOVERFLOWS</code>里。</p>
+<h5 id="如何查看LINUX-MIB-LISTENOVERFLOWS">0.0.1.2.1. 如何查看LINUX_MIB_LISTENOVERFLOWS</h5><ul>
+<li><code>cat /proc/net/netstat</code><br>在 <code>TcpExt</code> 这部分统计里有个 <code>ListenOverflows</code>子统计项</li>
+<li><code>netstat -es</code></li>
+</ul>
+<h4 id="判断3：-inet-csk-reqsk-queue-len-和-sysctl-max-syn-backlog">0.0.1.3. 判断3： inet_csk_reqsk_queue_len 和 sysctl_max_syn_backlog</h4><p>如果tcp syncookie机制没有使用，那么还有第3个检查</p>
+<ul>
+<li>半链接队列的长度不能超过sysctl_max_syn_backlog的3&#x2F;4， 否则丢弃。</li>
+</ul>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">7283 </span>        <span class="hljs-keyword">if</span> (!want_cookie &amp;&amp; !isn) &#123;<br><span class="hljs-symbol">7284 </span>                <span class="hljs-keyword">int</span> max_syn_backlog = READ_ONCE(net-&gt;ipv4.sysctl_max_syn_backlog);<br><span class="hljs-symbol">7287 </span>                <span class="hljs-keyword">if</span> (!syncookies &amp;&amp;<br><span class="hljs-symbol">7288 </span>                    (max_syn_backlog - inet_csk_reqsk_queue_len(sk) &lt;<br><span class="hljs-symbol">7289 </span>                     (max_syn_backlog &gt;&gt; <span class="hljs-number">2</span>)) &amp;&amp;<br><span class="hljs-symbol">7290 </span>                    !tcp_peer_is_proven(req, dst)) &#123;<br><br><span class="hljs-symbol">7301 </span>                &#125;<br></code></pre></td></tr></table></figure>
+<p>只有关闭syncookie时，才会走到这个检查逻辑里，不要被前面want_cookie（是否使用cookie的判断结果）干扰。</p>
+<h4 id="listen-调用-backlog-与-somaxconn-取最小值">0.0.1.4. listen 调用 backlog 与 somaxconn 取最小值</h4><ul>
+<li>比较listen调用里的第二个参数<code>backlog</code> 和 sysctl 里的<code>net.core.somaxconn</code>，取 <em><strong>最小值</strong></em></li>
+<li>结果存放到<code>sk-&gt;sk_max_ack_backlog</code>， 这也是accept 队列和变链接队列的最大长度。</li>
+</ul>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">1860</span>  */<br><span class="hljs-number">1861</span> int __sys_listen_socket<span class="hljs-punctuation">(</span>struct socket *sock, int backlog<span class="hljs-punctuation">)</span><br><span class="hljs-number">1862</span> &#123;<br>...<br><span class="hljs-number">1865</span>         somaxconn = READ_ONCE<span class="hljs-punctuation">(</span>sock_net<span class="hljs-punctuation">(</span>sock-&gt;sk<span class="hljs-punctuation">)</span>-&gt;core.sysctl_somaxconn<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">1866</span>         if <span class="hljs-punctuation">(</span><span class="hljs-punctuation">(</span>unsigned int<span class="hljs-punctuation">)</span>backlog &gt; somaxconn<span class="hljs-punctuation">)</span><br><span class="hljs-number">1867</span>                 backlog = somaxconn<span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs dns"> <span class="hljs-number">191</span> int __inet_listen_sk<span class="hljs-punctuation">(</span>struct sock *sk, int backlog<span class="hljs-punctuation">)</span><br> <span class="hljs-number">192</span> &#123;<br>...<br> <span class="hljs-number">199</span>         WRITE_ONCE<span class="hljs-punctuation">(</span>sk-&gt;sk_max_ack_backlog, backlog<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+
+<h4 id="系统参数-sysctl-max-syn-backlog">0.0.1.5. 系统参数 sysctl_max_syn_backlog</h4><ul>
+<li>最小 128</li>
+<li>取ehash_entries&#x2F;128 和 128 的最大值<br>ehash_entries如何计算， 如何查看:简单看了下，内核启动时候可以指定大小， 否则系统默认初始化是在内存模块里做的。待细看</li>
+</ul>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">3434 </span>        net-&gt;ipv4.sysctl_max_syn_backlog = max(<span class="hljs-number">128</span>U, ehash_entries / <span class="hljs-number">128</span>);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">245 </span>static inline <span class="hljs-keyword">int</span> reqsk_queue_len(const struct request_sock_queue *queue)<br><span class="hljs-symbol">246 </span>&#123;<br><span class="hljs-symbol">247 </span>        <span class="hljs-keyword">return</span> atomic_read(&amp;queue-&gt;qlen);<br><span class="hljs-symbol">248 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+
+<h4 id="如何查看accept队列里的child-socket数量以及accept队列的最大长度">0.0.1.6. 如何查看accept队列里的child socket数量以及accept队列的最大长度</h4><p>通过<code>ss -leti</code>命令，可以查看每个 listen socket 下的 accept 队列里的实际长度，也就是 等待被 accept 的 child socket 的个数。其实 accept 队列的总长度也已经透过内核传递给了ss里，只是ss命令在Send-Q列显示。<br>具体代码逻辑待查看。</p>
+<h5 id="内核-struct-tcp-info里的-tcpi-unacked和tcpi-sacked">0.0.1.6.1. 内核  struct tcp_info里的 tcpi_unacked和tcpi_sacked</h5><p>内核没有专门为两个统计值，设置上传的名字，而是借用<code> struct tcp_info</code>里的<code>tcpi_unacked</code>和<code>tcpi_sacked</code>两个字段传递 listen socket 的 accept 队列长度<code>sk_ack_backlog</code>和最大值<code>sk_max_ack_backlog</code></p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">4096 </span>        <span class="hljs-keyword">if</span> (info-&gt;tcpi_state == TCP_LISTEN) &#123;<br><span class="hljs-symbol">4097 </span>                /* listeners aliased fields :<br><span class="hljs-symbol">4098 </span>                 * tcpi_unacked -&gt; Number of children ready <span class="hljs-keyword">for</span> accept()<br><span class="hljs-symbol">4099 </span>                 * tcpi_sacked  -&gt; max backlog<br><span class="hljs-symbol">4100 </span>                 */<br><span class="hljs-symbol">4101 </span>                info-&gt;tcpi_unacked = READ_ONCE(sk-&gt;sk_ack_backlog);<br><span class="hljs-symbol">4102 </span>                info-&gt;tcpi_sacked = READ_ONCE(sk-&gt;sk_max_ack_backlog);<br><span class="hljs-symbol">4103 </span>                <span class="hljs-keyword">return</span>;<br><span class="hljs-symbol">4104 </span>        &#125;<br></code></pre></td></tr></table></figure>
+
+<h5 id="ss命令的实现">0.0.1.6.2. ss命令的实现</h5><p>ss命令通过 netlink 消息获取到 tcpinfo 后，会吧数据转换到一个 s 结构体，并打印出来。<br>因此队列长度就被当做<code>unacked</code>字段打印出来。 而listen socket 的队列最大长度，特意过滤没有打印。</p>
+<figure class="highlight abnf"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs abnf"><span class="hljs-number">3072</span>                 s.unacked        <span class="hljs-operator">=</span> info-&gt;tcpi_unacked<span class="hljs-comment">;</span><br>...<br><span class="hljs-number">3076</span>                 s.sacked         <span class="hljs-operator">=</span> info-&gt;tcpi_sacked<span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+<p>备注：ss 代码在<code>https://github.com/shemminger/iproute2.git</code></p>
+<h5 id="我也不知道为啥不打印出来最大长度值">0.0.1.6.3. 我也不知道为啥不打印出来最大长度值</h5><p>这部分功能在 2007 年比较早就进入了内核<code>https://web.git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=5ee3afba88f5a79d0bff07ddd87af45919259f91</code><br>而 ss 命里第一个版本是2013 年加入的时候， 就把 LISTEN socket 作为一个特殊情况处理了。<br><code>https://web.git.kernel.org/pub/scm/network/iproute2/iproute2.git/commit/?id=260804f422fd33aa78379270d564a495b7bb5717</code></p>
+<ul>
+<li>备注：内核代码版本v6.14(v6.14-rc6-22-gb7f94fcf5546)</li>
+</ul>
+<h4 id="如何查看accept队列里半连接的长度？">0.0.1.7. 如何查看accept队列里半连接的长度？</h4><p>我也不没找到命令， 待学习。</p>
+<h4 id="实验记录">0.0.1.8. 实验记录</h4><ul>
+<li>设置tcp_syncookies为 0， 关闭syncookie 机制。关闭后才能够进入tcp_max_syn_backlog的检查逻辑。</li>
+<li>设置tcp_max_syn_backlog 值为 64，</li>
+</ul>
+<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs bash"><span class="hljs-built_in">echo</span> 64 &gt; /proc/sys/net/ipv4/tcp_max_syn_backlog<br><span class="hljs-built_in">echo</span> 0 &gt; /proc/sys/net/ipv4/tcp_syncookies<br></code></pre></td></tr></table></figure>
+
+<h4 id="持续发送syn报文到server端口。">0.0.1.9. 持续发送syn报文到server端口。</h4><p>投过 scapy 构造简单的 syn 报文， 往 server 端发送 syn 报文。</p>
+<ul>
+<li>预期最大半链接数  64*(3&#x2F;4）&#x3D;48,  48+ 1 &#x3D; 49,  对应源代码，见判断 3<br>  <code>+1</code>的原因是代码里判断是<code>&lt;</code>, 而不是<code>&lt;=</code>, 所以要多发一个。</li>
+</ul>
+<p>实际抓包数据显示从第 49 个syn 报文开始， server 不再响应。</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">20</span>:<span class="hljs-number">57</span>:<span class="hljs-number">22</span>.<span class="hljs-number">633658</span> IP <span class="hljs-number">9.9.9.9</span>.<span class="hljs-number">10000</span> &gt; <span class="hljs-number">10.0.111.13</span>.<span class="hljs-number">2005</span>: Flags [S], seq <span class="hljs-number">0</span>, win <span class="hljs-number">8192</span>, length <span class="hljs-number">0</span><br><span class="hljs-number">20</span>:<span class="hljs-number">57</span>:<span class="hljs-number">22</span>.<span class="hljs-number">633693</span> IP <span class="hljs-number">10.0.111.13</span>.<span class="hljs-number">2005</span> &gt; <span class="hljs-number">9.9.9.9</span>.<span class="hljs-number">10000</span>: Flags [S.], seq <span class="hljs-number">4100933444</span>, ack <span class="hljs-number">1</span>, win <span class="hljs-number">59220</span>, options [mss <span class="hljs-number">8460</span>], length <span class="hljs-number">0</span><br><span class="hljs-number">20</span>:<span class="hljs-number">57</span>:<span class="hljs-number">22</span>.<span class="hljs-number">666099</span> IP <span class="hljs-number">9.9.9.9</span>.<span class="hljs-number">10001</span> &gt; <span class="hljs-number">10.0.111.13</span>.<span class="hljs-number">2005</span>: Flags [S], seq <span class="hljs-number">0</span>, win <span class="hljs-number">8192</span>, length <span class="hljs-number">0</span><br><span class="hljs-number">20</span>:<span class="hljs-number">57</span>:<span class="hljs-number">22</span>.<span class="hljs-number">666126</span> IP <span class="hljs-number">10.0.111.13</span>.<span class="hljs-number">2005</span> &gt; <span class="hljs-number">9.9.9.9</span>.<span class="hljs-number">10001</span>: Flags [S.], seq <span class="hljs-number">799721612</span>, ack <span class="hljs-number">1</span>, win <span class="hljs-number">59220</span>, options [mss <span class="hljs-number">8460</span>], length <span class="hljs-number">0</span><br><br>...<br><span class="hljs-number">20</span>:<span class="hljs-number">57</span>:<span class="hljs-number">24</span>.<span class="hljs-number">218159</span> IP <span class="hljs-number">9.9.9.9</span>.<span class="hljs-number">10047</span> &gt; <span class="hljs-number">10.0.111.13</span>.<span class="hljs-number">2005</span>: Flags [S], seq <span class="hljs-number">0</span>, win <span class="hljs-number">8192</span>, length <span class="hljs-number">0</span><br><span class="hljs-number">20</span>:<span class="hljs-number">57</span>:<span class="hljs-number">24</span>.<span class="hljs-number">218178</span> IP <span class="hljs-number">10.0.111.13</span>.<span class="hljs-number">2005</span> &gt; <span class="hljs-number">9.9.9.9</span>.<span class="hljs-number">10047</span>: Flags [S.], seq <span class="hljs-number">4141939655</span>, ack <span class="hljs-number">1</span>, win <span class="hljs-number">59220</span>, options [mss <span class="hljs-number">8460</span>], length <span class="hljs-number">0</span><br><span class="hljs-number">20</span>:<span class="hljs-number">57</span>:<span class="hljs-number">24</span>.<span class="hljs-number">250101</span> IP <span class="hljs-number">9.9.9.9</span>.<span class="hljs-number">10048</span> &gt; <span class="hljs-number">10.0.111.13</span>.<span class="hljs-number">2005</span>: Flags [S], seq <span class="hljs-number">0</span>, win <span class="hljs-number">8192</span>, length <span class="hljs-number">0</span><br><span class="hljs-number">20</span>:<span class="hljs-number">57</span>:<span class="hljs-number">24</span>.<span class="hljs-number">250111</span> IP <span class="hljs-number">10.0.111.13</span>.<span class="hljs-number">2005</span> &gt; <span class="hljs-number">9.9.9.9</span>.<span class="hljs-number">10048</span>: Flags [S.], seq <span class="hljs-number">3904682644</span>, ack <span class="hljs-number">1</span>, win <span class="hljs-number">59220</span>, options [mss <span class="hljs-number">8460</span>], length <span class="hljs-number">0</span>  &lt;===最后一个syn+ack 报文<br><span class="hljs-number">20</span>:<span class="hljs-number">57</span>:<span class="hljs-number">24</span>.<span class="hljs-number">282224</span> IP <span class="hljs-number">9.9.9.9</span>.<span class="hljs-number">10049</span> &gt; <span class="hljs-number">10.0.111.13</span>.<span class="hljs-number">2005</span>: Flags [S], seq <span class="hljs-number">0</span>, win <span class="hljs-number">8192</span>, length <span class="hljs-number">0</span>  &lt;===开始不响应 syn 报文了<br><span class="hljs-number">20</span>:<span class="hljs-number">57</span>:<span class="hljs-number">24</span>.<span class="hljs-number">314192</span> IP <span class="hljs-number">9.9.9.9</span>.<span class="hljs-number">10050</span> &gt; <span class="hljs-number">10.0.111.13</span>.<span class="hljs-number">2005</span>: Flags [S], seq <span class="hljs-number">0</span>, win <span class="hljs-number">8192</span>, length <span class="hljs-number">0</span><br></code></pre></td></tr></table></figure>
+
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/TCP/" class="category-chain-item">TCP</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/IPv4/" class="print-no-link">#IPv4</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>创建req scoket时的三个长度检查</div>
+      <div>https://martinbj2008.github.io/2025/05/05/tcp-req-queue-length-check/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>May 5, 2025</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2025/05/06/how-tcp-server-accept-a-new-connection-request/" title="tcp三次握手 --- 逐渐消失的tcp半链接队列">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">tcp三次握手 --- 逐渐消失的tcp半链接队列</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2025/05/03/netdev-state-flags-part2/" title="网口状态标志位解析part2: 内核如何维护网卡carrier的状态">
+                        <span class="hidden-mobile">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

@@ -1,0 +1,880 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. 问题来源接OP问题报告，监控到部分机器的net rx drop统计值异常，触发报警，需排查具体原因，并确认是否影响业务。 0.2. 问题分析0.2.1. 复现问题跟OP同学确认,通过采集&#x2F;proc&#x2F;net&#x2F;dev下的rx drop。登录到出问题的机器上, 确认内核该统计值确实异常。  异常报文个数不多，大约1s一个左右。 不是所有机器都有异常，有部分机器drop统计为0.  0.2.2.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="net rx drop">
+<meta property="og:url" content="https://martinbj2008.github.io/2020/03/15/2020-03-15-net-rx-drop/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. 问题来源接OP问题报告，监控到部分机器的net rx drop统计值异常，触发报警，需排查具体原因，并确认是否影响业务。 0.2. 问题分析0.2.1. 复现问题跟OP同学确认,通过采集&#x2F;proc&#x2F;net&#x2F;dev下的rx drop。登录到出问题的机器上, 确认内核该统计值确实异常。  异常报文个数不多，大约1s一个左右。 不是所有机器都有异常，有部分机器drop统计为0.  0.2.2.">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2020-03-14T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.752Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IRQ">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>net rx drop - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="net rx drop"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2020-03-15 00:00" pubdate>
+          March 15, 2020 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          9k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          76 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">net rx drop</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="问题来源">0.1. 问题来源</h2><p>接OP问题报告，监控到部分机器的net rx drop统计值异常，触发报警，<br>需排查具体原因，并确认是否影响业务。</p>
+<h2 id="问题分析">0.2. 问题分析</h2><h3 id="复现问题">0.2.1. 复现问题</h3><p>跟OP同学确认,通过采集<code>/proc/net/dev</code>下的rx drop。<br>登录到出问题的机器上, 确认内核该统计值确实异常。</p>
+<ul>
+<li>异常报文个数不多，大约1s一个左右。</li>
+<li>不是所有机器都有异常，有部分机器drop统计为0.</li>
+</ul>
+<h3 id="相关内核代码">0.2.2. 相关内核代码</h3><p>当一个数据报文经过对端设备（交换机或者网卡）传输到本机物理网卡时候，需要经过<br>    <code>网卡-- 网卡驱动-- 网络协议栈</code><br>这几个模块的处理。我们看到的drop统计值在增加，是在网络协议栈的入口处理部分产生异常导致。</p>
+<span id="more"></span>
+
+<h4 id="内核网络协议栈（伪）入口代码：">0.2.2.1. 内核网络协议栈（伪）入口代码：</h4><p>注：本文里使用内核3.10.0-514.16.1代码</p>
+<p><code>net/core/dev.c</code></p>
+<figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br></pre></td><td class="code"><pre><code class="hljs yaml"><span class="hljs-number">3709 </span><span class="hljs-string">static</span> <span class="hljs-string">int</span> <span class="hljs-string">__netif_receive_skb_core(struct</span> <span class="hljs-string">sk_buff</span> <span class="hljs-string">*skb,</span> <span class="hljs-string">bool</span> <span class="hljs-string">pfmemalloc)</span><br><span class="hljs-number">3710</span> &#123;<br><span class="hljs-string">....</span><br><span class="hljs-number">3753</span><br><span class="hljs-number">3754         </span><span class="hljs-string">list_for_each_entry_rcu(ptype</span>, <span class="hljs-string">&amp;ptype_all</span>, <span class="hljs-string">list)</span> &#123;<br><span class="hljs-number">3755                 </span><span class="hljs-string">if</span> <span class="hljs-string">(!ptype-&gt;dev</span> <span class="hljs-string">||</span> <span class="hljs-string">ptype-&gt;dev</span> <span class="hljs-string">==</span> <span class="hljs-string">skb-&gt;dev)</span> &#123;<br><span class="hljs-number">3756                         </span><span class="hljs-string">if</span> <span class="hljs-string">(pt_prev)</span><br><span class="hljs-number">3757                                 </span><span class="hljs-string">ret</span> <span class="hljs-string">=</span> <span class="hljs-string">deliver_skb(skb</span>, <span class="hljs-string">pt_prev</span>, <span class="hljs-string">orig_dev);</span><br><span class="hljs-number">3758                         </span><span class="hljs-string">pt_prev</span> <span class="hljs-string">=</span> <span class="hljs-string">ptype;</span><br><span class="hljs-number">3759</span>                 &#125;<br><span class="hljs-number">3760</span>         &#125;<br><span class="hljs-number">3761</span><br><span class="hljs-string">....</span><br><span class="hljs-number">3814</span><br><span class="hljs-number">3815</span>         <span class="hljs-string">/*</span> <span class="hljs-string">deliver</span> <span class="hljs-string">only</span> <span class="hljs-string">exact</span> <span class="hljs-string">match</span> <span class="hljs-string">when</span> <span class="hljs-string">indicated</span> <span class="hljs-string">*/</span><br><span class="hljs-number">3816         </span><span class="hljs-string">null_or_dev</span> <span class="hljs-string">=</span> <span class="hljs-string">deliver_exact</span> <span class="hljs-string">?</span> <span class="hljs-string">skb-&gt;dev</span> <span class="hljs-string">:</span> <span class="hljs-literal">NULL</span><span class="hljs-string">;</span><br><span class="hljs-number">3817</span><br><span class="hljs-number">3818         </span><span class="hljs-string">type</span> <span class="hljs-string">=</span> <span class="hljs-string">skb-&gt;protocol;</span><br><span class="hljs-number">3819         </span><span class="hljs-string">list_for_each_entry_rcu(ptype</span>,<br><span class="hljs-number">3820</span>                         <span class="hljs-string">&amp;ptype_base</span>[<span class="hljs-string">ntohs(type)</span> <span class="hljs-string">&amp;</span> <span class="hljs-string">PTYPE_HASH_MASK</span>], <span class="hljs-string">list)</span> &#123;<br><span class="hljs-number">3821                 </span><span class="hljs-string">if</span> <span class="hljs-string">(ptype-&gt;type</span> <span class="hljs-string">==</span> <span class="hljs-string">type</span> <span class="hljs-string">&amp;&amp;</span><br><span class="hljs-number">3822</span>                     <span class="hljs-string">(ptype-&gt;dev</span> <span class="hljs-string">==</span> <span class="hljs-string">null_or_dev</span> <span class="hljs-string">||</span> <span class="hljs-string">ptype-&gt;dev</span> <span class="hljs-string">==</span> <span class="hljs-string">skb-&gt;dev</span> <span class="hljs-string">||</span><br><span class="hljs-number">3823                      </span><span class="hljs-string">ptype-&gt;dev</span> <span class="hljs-string">==</span> <span class="hljs-string">orig_dev))</span> &#123;<br><span class="hljs-number">3824                         </span><span class="hljs-string">if</span> <span class="hljs-string">(pt_prev)</span><br><span class="hljs-number">3825                                 </span><span class="hljs-string">ret</span> <span class="hljs-string">=</span> <span class="hljs-string">deliver_skb(skb</span>, <span class="hljs-string">pt_prev</span>, <span class="hljs-string">orig_dev);</span><br><span class="hljs-number">3826                         </span><span class="hljs-string">pt_prev</span> <span class="hljs-string">=</span> <span class="hljs-string">ptype;</span><br><span class="hljs-number">3827</span>                 &#125;<br><span class="hljs-number">3828</span>         &#125;<br><span class="hljs-number">3829</span><br><span class="hljs-number">3830         </span><span class="hljs-string">if</span> <span class="hljs-string">(pt_prev)</span> &#123;<br><span class="hljs-number">3831                 </span><span class="hljs-string">if</span> <span class="hljs-string">(unlikely(skb_orphan_frags(skb</span>, <span class="hljs-string">GFP_ATOMIC)))</span><br><span class="hljs-number">3832                         </span><span class="hljs-string">goto</span> <span class="hljs-string">drop;</span><br><span class="hljs-number">3833                 </span><span class="hljs-string">else</span><br><span class="hljs-number">3834                         </span><span class="hljs-string">ret</span> <span class="hljs-string">=</span> <span class="hljs-string">pt_prev-&gt;func(skb</span>, <span class="hljs-string">skb-&gt;dev</span>, <span class="hljs-string">pt_prev</span>, <span class="hljs-string">orig_dev);</span><br><span class="hljs-number">3835</span>         &#125; <span class="hljs-string">else</span> &#123;<br><span class="hljs-attr">3836 drop:</span><br><span class="hljs-number">3837                 </span><span class="hljs-string">if</span> <span class="hljs-string">(!deliver_exact)</span><br><span class="hljs-number">3838                         </span><span class="hljs-string">atomic_long_inc(&amp;skb-&gt;dev-&gt;rx_dropped);</span><br><span class="hljs-number">3839                 </span><span class="hljs-string">else</span><br><span class="hljs-number">3840                         </span><span class="hljs-string">atomic_long_inc(&amp;skb-&gt;dev-&gt;rx_nohandler);</span><br><span class="hljs-number">3841                 </span><span class="hljs-string">kfree_skb(skb);</span><br><span class="hljs-number">3842</span>                 <span class="hljs-string">/*</span> <span class="hljs-string">Jamal</span>, <span class="hljs-string">now</span> <span class="hljs-string">you</span> <span class="hljs-string">will</span> <span class="hljs-string">not</span> <span class="hljs-string">able</span> <span class="hljs-string">to</span> <span class="hljs-string">escape</span> <span class="hljs-string">explaining</span><br><span class="hljs-number">3843</span>                  <span class="hljs-string">*</span> <span class="hljs-string">me</span> <span class="hljs-string">how</span> <span class="hljs-string">you</span> <span class="hljs-string">were</span> <span class="hljs-string">going</span> <span class="hljs-string">to</span> <span class="hljs-string">use</span> <span class="hljs-string">this.</span> <span class="hljs-string">:-)</span><br><span class="hljs-number">3844</span>                  <span class="hljs-string">*/</span><br><span class="hljs-number">3845                 </span><span class="hljs-string">ret</span> <span class="hljs-string">=</span> <span class="hljs-string">NET_RX_DROP;</span><br><span class="hljs-number">3846</span>         &#125;<br><span class="hljs-number">3847</span><br><span class="hljs-attr">3848 out:</span><br><span class="hljs-number">3849         </span><span class="hljs-string">return</span> <span class="hljs-string">ret;</span><br><span class="hljs-number">3850</span> &#125;<br></code></pre></td></tr></table></figure>
+<p>有同学可能质疑rx_dropped的统计值不止这一处在修改（增加), 内核里确实不止这一处在增加drop。<br>这里使用perf调试命令，可以确认3838行的增加跟总统计值匹配，而不是其他地方导致增加。<br>具体perf命令的使用见下一节。</p>
+<h3 id="IPv6报文定位">0.2.3. IPv6报文定位</h3><p>在使用perf命令查看统计值增长点的时候，我们搂草打兔子，捎带把skb的protocol给打印出来了。<br>截止到目前可以认为protocol的值就是我们收的网络报文的ethernet头里的protocol字段。</p>
+<figure class="highlight livescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><code class="hljs livescript">[root@testtest ~]<span class="hljs-comment"># perf probe -a &quot;__netif_receive_skb_core:129 skb-&gt;protocol&quot;</span><br>Added <span class="hljs-keyword">new</span> events:<br>  probe:__netif_receive_skb_core (<span class="hljs-literal">on</span> __netif_receive_skb_core:<span class="hljs-number">129</span> <span class="hljs-keyword">with</span> protocol=skb-&gt;protocol)<br>  probe:__netif_receive_skb_core_1 (<span class="hljs-literal">on</span> __netif_receive_skb_core:<span class="hljs-number">129</span> <span class="hljs-keyword">with</span> protocol=skb-&gt;protocol)<br><br>You can now use <span class="hljs-literal">it</span> <span class="hljs-keyword">in</span> all perf tools, such as:<br><br>	perf record -e probe:__netif_receive_skb_core_1 -aR sleep <span class="hljs-number">1</span><br><br>[root@testtest ~]<span class="hljs-comment"># perf record -e probe:__netif_receive_skb_core_1 -aR sleep 5</span><br>[ perf record: Woken up <span class="hljs-number">1</span> times <span class="hljs-keyword">to</span> write data ]<br>[ perf record: Captured <span class="hljs-keyword">and</span> wrote <span class="hljs-number">0.209</span> MB perf.data (<span class="hljs-number">5</span> samples) ]<br>[root@testtest ~]<span class="hljs-comment">#</span><br>[root@testtest ~]<span class="hljs-comment">#</span><br>[root@testtest ~]<span class="hljs-comment"># perf script</span><br>         swapper     <span class="hljs-number">0</span> [<span class="hljs-number">003</span>] <span class="hljs-number">596928.567038</span>: probe:__netif_receive_skb_core_1: (ffffffff8152afb6) protocol=dd86<br>         swapper     <span class="hljs-number">0</span> [<span class="hljs-number">011</span>] <span class="hljs-number">596929.277293</span>: probe:__netif_receive_skb_core_1: (ffffffff8152afb6) protocol=<span class="hljs-number">400</span><br>         swapper     <span class="hljs-number">0</span> [<span class="hljs-number">001</span>] <span class="hljs-number">596929.431077</span>: probe:__netif_receive_skb_core_1: (ffffffff8152afb6) protocol=dd86<br>         swapper     <span class="hljs-number">0</span> [<span class="hljs-number">008</span>] <span class="hljs-number">596930.073356</span>: probe:__netif_receive_skb_core_1: (ffffffff8152afb6) protocol=dd86<br>         swapper     <span class="hljs-number">0</span> [<span class="hljs-number">011</span>] <span class="hljs-number">596931.278891</span>: probe:__netif_receive_skb_core_1: (ffffffff8152afb6) protocol=<span class="hljs-number">400</span><br>[root@testtest ~]<span class="hljs-comment">#</span><br></code></pre></td></tr></table></figure>
+
+<p>看到<code>protocol=dd86</code>，drop增加的触发原因就找到了（一个）。</p>
+<p>因为我们公司是把内核的IPv6功能禁止的，网络协议栈收到IPv6报文的时候是不做任何处理并丢弃的。</p>
+<figure class="highlight routeros"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs routeros">[root@testtest ~]# cat /proc/cmdline<br><span class="hljs-attribute">BOOT_IMAGE</span>=/vmlinuz-3.10.0-327.36.3.el7.x86_64 <span class="hljs-attribute">root</span>=UUID=7918e921-db4e-4652-9938-a38607100a96 ro <span class="hljs-attribute">crashkernel</span>=128M <span class="hljs-attribute">selinux</span>=0 ipv6.<span class="hljs-attribute">disable</span>=1<br></code></pre></td></tr></table></figure>
+
+<p>为了进一步验证分析结果，上一个tcpdump的结果</p>
+<figure class="highlight smali"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><code class="hljs smali">[root@testtest ~]<span class="hljs-comment"># tcpdump -i eth0 ip6 -c 10</span><br>tcpdump: verbose output suppressed, use -v<span class="hljs-built_in"> or </span>-vv for full protocol decode<br>listening on eth0, link-type EN10MB (Ethernet), capture size 65535 bytes<br>14:15:40.663327 IP6 fe80::6e0b:84ff:fe81:b4d3.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit<br>14:15:45.334814 IP6 fe80::6e0b:84ff:fed6:c323.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit<br>14:15:45.403538 IP6 fe80::6e0b:84ff:febd:aef8.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit<br>14:15:52.542434 IP6 fe80::6e0b:84ff:fe81:b935.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit<br>14:16:00.186710 IP6 fe80::6e0b:84ff:febd:b27c.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit<br>14:16:06.397437 IP6 fe80::6e0b:84ff:fe81:ba03.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit<br>14:16:07.834059 IP6 fe80::6e0b:84ff:febd:b602.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit<br>14:16:22.138601 IP6 fe80::6e92:bfff:fe2e:616f.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit<br>14:16:31.827770 IP6 fe80::6e0b:84ff:fed6:c053.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit<br>14:16:31.882039 IP6 fe80::6e0b:84ff:febd:b798.dhcpv6-client &gt; ff02::1:2.dhcpv6-server: dhcp6 solicit<br>10 packets captured<br>10 packets received by filter<br>0 packets dropped by kernel<br>[root@testtest ~]<span class="hljs-comment">#</span><br></code></pre></td></tr></table></figure>
+
+<p>注：</p>
+<ol>
+<li>这里的截屏是写文章时候去线上测试机抓取的，部分机器上的IPv6问题被修复过一部分。<br>所以，我们看到的IPv6报文个数比当初分析问题的时候，相对要偏少。</li>
+</ol>
+<p>IPv6报文的来源：服务器同学定位是浪潮服务器的网卡主动发出的。</p>
+<h3 id="STP报文定位">0.2.4. STP报文定位</h3><h4 id="异常报文统计有出入">0.2.4.1. 异常报文统计有出入</h4><p>在使用perf工具定位IPv6报文后，人肉查看，发现IPv6的个数大约占drop统计值的60%左右，<br>也就是说，还有其他类型的报文导致drop统计值在增加。<br>在硬件厂商修复网卡问题后，观察到大幅降低了drop的增长速度，但没有彻底消除drop的异常统计增长。</p>
+<p>正如perf结果显示还有部分<code>protocol=400</code>的报文，这是些啥报文？</p>
+<p>我们搜集到了如下一些信息：  </p>
+<ul>
+<li>tcpdump全量抓包，也没有看到<code>400</code>的报文。</li>
+<li>查询RFC相关定义，可以发现他们是<code>802.2 LLC</code></li>
+<li>在内核代码里，被网桥的llc模块处理的。</li>
+</ul>
+<h5 id="内核代码">0.2.4.1.1. 内核代码</h5><p><code>net/llc/llc_core.c</code></p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">110 </span>#define ETH_P_802_2     <span class="hljs-number">0</span>x0004          /* <span class="hljs-number">802.2</span> frames                 */<br><br><span class="hljs-symbol">135 </span>static struct packet_type llc_packet_type __read_mostly = &#123;<br><span class="hljs-symbol">136 </span>        .type = cpu_to_be16(ETH_P_802_2),<br><span class="hljs-symbol">137 </span>        .func = llc_rcv,<br><span class="hljs-symbol">138 </span>&#125;;<br></code></pre></td></tr></table></figure>
+
+<p>做一个试验：<br>    手动加载llc模块，加载后drop统计值不再增张了。<br>这个实验侧面验证了，有部分网桥相关的报文被传递到内核网络协议栈了。</p>
+<h5 id="802-2-LLC">0.2.4.1.2. 802.2 LLC</h5><p>LLC对应了一大家族的链路协议类型，我们需要定位具体是哪一种类型的报文引起的。<br>这就需要把<code>protocol=400</code>的报文被统计异常的时候，把它当时对应的ethernet头信息打印出来。<br>针对这样的需求，下一节的centos7上的<code>核弹</code>（热补丁）派上用场了。</p>
+<p>注：<br>    LLC对应一大坨的链路层协议，网卡驱动（以ixgbe为例）会借助<code>eth_type_trans</code>函数，<br>    把这些ethernet 协议汇总为<code>802.2 LLC</code>，并存放在<code>skb-&gt;protocol</code>里的。</p>
+<p><code>drivers/net/ethernet/intel/ixgbe/ixgbe_main.c</code></p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1665 </span>static void ixgbe_process_skb_fields(struct ixgbe_ring *rx_ring,<br><span class="hljs-symbol">1666 </span>                                     union ixgbe_adv_rx_desc *rx_desc,<br><span class="hljs-symbol">1667 </span>                                     struct sk_buff *skb)<br><span class="hljs-symbol">1668 </span>&#123;<br><span class="hljs-symbol">1669 </span>        struct net_device *dev = rx_ring-&gt;netdev;<br><span class="hljs-symbol">1670 </span>        u32 flags = rx_ring-&gt;q_vector-&gt;adapter-&gt;flags;<br><span class="hljs-number">1671</span><br><span class="hljs-symbol">1672 </span>        ixgbe_update_rsc_stats(rx_ring, skb);<br><span class="hljs-number">1673</span><br><span class="hljs-symbol">1674 </span>        ixgbe_rx_hash(rx_ring, rx_desc, skb);<br><span class="hljs-number">1675</span><br><span class="hljs-symbol">1676 </span>        ixgbe_rx_checksum(rx_ring, rx_desc, skb);<br><span class="hljs-number">1677</span><br><span class="hljs-symbol">1678 </span>        <span class="hljs-keyword">if</span> (unlikely(flags &amp; IXGBE_FLAG_RX_HWTSTAMP_ENABLED))<br><span class="hljs-symbol">1679 </span>                ixgbe_ptp_rx_hwtstamp(rx_ring, rx_desc, skb);<br><span class="hljs-number">1680</span><br><span class="hljs-symbol">1681 </span>        <span class="hljs-keyword">if</span> ((dev-&gt;features &amp; NETIF_F_HW_VLAN_CTAG_RX) &amp;&amp;<br><span class="hljs-symbol">1682 </span>            ixgbe_test_staterr(rx_desc, IXGBE_RXD_STAT_VP)) &#123;<br><span class="hljs-symbol">1683 </span>                u16 vid = le16_to_cpu(rx_desc-&gt;wb.upper.vlan);<br><span class="hljs-symbol">1684 </span>                __vlan_hwaccel_put_tag(skb, htons(ETH_P_8021Q), vid);<br><span class="hljs-symbol">1685 </span>        &#125;<br><span class="hljs-number">1686</span><br><span class="hljs-symbol">1687 </span>        skb_record_rx_queue(skb, rx_ring-&gt;queue_index);<br><span class="hljs-number">1688</span><br><span class="hljs-symbol">1689 </span>        skb-&gt;protocol = eth_type_trans(skb, dev);<br><span class="hljs-symbol">1690 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<p><code>net/ethernet/eth.c</code></p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">188</span> __be16 eth_type_trans<span class="hljs-punctuation">(</span>struct sk_buff *skb, struct net_device *dev<span class="hljs-punctuation">)</span><br><span class="hljs-number">189</span> &#123;<br>...<br><span class="hljs-number">230</span>         if <span class="hljs-punctuation">(</span>likely<span class="hljs-punctuation">(</span>eth_proto_is_802_3<span class="hljs-punctuation">(</span>eth-&gt;h_proto<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><br><span class="hljs-number">231</span>                 return eth-&gt;h_proto<span class="hljs-comment">;</span><br>...<br><span class="hljs-number">242</span>         /*<br><span class="hljs-number">243</span>          *      Real <span class="hljs-number">802</span>.<span class="hljs-number">2</span> LLC<br><span class="hljs-number">244</span>          */<br><span class="hljs-number">245</span>         return htons<span class="hljs-punctuation">(</span>ETH_P_802_2<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">246</span> &#125;<br><span class="hljs-number">247</span> EXPORT_SYMBOL<span class="hljs-punctuation">(</span>eth_type_trans<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+
+<h4 id="centos7上的核弹-内核热升级工具">0.2.4.2. centos7上的核弹 内核热升级工具</h4><p>centos7（3.10内核）开始，内核组已经部署了一个叫<code>centos-kpatch-modules</code>的rpm包，<br>它可以做到业务不感知的情况下，加载调试模块，调试完就可卸载。</p>
+<p>刚好出问题的机器内核版本是<code>3.10.0-514.16.1.el7.x86_64</code>，<br>于是编写了一个调试模块(后续会集成到<code>centos-kpatch-modules</code>)，其功能是：<br>    当drop掉异常报文的时候，把报文的内容（ethernet头）打印出来。</p>
+<p>通过kpatch命令加载调试模块，就能把被drop的报文头信息打印出来，</p>
+<figure class="highlight llvm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs llvm">[root<span class="hljs-title">@testtest</span> xfile]# uname -a<br>Linux testtest <span class="hljs-number">3.10</span>.<span class="hljs-number">0</span><span class="hljs-number">-327.36</span>.<span class="hljs-number">3</span>.el<span class="hljs-number">7</span>.<span class="hljs-keyword">x</span><span class="hljs-number">86</span>_<span class="hljs-number">64</span> <span class="hljs-variable">#1</span> SMP Mon Oct <span class="hljs-number">24</span> <span class="hljs-number">16</span>:<span class="hljs-number">09</span>:<span class="hljs-number">20</span> UTC <span class="hljs-number">2016</span> <span class="hljs-keyword">x</span><span class="hljs-number">86</span>_<span class="hljs-number">64</span> <span class="hljs-keyword">x</span><span class="hljs-number">86</span>_<span class="hljs-number">64</span> <span class="hljs-keyword">x</span><span class="hljs-number">86</span>_<span class="hljs-number">64</span> GNU/Linux<br>[root<span class="hljs-title">@testtest</span> xfile]# rpm -q centos-kpatch-modules<br>centos-kpatch-modules<span class="hljs-number">-1.6</span><span class="hljs-number">-1</span>.<span class="hljs-keyword">x</span><span class="hljs-number">86</span>_<span class="hljs-number">64</span><br>[root<span class="hljs-title">@testtest</span> xfile]# kpatch  <span class="hljs-keyword">load</span> /root/martin/xfile/net_rx_drop/<span class="hljs-number">327</span>/kpatch-dev.ko<br>loading patch <span class="hljs-keyword">module</span>: /root/martin/xfile/net_rx_drop/<span class="hljs-number">327</span>/kpatch-dev.ko<br>[root<span class="hljs-title">@testtest</span> xfile]# dmesg<br>[<span class="hljs-number">606774.224447</span>] kpatch: loaded patch <span class="hljs-keyword">module</span> &#x27;kpatch_dev&#x27;<br>[<span class="hljs-number">606775.135343</span>] __netif_receive_skb_core: skb len:<span class="hljs-number">105</span> protocol:<span class="hljs-number">0004</span><br>[<span class="hljs-number">606775.135348</span>] skb_mac_head:ffff<span class="hljs-number">88003625</span><span class="hljs-keyword">c</span><span class="hljs-number">440</span> skb data:ffff<span class="hljs-number">88003625</span><span class="hljs-keyword">c</span><span class="hljs-number">44</span>e<span class="hljs-punctuation">,</span> mac hdr offset:<span class="hljs-number">14</span><br>[<span class="hljs-number">606775.135350</span>] mac hdr dest:<span class="hljs-number">01</span>:<span class="hljs-number">80</span>:<span class="hljs-keyword">c</span><span class="hljs-number">2</span>:<span class="hljs-number">00</span>:<span class="hljs-number">00</span>:<span class="hljs-number">00</span> &lt;<span class="hljs-operator">=</span><span class="hljs-operator">=</span><span class="hljs-operator">=</span> <span class="hljs-number">50</span>:da:<span class="hljs-number">00</span>:ef:<span class="hljs-number">54</span>:<span class="hljs-number">0</span>a proto: <span class="hljs-number">0069</span><br>[<span class="hljs-number">606775.337246</span>] __netif_receive_skb_core: skb len:<span class="hljs-number">96</span> protocol:<span class="hljs-number">86</span>dd<br>[<span class="hljs-number">606775.337252</span>] skb_mac_head:ffff<span class="hljs-number">880850046</span><span class="hljs-keyword">c</span><span class="hljs-number">40</span> skb data:ffff<span class="hljs-number">880850046</span><span class="hljs-keyword">c</span><span class="hljs-number">4</span>e<span class="hljs-punctuation">,</span> mac hdr offset:<span class="hljs-number">14</span><br>[<span class="hljs-number">606775.337255</span>] mac hdr dest:<span class="hljs-number">33</span>:<span class="hljs-number">33</span>:<span class="hljs-number">00</span>:<span class="hljs-number">01</span>:<span class="hljs-number">00</span>:<span class="hljs-number">02</span> &lt;<span class="hljs-operator">=</span><span class="hljs-operator">=</span><span class="hljs-operator">=</span> <span class="hljs-number">6</span><span class="hljs-keyword">c</span>:<span class="hljs-number">0</span>b:<span class="hljs-number">84</span>:<span class="hljs-number">81</span>:ba:<span class="hljs-number">03</span> proto: <span class="hljs-number">86</span>dd<br>[root<span class="hljs-title">@testtest</span> xfile]#<br></code></pre></td></tr></table></figure>
+
+<p>通过日志我们看到被drop的报文ethernet头里protocol字段是<code>0069</code>, 其转化后存在skb里的protocol字段是<code>0004</code>。</p>
+<p>tcpdump命令也显示有报文进入(此处说法不严谨，后续会被打脸)。</p>
+<figure class="highlight dart"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs dart">[root<span class="hljs-meta">@localhost</span> ~]# tcpdump -i em1 not ip -c <span class="hljs-number">8</span><br>tcpdump: verbose output suppressed, use -v or -vv <span class="hljs-keyword">for</span> full protocol decode<br>listening <span class="hljs-keyword">on</span> em1, link-type <span class="hljs-title class_">EN10MB</span> (<span class="hljs-title class_">Ethernet</span>), capture size <span class="hljs-number">65535</span> bytes<br><span class="hljs-number">04</span>:<span class="hljs-number">55</span>:<span class="hljs-number">07.868905</span> <span class="hljs-title class_">IP6</span> fe80::303b:6dff:fe6a:20c4 &gt; ff02::<span class="hljs-number">16</span>: HBH <span class="hljs-title class_">ICMP6</span>, multicast listener report v2, <span class="hljs-number">1</span> group <span class="hljs-title function_">record</span>(s), length <span class="hljs-number">28</span><br><span class="hljs-number">04</span>:<span class="hljs-number">55</span>:<span class="hljs-number">08.183959</span> STP <span class="hljs-number">802</span>.1d, <span class="hljs-title class_">Config</span>, <span class="hljs-title class_">Flags</span> [none], bridge-id 812c.<span class="hljs-number">38</span>:1c:1a:7a:c1:<span class="hljs-number">80.8036</span>, length <span class="hljs-number">42</span><br><span class="hljs-number">04</span>:<span class="hljs-number">55</span>:<span class="hljs-number">08.738143</span> STP <span class="hljs-number">802</span>.1s, <span class="hljs-title class_">Rapid</span> STP, CIST <span class="hljs-title class_">Flags</span> [<span class="hljs-title class_">Learn</span>, <span class="hljs-title class_">Forward</span>, <span class="hljs-title class_">Agreement</span>], length <span class="hljs-number">102</span><br><span class="hljs-number">04</span>:<span class="hljs-number">55</span>:<span class="hljs-number">08.790157</span> <span class="hljs-title class_">IP6</span> fe80::5c11:3ff:fe55:<span class="hljs-number">9037</span> &gt; ff02::<span class="hljs-number">2</span>: <span class="hljs-title class_">ICMP6</span>, router solicitation, length <span class="hljs-number">8</span><br><span class="hljs-number">04</span>:<span class="hljs-number">55</span>:<span class="hljs-number">08.914911</span> <span class="hljs-title class_">IP6</span> :: &gt; ff02::<span class="hljs-number">16</span>: HBH <span class="hljs-title class_">ICMP6</span>, multicast listener report v2, <span class="hljs-number">1</span> group <span class="hljs-title function_">record</span>(s), length <span class="hljs-number">28</span><br><span class="hljs-number">04</span>:<span class="hljs-number">55</span>:<span class="hljs-number">09.033921</span> <span class="hljs-title class_">IP6</span> :: &gt; ff02::<span class="hljs-number">16</span>: HBH <span class="hljs-title class_">ICMP6</span>, multicast listener report v2, <span class="hljs-number">1</span> group <span class="hljs-title function_">record</span>(s), length <span class="hljs-number">28</span><br><span class="hljs-number">04</span>:<span class="hljs-number">55</span>:<span class="hljs-number">09.185917</span> <span class="hljs-title class_">IP6</span> :: &gt; ff02::<span class="hljs-number">1</span>:ffab:f174: <span class="hljs-title class_">ICMP6</span>, neighbor solicitation, who has fe80::18cc:d5ff:feab:f174, length <span class="hljs-number">24</span><br><span class="hljs-number">04</span>:<span class="hljs-number">55</span>:<span class="hljs-number">09.773337</span> <span class="hljs-title class_">IP6</span> fe80::e818:a4ff:fe30:c522 &gt; ff02::<span class="hljs-number">2</span>: <span class="hljs-title class_">ICMP6</span>, router solicitation, length <span class="hljs-number">8</span><br><span class="hljs-number">8</span> packets captured<br><span class="hljs-number">14</span> packets received by filter<br><span class="hljs-number">0</span> packets dropped by kernel<br>[root<span class="hljs-meta">@localhost</span> ~]#<br></code></pre></td></tr></table></figure>
+<p>至此，我们锁定STP报文是drop统计增加的另一个来源。</p>
+<p>综合多台机器测试结果，被丢弃的报文有三类</p>
+<ul>
+<li>IPv6</li>
+<li>STP</li>
+<li>LLDP</li>
+</ul>
+<p>至此问题上半部分析清楚。</p>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/IRQ/" class="category-chain-item">IRQ</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/IRQ/" class="print-no-link">#IRQ</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>net rx drop</div>
+      <div>https://martinbj2008.github.io/2020/03/15/2020-03-15-net-rx-drop/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>March 15, 2020</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2020/03/15/2020-03-15-net-rx-drop-1/" title="net rx drop(续)">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">net rx drop(续)</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2019/11/11/flush-all-ipv6-address-when-interface-down/" title="How IPv6 addresses are flushed on link down">
+                        <span class="hidden-mobile">How IPv6 addresses are flushed on link down</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

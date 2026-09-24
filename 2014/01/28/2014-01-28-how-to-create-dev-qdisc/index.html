@@ -1,0 +1,870 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. Summary0.1.1. Part 1: Register multi queue net device.In this part, only the framework is prepared for qdisc,and the noop_qdisc is set as default. 0.1.1.1. prepare netdev_queues.for example: inte">
+<meta property="og:type" content="article">
+<meta property="og:title" content="how to create dev qdisc">
+<meta property="og:url" content="https://martinbj2008.github.io/2014/01/28/2014-01-28-how-to-create-dev-qdisc/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. Summary0.1.1. Part 1: Register multi queue net device.In this part, only the framework is prepared for qdisc,and the noop_qdisc is set as default. 0.1.1.1. prepare netdev_queues.for example: inte">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://www.lucidchart.com/publicSegments/view/52f496a8-5c18-4c12-9d2e-62830a0093bd/image.png">
+<meta property="article:published_time" content="2014-01-28T05:47:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.750Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IPv4">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://www.lucidchart.com/publicSegments/view/52f496a8-5c18-4c12-9d2e-62830a0093bd/image.png">
+  
+  
+  
+  <title>how to create dev qdisc - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="how to create dev qdisc"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2014-01-28 13:47" pubdate>
+          January 28, 2014 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          12k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          103 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">how to create dev qdisc</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="Summary">0.1. Summary</h2><h3 id="Part-1-Register-multi-queue-net-device">0.1.1. Part 1: Register multi queue net device.</h3><p>In this part, only the framework is prepared for qdisc,<br>and the <code>noop_qdisc</code> is set as default.</p>
+<h4 id="prepare-netdev-queues">0.1.1.1. prepare netdev_queues.</h4><p>for example: intel igb hardware has 8 hardware tx queue,<br>and nic driver create 8 corresponding <code>struct netdev_queue</code><br>in the <code>_tx</code> of <code>struct net_device</code>.</p>
+<h4 id="prepare-mq-qdisc">0.1.1.2. prepare mq_qdisc</h4><p>The <code>mq_qdisc</code> is attached to the corresponding device.<br>In <code>mq_qdisc</code> private field, a default qdisc will be<br>create for <strong>each</strong> NIC’s hardware queue.<br>This is done in <code>mq_init</code>.<br>The default qdisc is <code>pfifo_fast_ops</code>.</p>
+<h4 id="attach-mq-qdisc-to-netdev-queue">0.1.1.3. attach mq_qdisc to netdev_queue.</h4><p>In <code>mq_attach</code>, these qdiscs are attatched to corresponding<br><code>struct netdev_queue</code>.</p>
+<h3 id="Part-2-Active-a-net-device-with-right-qdiscs">0.1.2. Part 2: Active a net device with right qdiscs</h3><p>Here only trace with the case <code>mq_qdisc</code>.<br>When dev is up, <code>dev_open</code> is called, which will call <code>dev_activate</code>.</p>
+<span id="more"></span>
+<h4 id="2-1">0.1.2.1. 2.1</h4><p>A qdisc with <code>mq_qdisc_ops</code> is alloced and assigned to <code>dev-&gt;qdisc</code>,<br>The <code>mq qdisc</code> is not a simple qdisc, which includes sub-qdisc in its<br>private fields. Each sub-qdisc is a default qdisc(pfif0).</p>
+<!-- ![mq qdisc](/images/mq/mq.blankflowchar.jpeg) -->
+<p><img src="https://www.lucidchart.com/publicSegments/view/52f496a8-5c18-4c12-9d2e-62830a0093bd/image.png" srcset="/img/loading.gif" lazyload alt="mq qdisc"></p>
+<h4 id="2-2">0.1.2.2. 2.2</h4><p>when <code>attach</code> a qdisc to a device by <code>qdisc-&gt;attach</code>(which equal <code>mq_attach</code>),<br>in <code>mq_attach</code>, each qdisc alloc in 2.1, will be assigned to a<br>netdevice queue(which is alloced in part1).</p>
+<p>by now, each netdevice queue has a qdisc, but the qdisc is assigned to<br><code>qdisc_sleeping</code> of <code>netdev_queue</code>.</p>
+<p>at last, <code>dev_activate</code> call <code>transition_one_qdisc</code> for each tx queue,<br>to set <code>netdev_queue-&gt;qdisc</code> with <code>netdev_queue-&gt;qdisc_sleeping</code>.</p>
+<p><code>attach_default_qdiscs</code> will be called twice time,<br>one is called to create with <code>mq_qdisc_ops</code>,<br>one is called to create with <code>default_qdisc_ops</code>,</p>
+<h4 id="Data-Structure">0.1.2.3. Data Structure</h4><h5 id="struct-net-device-and-netdev-queue">0.1.2.3.1. struct net_device and netdev_queue</h5><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net_device</span> &#123;</span><br>...<br><span class="hljs-number">1350</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">netdev_queue</span>     *_<span class="hljs-title">tx</span> ____<span class="hljs-title">cacheline_aligned_in_smp</span>;</span><br><span class="hljs-number">1351</span><br><span class="hljs-number">1352</span>         <span class="hljs-comment">/* Number of TX queues allocated at alloc_netdev_mq() time  */</span><br><span class="hljs-number">1353</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span>            num_tx_queues;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">544</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">netdev_queue</span> &#123;</span><br> ...<br> <span class="hljs-number">548</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net_device</span>       *<span class="hljs-title">dev</span>;</span><br> <span class="hljs-number">549</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc</span>            *<span class="hljs-title">qdisc</span>;</span><br> <span class="hljs-number">550</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc</span>            *<span class="hljs-title">qdisc_sleeping</span>;</span><br>...<br> <span class="hljs-number">560</span>         <span class="hljs-type">spinlock_t</span>              _xmit_lock ____cacheline_aligned_in_smp;<br>...<br> <span class="hljs-number">573</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span>           state;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">21</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">mq_sched</span> &#123;</span><br><span class="hljs-number">22</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc</span>            **<span class="hljs-title">qdiscs</span>;</span><br><span class="hljs-number">23</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h4 id="Call-trace">0.1.2.4. Call trace.</h4><h5 id="Part-1">0.1.2.4.1. Part 1</h5><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs c">&gt; igb_probe<br>&gt; &gt; alloc_etherdev_mq<br>&gt; &gt; &gt; alloc_etherdev_mqs<br>&gt; &gt; &gt; &gt; alloc_netdev_mqs<br>&gt; &gt; &gt; &gt; &gt; ether_setup<br>&gt; &gt; &gt; &gt; &gt; netif_alloc_netdev_queues<br>&gt; &gt; &gt; &gt; &gt; &gt; netdev_for_each_tx_queue(dev, netdev_init_one_queue, <span class="hljs-literal">NULL</span>);<br>&gt; &gt; &gt; &gt; &gt; &gt; &gt; netdev_init_one_queue<br>&gt; &gt; register_netdev<br>&gt; &gt; &gt; register_netdevice<br>&gt; &gt; &gt; &gt; dev_init_scheduler<br>&gt; &gt; &gt; &gt; &gt; netdev_for_each_tx_queue(dev, dev_init_scheduler_queue, &amp;noop_qdisc);<br>&gt; &gt; &gt; &gt; &gt; &gt; dev_init_scheduler_queue<br></code></pre></td></tr></table></figure>
+
+<p>NOTE:<br>if disable RPS(google patch), there is no soft queue to receive packet.<br>because there is <code>igb_ring</code> in the driver.</p>
+<h6 id="Part-2">0.1.2.4.1.1. Part 2</h6><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs c">&gt; dev_open<br>&gt; &gt; __dev_open<br>&gt; &gt; &gt; dev_activate<br>&gt; &gt; &gt; &gt; attach_default_qdiscs(dev);<br>&gt; &gt; &gt; &gt; &gt; qdisc_create_dflt(txq, &amp;mq_qdisc_ops, TC_H_ROOT);<br>&gt; &gt; &gt; &gt; &gt; &gt; qdisc_alloc<br>&gt; &gt; &gt; &gt; &gt; &gt; ops-&gt;init(equal: mq_init)<br>&gt; &gt; &gt; &gt; &gt; &gt; &gt; <span class="hljs-keyword">for</span> (ntx = <span class="hljs-number">0</span>; ntx &lt; dev-&gt;num_tx_queues; ntx++) &#123;<br>&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; qdisc_create_dflt(dev_queue, default_qdisc_ops ...<br>&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; qdisc_alloc<br>&gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; &gt; ops-&gt;init<br>&gt; &gt; &gt; &gt; &gt; qdisc-&gt;ops-&gt;attach<br>&gt; &gt; &gt; &gt; &gt; dev_graft_qdisc<br>&gt; &gt; &gt; &gt; netdev_for_each_tx_queue(dev, transition_one_qdisc, &amp;need_watchdog); <br>&gt; &gt; &gt; &gt; &gt; transition_one_qdisc<br></code></pre></td></tr></table></figure>
+
+<h3 id="Functions-in-Part-1">0.1.3. Functions in Part 1.</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2016</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">igb_probe</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> pci_dev *pdev, <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> pci_device_id *ent)</span><br>2017 &#123;<br>...<br><span class="hljs-number">2067</span>         netdev = alloc_etherdev_mq(<span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> igb_adapter),<br><span class="hljs-number">2068</span>                                    IGB_MAX_TX_QUEUES);<br><span class="hljs-number">2069</span>         <span class="hljs-keyword">if</span> (!netdev)<br><span class="hljs-number">2070</span>                 <span class="hljs-keyword">goto</span> err_alloc_etherdev;<br>...<br><span class="hljs-number">2317</span>         <span class="hljs-built_in">strcpy</span>(netdev-&gt;name, <span class="hljs-string">&quot;eth%d&quot;</span>);<br><span class="hljs-number">2318</span>         err = register_netdev(netdev);<br><span class="hljs-number">2319</span>         <span class="hljs-keyword">if</span> (err)<br><span class="hljs-number">2320</span>                 <span class="hljs-keyword">goto</span> err_register;<br>...<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">51</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> alloc_etherdev_mq(sizeof_priv, count) alloc_etherdev_mqs(sizeof_priv, count, count)</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">372</span> <span class="hljs-comment">/**</span><br><span class="hljs-comment">373  * alloc_etherdev_mqs - Allocates and sets up an Ethernet device</span><br><span class="hljs-comment">374  * @sizeof_priv: Size of additional driver-private structure to be allocated</span><br><span class="hljs-comment">375  *      for this Ethernet device</span><br><span class="hljs-comment">376  * @txqs: The number of TX queues this device has.</span><br><span class="hljs-comment">377  * @rxqs: The number of RX queues this device has.</span><br><span class="hljs-comment">378  *</span><br><span class="hljs-comment">379  * Fill in the fields of the device structure with Ethernet-generic</span><br><span class="hljs-comment">380  * values. Basically does everything except registering the device.</span><br><span class="hljs-comment">381  *</span><br><span class="hljs-comment">382  * Constructs a new net device, complete with a private data area of</span><br><span class="hljs-comment">383  * size (sizeof_priv).  A 32-byte (not bit) alignment is enforced for</span><br><span class="hljs-comment">384  * this private data area.</span><br><span class="hljs-comment">385  */</span><br><span class="hljs-number">386</span><br><span class="hljs-number">387</span> <span class="hljs-keyword">struct</span> net_device *<span class="hljs-title function_">alloc_etherdev_mqs</span><span class="hljs-params">(<span class="hljs-type">int</span> sizeof_priv, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> txqs,</span><br><span class="hljs-params"><span class="hljs-number">388</span>                                       <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> rxqs)</span><br>389 &#123;<br><span class="hljs-number">390</span>         <span class="hljs-keyword">return</span> alloc_netdev_mqs(sizeof_priv, <span class="hljs-string">&quot;eth%d&quot;</span>, ether_setup, txqs, rxqs);<br><span class="hljs-number">391</span> &#125;<br><span class="hljs-number">392</span> EXPORT_SYMBOL(alloc_etherdev_mqs);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">6223</span> <span class="hljs-comment">/**</span><br><span class="hljs-comment">6224  *      alloc_netdev_mqs - allocate network device</span><br><span class="hljs-comment">6225  *      @sizeof_priv:   size of private data to allocate space for</span><br><span class="hljs-comment">6226  *      @name:          device name format string</span><br><span class="hljs-comment">6227  *      @setup:         callback to initialize device</span><br><span class="hljs-comment">6228  *      @txqs:          the number of TX subqueues to allocate</span><br><span class="hljs-comment">6229  *      @rxqs:          the number of RX subqueues to allocate</span><br><span class="hljs-comment">6230  *</span><br><span class="hljs-comment">6231  *      Allocates a struct net_device with private data area for driver use</span><br><span class="hljs-comment">6232  *      and performs basic initialization.  Also allocates subquue structs</span><br><span class="hljs-comment">6233  *      for each queue on the device.</span><br><span class="hljs-comment">6234  */</span><br><span class="hljs-number">6235</span> <span class="hljs-keyword">struct</span> net_device *<span class="hljs-title function_">alloc_netdev_mqs</span><span class="hljs-params">(<span class="hljs-type">int</span> sizeof_priv, <span class="hljs-type">const</span> <span class="hljs-type">char</span> *name,</span><br><span class="hljs-params"><span class="hljs-number">6236</span>                 <span class="hljs-type">void</span> (*setup)(<span class="hljs-keyword">struct</span> net_device *),</span><br><span class="hljs-params"><span class="hljs-number">6237</span>                 <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> txqs, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> rxqs)</span><br>6238 &#123;<br><span class="hljs-number">6239</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net_device</span> *<span class="hljs-title">dev</span>;</span><br><span class="hljs-number">6240</span>         <span class="hljs-type">size_t</span> alloc_size;<br><span class="hljs-number">6241</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net_device</span> *<span class="hljs-title">p</span>;</span><br><span class="hljs-number">6242</span><br><span class="hljs-number">6243</span>         BUG_ON(<span class="hljs-built_in">strlen</span>(name) &gt;= <span class="hljs-keyword">sizeof</span>(dev-&gt;name));<br><span class="hljs-number">6244</span><br><span class="hljs-number">6245</span>         <span class="hljs-keyword">if</span> (txqs &lt; <span class="hljs-number">1</span>) &#123;<br><span class="hljs-number">6246</span>                 pr_err(<span class="hljs-string">&quot;alloc_netdev: Unable to allocate device with zero queues\n&quot;</span>);<br><span class="hljs-number">6247</span>                 <span class="hljs-keyword">return</span> <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">6248</span>         &#125;<br><span class="hljs-number">6249</span><br><span class="hljs-number">6250</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_RPS</span><br><span class="hljs-number">6251</span>         <span class="hljs-keyword">if</span> (rxqs &lt; <span class="hljs-number">1</span>) &#123;<br><span class="hljs-number">6252</span>                 pr_err(<span class="hljs-string">&quot;alloc_netdev: Unable to allocate device with zero RX queues\n&quot;</span>);<br><span class="hljs-number">6253</span>                 <span class="hljs-keyword">return</span> <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">6254</span>         &#125;<br><span class="hljs-number">6255</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">6256</span><br><span class="hljs-number">6257</span>         alloc_size = <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> net_device);<br><span class="hljs-number">6258</span>         <span class="hljs-keyword">if</span> (sizeof_priv) &#123;<br><span class="hljs-number">6259</span>                 <span class="hljs-comment">/* ensure 32-byte alignment of private area */</span><br><span class="hljs-number">6260</span>                 alloc_size = ALIGN(alloc_size, NETDEV_ALIGN);<br><span class="hljs-number">6261</span>                 alloc_size += sizeof_priv;<br><span class="hljs-number">6262</span>         &#125;<br><span class="hljs-number">6263</span>         <span class="hljs-comment">/* ensure 32-byte alignment of whole construct */</span><br><span class="hljs-number">6264</span>         alloc_size += NETDEV_ALIGN - <span class="hljs-number">1</span>;<br><span class="hljs-number">6265</span><br><span class="hljs-number">6266</span>         p = kzalloc(alloc_size, GFP_KERNEL | __GFP_NOWARN | __GFP_REPEAT);<br><span class="hljs-number">6267</span>         <span class="hljs-keyword">if</span> (!p)<br><span class="hljs-number">6268</span>                 p = vzalloc(alloc_size);<br><span class="hljs-number">6269</span>         <span class="hljs-keyword">if</span> (!p)<br><span class="hljs-number">6270</span>                 <span class="hljs-keyword">return</span> <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">6271</span><br><span class="hljs-number">6272</span>         dev = PTR_ALIGN(p, NETDEV_ALIGN);<br><span class="hljs-number">6273</span>         dev-&gt;padded = (<span class="hljs-type">char</span> *)dev - (<span class="hljs-type">char</span> *)p;<br><span class="hljs-number">6274</span><br><span class="hljs-number">6275</span>         dev-&gt;pcpu_refcnt = alloc_percpu(<span class="hljs-type">int</span>);<br><span class="hljs-number">6276</span>         <span class="hljs-keyword">if</span> (!dev-&gt;pcpu_refcnt)<br><span class="hljs-number">6277</span>                 <span class="hljs-keyword">goto</span> free_dev;<br><span class="hljs-number">6278</span><br><span class="hljs-number">6279</span>         <span class="hljs-keyword">if</span> (dev_addr_init(dev))<br><span class="hljs-number">6280</span>                 <span class="hljs-keyword">goto</span> free_pcpu;<br><span class="hljs-number">6281</span><br><span class="hljs-number">6282</span>         dev_mc_init(dev);<br><span class="hljs-number">6283</span>         dev_uc_init(dev);<br><span class="hljs-number">6284</span><br><span class="hljs-number">6285</span>         dev_net_set(dev, &amp;init_net);<br><span class="hljs-number">6286</span><br><span class="hljs-number">6287</span>         dev-&gt;gso_max_size = GSO_MAX_SIZE;<br><span class="hljs-number">6288</span>         dev-&gt;gso_max_segs = GSO_MAX_SEGS;<br><span class="hljs-number">6289</span><br><span class="hljs-number">6290</span>         INIT_LIST_HEAD(&amp;dev-&gt;napi_list);<br><span class="hljs-number">6291</span>         INIT_LIST_HEAD(&amp;dev-&gt;unreg_list);<br><span class="hljs-number">6292</span>         INIT_LIST_HEAD(&amp;dev-&gt;close_list);<br><span class="hljs-number">6293</span>         INIT_LIST_HEAD(&amp;dev-&gt;link_watch_list);<br><span class="hljs-number">6294</span>         INIT_LIST_HEAD(&amp;dev-&gt;adj_list.upper);<br><span class="hljs-number">6295</span>         INIT_LIST_HEAD(&amp;dev-&gt;adj_list.lower);<br><span class="hljs-number">6296</span>         INIT_LIST_HEAD(&amp;dev-&gt;all_adj_list.upper);<br><span class="hljs-number">6297</span>         INIT_LIST_HEAD(&amp;dev-&gt;all_adj_list.lower);<br><span class="hljs-number">6298</span>         dev-&gt;priv_flags = IFF_XMIT_DST_RELEASE;<br><span class="hljs-number">6299</span>         setup(dev);<br><span class="hljs-number">6300</span><br><span class="hljs-number">6301</span>         dev-&gt;num_tx_queues = txqs;<br><span class="hljs-number">6302</span>         dev-&gt;real_num_tx_queues = txqs;<br><span class="hljs-number">6303</span>         <span class="hljs-keyword">if</span> (netif_alloc_netdev_queues(dev))<br><span class="hljs-number">6304</span>                 <span class="hljs-keyword">goto</span> free_all;<br><span class="hljs-number">6305</span><br><span class="hljs-number">6306</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_RPS</span><br><span class="hljs-number">6307</span>         dev-&gt;num_rx_queues = rxqs;<br><span class="hljs-number">6308</span>         dev-&gt;real_num_rx_queues = rxqs;<br><span class="hljs-number">6309</span>         <span class="hljs-keyword">if</span> (netif_alloc_rx_queues(dev))<br><span class="hljs-number">6310</span>                 <span class="hljs-keyword">goto</span> free_all;<br><span class="hljs-number">6311</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">6312</span><br><span class="hljs-number">6313</span>         <span class="hljs-built_in">strcpy</span>(dev-&gt;name, name);<br><span class="hljs-number">6314</span>         dev-&gt;group = INIT_NETDEV_GROUP;<br><span class="hljs-number">6315</span>         <span class="hljs-keyword">if</span> (!dev-&gt;ethtool_ops)<br><span class="hljs-number">6316</span>                 dev-&gt;ethtool_ops = &amp;default_ethtool_ops;<br><span class="hljs-number">6317</span>         <span class="hljs-keyword">return</span> dev;<br><span class="hljs-number">6318</span><br><span class="hljs-number">6319</span> free_all:<br><span class="hljs-number">6320</span>         free_netdev(dev);<br><span class="hljs-number">6321</span>         <span class="hljs-keyword">return</span> <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">6322</span><br><span class="hljs-number">6323</span> free_pcpu:<br><span class="hljs-number">6324</span>         free_percpu(dev-&gt;pcpu_refcnt);<br><span class="hljs-number">6325</span>         netif_free_tx_queues(dev);<br><span class="hljs-number">6326</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_RPS</span><br><span class="hljs-number">6327</span>         kfree(dev-&gt;_rx);<br><span class="hljs-number">6328</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">6329</span><br><span class="hljs-number">6330</span> free_dev:<br><span class="hljs-number">6331</span>         netdev_freemem(dev);<br><span class="hljs-number">6332</span>         <span class="hljs-keyword">return</span> <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">6333</span> &#125;<br><span class="hljs-number">6334</span> EXPORT_SYMBOL(alloc_netdev_mqs);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">5742</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">netif_alloc_netdev_queues</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net_device *dev)</span><br>5743 &#123;<br><span class="hljs-number">5744</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> count = dev-&gt;num_tx_queues;<br><span class="hljs-number">5745</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">netdev_queue</span> *<span class="hljs-title">tx</span>;</span><br><span class="hljs-number">5746</span>         <span class="hljs-type">size_t</span> sz = count * <span class="hljs-keyword">sizeof</span>(*tx);<br><span class="hljs-number">5747</span><br><span class="hljs-number">5748</span>         BUG_ON(count &lt; <span class="hljs-number">1</span> || count &gt; <span class="hljs-number">0xffff</span>);<br><span class="hljs-number">5749</span><br><span class="hljs-number">5750</span>         tx = kzalloc(sz, GFP_KERNEL | __GFP_NOWARN | __GFP_REPEAT);<br><span class="hljs-number">5751</span>         <span class="hljs-keyword">if</span> (!tx) &#123;<br><span class="hljs-number">5752</span>                 tx = vzalloc(sz);<br><span class="hljs-number">5753</span>                 <span class="hljs-keyword">if</span> (!tx)<br><span class="hljs-number">5754</span>                         <span class="hljs-keyword">return</span> -ENOMEM;<br><span class="hljs-number">5755</span>         &#125;<br><span class="hljs-number">5756</span>         dev-&gt;_tx = tx;<br><span class="hljs-number">5757</span><br><span class="hljs-number">5758</span>         netdev_for_each_tx_queue(dev, netdev_init_one_queue, <span class="hljs-literal">NULL</span>);<br><span class="hljs-number">5759</span>         spin_lock_init(&amp;dev-&gt;tx_global_lock);<br><span class="hljs-number">5760</span><br><span class="hljs-number">5761</span>         <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">5762</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">5720</span> <span class="hljs-type">static</span> <span class="hljs-type">void</span> <span class="hljs-title function_">netdev_init_one_queue</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net_device *dev,</span><br><span class="hljs-params"><span class="hljs-number">5721</span>                                   <span class="hljs-keyword">struct</span> netdev_queue *<span class="hljs-built_in">queue</span>, <span class="hljs-type">void</span> *_unused)</span><br>5722 &#123;<br><span class="hljs-number">5723</span>         <span class="hljs-comment">/* Initialize queue lock */</span><br><span class="hljs-number">5724</span>         spin_lock_init(&amp;<span class="hljs-built_in">queue</span>-&gt;_xmit_lock);<br><span class="hljs-number">5725</span>         netdev_set_xmit_lockdep_class(&amp;<span class="hljs-built_in">queue</span>-&gt;_xmit_lock, dev-&gt;type);<br><span class="hljs-number">5726</span>         <span class="hljs-built_in">queue</span>-&gt;xmit_lock_owner = <span class="hljs-number">-1</span>;<br><span class="hljs-number">5727</span>         netdev_queue_numa_node_write(<span class="hljs-built_in">queue</span>, NUMA_NO_NODE);<br><span class="hljs-number">5728</span>         <span class="hljs-built_in">queue</span>-&gt;dev = dev;<br><span class="hljs-number">5729</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_BQL</span><br><span class="hljs-number">5730</span>         dql_init(&amp;<span class="hljs-built_in">queue</span>-&gt;dql, HZ);<br><span class="hljs-number">5731</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">5732</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">5972</span> <span class="hljs-type">int</span> <span class="hljs-title function_">register_netdev</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net_device *dev)</span><br>5973 &#123;<br><span class="hljs-number">5974</span>         <span class="hljs-type">int</span> err;<br><span class="hljs-number">5975</span><br><span class="hljs-number">5976</span>         rtnl_lock();<br><span class="hljs-number">5977</span>         err = register_netdevice(dev);<br><span class="hljs-number">5978</span>         rtnl_unlock();<br><span class="hljs-number">5979</span>         <span class="hljs-keyword">return</span> err;<br><span class="hljs-number">5980</span> &#125;<br><span class="hljs-number">5981</span> EXPORT_SYMBOL(register_netdev);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">5781</span> <span class="hljs-type">int</span> <span class="hljs-title function_">register_netdevice</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net_device *dev)</span><br>5782 &#123;<br>...<br><span class="hljs-number">5879</span>         linkwatch_init_dev(dev);<br><span class="hljs-number">5880</span><br><span class="hljs-number">5881</span>         dev_init_scheduler(dev);<br><span class="hljs-number">5882</span>         dev_hold(dev);<br><span class="hljs-number">5883</span>         list_netdevice(dev);<br><span class="hljs-number">5884</span>         add_device_randomness(dev-&gt;dev_addr, dev-&gt;addr_len);<br>...<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">876</span> <span class="hljs-type">void</span> <span class="hljs-title function_">dev_init_scheduler</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net_device *dev)</span><br>877 &#123;<br><span class="hljs-number">878</span>         dev-&gt;qdisc = &amp;noop_qdisc;<br><span class="hljs-number">879</span>         netdev_for_each_tx_queue(dev, dev_init_scheduler_queue, &amp;noop_qdisc);<br><span class="hljs-number">880</span>         <span class="hljs-keyword">if</span> (dev_ingress_queue(dev))<br><span class="hljs-number">881</span>                 dev_init_scheduler_queue(dev, dev_ingress_queue(dev), &amp;noop_qdisc);<br><span class="hljs-number">882</span><br><span class="hljs-number">883</span>         setup_timer(&amp;dev-&gt;watchdog_timer, dev_watchdog, (<span class="hljs-type">unsigned</span> <span class="hljs-type">long</span>)dev);<br><span class="hljs-number">884</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">866 </span>static void dev_init_scheduler_queue(struct net_device *dev,<br><span class="hljs-symbol">867 </span>                                     struct netdev_queue *dev_queue,<br><span class="hljs-symbol">868 </span>                                     void *_qdisc)<br><span class="hljs-symbol">869 </span>&#123;<br><span class="hljs-symbol">870 </span>        struct Qdisc *qdisc = _qdisc;<br><span class="hljs-number">871</span><br><span class="hljs-symbol">872 </span>        dev_queue-&gt;qdisc = qdisc;<br><span class="hljs-symbol">873 </span>        dev_queue-&gt;qdisc_sleeping = qdisc;<br><span class="hljs-symbol">874 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">366</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc</span> <span class="hljs-title">noop_qdisc</span> =</span> &#123;<br><span class="hljs-number">367</span>         .enqueue        =       noop_enqueue,<br><span class="hljs-number">368</span>         .dequeue        =       noop_dequeue,<br><span class="hljs-number">369</span>         .flags          =       TCQ_F_BUILTIN,<br><span class="hljs-number">370</span>         .ops            =       &amp;noop_qdisc_ops,<br><span class="hljs-number">371</span>         .<span class="hljs-built_in">list</span>           =       LIST_HEAD_INIT(noop_qdisc.<span class="hljs-built_in">list</span>),<br><span class="hljs-number">372</span>         .q.lock         =       __SPIN_LOCK_UNLOCKED(noop_qdisc.q.lock),<br><span class="hljs-number">373</span>         .dev_queue      =       &amp;noop_netdev_queue,<br><span class="hljs-number">374</span>         .busylock       =       __SPIN_LOCK_UNLOCKED(noop_qdisc.busylock),<br><span class="hljs-number">375</span> &#125;;<br></code></pre></td></tr></table></figure>
+<h4 id="functions-for-Part-2">0.1.3.1. functions for Part 2.</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">745</span> <span class="hljs-type">void</span> <span class="hljs-title function_">dev_activate</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net_device *dev)</span><br>746 &#123;<br><span class="hljs-number">747</span>         <span class="hljs-type">int</span> need_watchdog;<br><span class="hljs-number">748</span><br><span class="hljs-number">749</span>         <span class="hljs-comment">/* No queueing discipline is attached to device;</span><br><span class="hljs-comment">750          * create default one for devices, which need queueing</span><br><span class="hljs-comment">751          * and noqueue_qdisc for virtual interfaces</span><br><span class="hljs-comment">752          */</span><br><span class="hljs-number">753</span><br><span class="hljs-number">754</span>         <span class="hljs-keyword">if</span> (dev-&gt;qdisc == &amp;noop_qdisc)<br><span class="hljs-number">755</span>                 attach_default_qdiscs(dev);<br><span class="hljs-number">756</span><br><span class="hljs-number">757</span>         <span class="hljs-keyword">if</span> (!netif_carrier_ok(dev))<br><span class="hljs-number">758</span>                 <span class="hljs-comment">/* Delay activation until next carrier-on event */</span><br><span class="hljs-number">759</span>                 <span class="hljs-keyword">return</span>;<br><span class="hljs-number">760</span><br><span class="hljs-number">761</span>         need_watchdog = <span class="hljs-number">0</span>;<br><span class="hljs-number">762</span>         netdev_for_each_tx_queue(dev, transition_one_qdisc, &amp;need_watchdog);<br><span class="hljs-number">763</span>         <span class="hljs-keyword">if</span> (dev_ingress_queue(dev))<br><span class="hljs-number">764</span>                 transition_one_qdisc(dev, dev_ingress_queue(dev), <span class="hljs-literal">NULL</span>);<br><span class="hljs-number">765</span><br><span class="hljs-number">766</span>         <span class="hljs-keyword">if</span> (need_watchdog) &#123;<br><span class="hljs-number">767</span>                 dev-&gt;trans_start = jiffies;<br><span class="hljs-number">768</span>                 dev_watchdog_up(dev);<br><span class="hljs-number">769</span>         &#125;<br><span class="hljs-number">770</span> &#125;<br><span class="hljs-number">771</span> EXPORT_SYMBOL(dev_activate);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">708</span> <span class="hljs-type">static</span> <span class="hljs-type">void</span> <span class="hljs-title function_">attach_default_qdiscs</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net_device *dev)</span><br>709 &#123;<br><span class="hljs-number">710</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">netdev_queue</span> *<span class="hljs-title">txq</span>;</span><br><span class="hljs-number">711</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc</span> *<span class="hljs-title">qdisc</span>;</span><br><span class="hljs-number">712</span><br><span class="hljs-number">713</span>         txq = netdev_get_tx_queue(dev, <span class="hljs-number">0</span>);<br><span class="hljs-number">714</span><br><span class="hljs-number">715</span>         <span class="hljs-keyword">if</span> (!netif_is_multiqueue(dev) || dev-&gt;tx_queue_len == <span class="hljs-number">0</span>) &#123;<br><span class="hljs-number">716</span>                 netdev_for_each_tx_queue(dev, attach_one_default_qdisc, <span class="hljs-literal">NULL</span>);<br><span class="hljs-number">717</span>                 dev-&gt;qdisc = txq-&gt;qdisc_sleeping;<br><span class="hljs-number">718</span>                 atomic_inc(&amp;dev-&gt;qdisc-&gt;refcnt);<br><span class="hljs-number">719</span>         &#125; <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-number">720</span>                 qdisc = qdisc_create_dflt(txq, &amp;mq_qdisc_ops, TC_H_ROOT);<br><span class="hljs-number">721</span>                 <span class="hljs-keyword">if</span> (qdisc) &#123;<br><span class="hljs-number">722</span>                         qdisc-&gt;ops-&gt;attach(qdisc);<br><span class="hljs-number">723</span>                         dev-&gt;qdisc = qdisc;<br><span class="hljs-number">724</span>                 &#125;<br><span class="hljs-number">725</span>         &#125;<br><span class="hljs-number">726</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">223</span> <span class="hljs-type">static</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc_class_ops</span> <span class="hljs-title">mq_class_ops</span> =</span> &#123;<br><span class="hljs-number">224</span>         .select_queue   = mq_select_queue,<br><span class="hljs-number">225</span>         .graft          = mq_graft,<br><span class="hljs-number">226</span>         .leaf           = mq_leaf,<br><span class="hljs-number">227</span>         .get            = mq_get,<br><span class="hljs-number">228</span>         .put            = mq_put,<br><span class="hljs-number">229</span>         .walk           = mq_walk,<br><span class="hljs-number">230</span>         .dump           = mq_dump_class,<br><span class="hljs-number">231</span>         .dump_stats     = mq_dump_class_stats,<br><span class="hljs-number">232</span> &#125;;<br><span class="hljs-number">233</span><br><span class="hljs-number">234</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc_ops</span> <span class="hljs-title">mq_qdisc_ops</span> __<span class="hljs-title">read_mostly</span> =</span> &#123;<br><span class="hljs-number">235</span>         .cl_ops         = &amp;mq_class_ops,<br><span class="hljs-number">236</span>         .id             = <span class="hljs-string">&quot;mq&quot;</span>,<br><span class="hljs-number">237</span>         .priv_size      = <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> mq_sched),<br><span class="hljs-number">238</span>         .init           = mq_init,<br><span class="hljs-number">239</span>         .destroy        = mq_destroy,<br><span class="hljs-number">240</span>         .attach         = mq_attach,<br><span class="hljs-number">241</span>         .dump           = mq_dump,<br><span class="hljs-number">242</span>         .owner          = THIS_MODULE,<br><span class="hljs-number">243</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">584</span> <span class="hljs-keyword">struct</span> Qdisc *<span class="hljs-title function_">qdisc_create_dflt</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> netdev_queue *dev_queue,</span><br><span class="hljs-params"><span class="hljs-number">585</span>                                 <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> Qdisc_ops *ops,</span><br><span class="hljs-params"><span class="hljs-number">586</span>                                 <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> parentid)</span><br>587 &#123;<br><span class="hljs-number">588</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc</span> *<span class="hljs-title">sch</span>;</span><br><span class="hljs-number">589</span><br><span class="hljs-number">590</span>         <span class="hljs-keyword">if</span> (!try_module_get(ops-&gt;owner))<br><span class="hljs-number">591</span>                 <span class="hljs-keyword">goto</span> errout;<br><span class="hljs-number">592</span><br><span class="hljs-number">593</span>         sch = qdisc_alloc(dev_queue, ops);<br><span class="hljs-number">594</span>         <span class="hljs-keyword">if</span> (IS_ERR(sch))<br><span class="hljs-number">595</span>                 <span class="hljs-keyword">goto</span> errout;<br><span class="hljs-number">596</span>         sch-&gt;parent = parentid;<br><span class="hljs-number">597</span><br><span class="hljs-number">598</span>         <span class="hljs-keyword">if</span> (!ops-&gt;init || ops-&gt;init(sch, <span class="hljs-literal">NULL</span>) == <span class="hljs-number">0</span>)<br><span class="hljs-number">599</span>                 <span class="hljs-keyword">return</span> sch;<br><span class="hljs-number">600</span><br><span class="hljs-number">601</span>         qdisc_destroy(sch);<br><span class="hljs-number">602</span> errout:<br><span class="hljs-number">603</span>         <span class="hljs-keyword">return</span> <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">604</span> &#125;<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Netdev/" class="category-chain-item">Netdev</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/IPv4/" class="print-no-link">#IPv4</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>how to create dev qdisc</div>
+      <div>https://martinbj2008.github.io/2014/01/28/2014-01-28-how-to-create-dev-qdisc/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>January 28, 2014</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2014/02/08/2014-02-08-qdisc-running-flag/" title="Qdisc running flag">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">Qdisc running flag</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2014/01/28/2014-01-28-qdisc-study-part1-qdisc-base/" title="qdisc study part1: qdisc_base">
+                        <span class="hidden-mobile">qdisc study part1: qdisc_base</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

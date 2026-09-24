@@ -1,0 +1,852 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. summary  When nic supports hardware checksum, tcp only partially calculate the sum and fill the related info into skb three item:  ip_summed csum_start csum_offset  when nic driver sends the pack">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Tcp Checksum in Send Direction">
+<meta property="og:url" content="https://martinbj2008.github.io/2012/07/13/2012-07-13-tcpchecksum/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. summary  When nic supports hardware checksum, tcp only partially calculate the sum and fill the related info into skb three item:  ip_summed csum_start csum_offset  when nic driver sends the pack">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2012-07-12T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.747Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="checksum">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>Tcp Checksum in Send Direction - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="Tcp Checksum in Send Direction"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2012-07-13 00:00" pubdate>
+          July 13, 2012 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          10k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          87 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">Tcp Checksum in Send Direction</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="summary">0.1. summary</h2><p>  When nic supports hardware checksum, tcp only partially calculate the sum and fill the related info into skb three item:</p>
+<ol>
+<li><code>ip_summed</code></li>
+<li><code>csum_start</code></li>
+<li><code>csum_offset</code></li>
+</ol>
+<p>when nic driver sends the packet, it will fill these information to hardware’s correspond register.</p>
+<span id="more"></span>
+<h2 id="call-trace">0.2. call trace</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs c">&gt; tcp_sendmsg<br>&gt; &gt; __tcp_push_pending_frames tcp_push_one<br>&gt; &gt; &gt; tcp_write_xmit tcp_transmit_skb<br>&gt; &gt; &gt; &gt; icsk-&gt;icsk_af_ops-&gt;send_check(sk, skb);<br>&gt; &gt; &gt; &gt; &gt; err = icsk-&gt;icsk_af_ops-&gt;queue_xmit(skb, &amp;inet-&gt;cork.fl);<br></code></pre></td></tr></table></figure>
+
+<p>注：<code>__tcp_push_pending_frames</code>和 <code>tcp_push_one</code>最终都调用<code>tcp_write_xmit</code></p>
+<h2 id="relate-source">0.3. relate source</h2><h3 id="tcp-prot-and-tcp-sendmsg">0.3.1. tcp_prot and tcp_sendmsg</h3><figure class="highlight jboss-cli"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs jboss-cli"> 2612 struct proto tcp_prot = &#123;<br><span class="hljs-string">...</span><br> 2620         <span class="hljs-string">.init</span>                   = tcp_v4_init_sock,<br> 2626         <span class="hljs-string">.sendmsg</span>                = tcp_sendmsg,<br></code></pre></td></tr></table></figure>
+<h3 id="tcp-sendmsg">0.3.2. tcp_sendmsg</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">916</span> <span class="hljs-type">int</span> <span class="hljs-title function_">tcp_sendmsg</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> kiocb *iocb, <span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-keyword">struct</span> msghdr *msg,</span><br><span class="hljs-params"> <span class="hljs-number">917</span>                 <span class="hljs-type">size_t</span> size)</span><br> 918 &#123;<br>...<br> <span class="hljs-number">987</span>    <span class="hljs-keyword">if</span> (sk-&gt;sk_route_caps &amp; NETIF_F_ALL_CSUM)<br> <span class="hljs-number">988</span>       skb-&gt;ip_summed = CHECKSUM_PARTIAL;<br> <span class="hljs-number">989</span><br>....<br><span class="hljs-number">1096</span>                         <span class="hljs-keyword">if</span> (forced_push(tp)) &#123;<br><span class="hljs-number">1097</span>                                 tcp_mark_push(tp, skb);<br><span class="hljs-number">1098</span>                                 __tcp_push_pending_frames(sk, mss_now, TCP_NAGLE_PUSH);<br><span class="hljs-number">1099</span>                         &#125; <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (skb == tcp_send_head(sk))<br><span class="hljs-number">1100</span>                                 tcp_push_one(sk, mss_now);<br>__tcp_push_pending_frames<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1828</span> <span class="hljs-type">void</span> __tcp_push_pending_frames(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> cur_mss,<br><span class="hljs-number">1829</span>                                <span class="hljs-type">int</span> nonagle)<br><span class="hljs-number">1830</span> &#123;<br><span class="hljs-number">1831</span>         <span class="hljs-comment">/* If we are closed, the bytes will have to remain here.</span><br><span class="hljs-comment">1832          * In time closedown will finish, we empty the write queue and</span><br><span class="hljs-comment">1833          * all will be happy.</span><br><span class="hljs-comment">1834          */</span><br><span class="hljs-number">1835</span>         <span class="hljs-keyword">if</span> (unlikely(sk-&gt;sk_state == TCP_CLOSE))<br><span class="hljs-number">1836</span>                 <span class="hljs-keyword">return</span>;<br><span class="hljs-number">1837</span><br><span class="hljs-number">1838</span>         <span class="hljs-keyword">if</span> (tcp_write_xmit(sk, cur_mss, nonagle, <span class="hljs-number">0</span>, GFP_ATOMIC))<br><span class="hljs-number">1839</span>                 tcp_check_probe_timer(sk);<br><span class="hljs-number">1840</span> &#125;<br></code></pre></td></tr></table></figure>
+<h3 id="tcp-push-one">0.3.3. tcp_push_one</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1845 </span>void tcp_push_one(struct sock *sk, unsigned <span class="hljs-keyword">int</span> mss_now)<br><span class="hljs-symbol">1846 </span>&#123;<br><span class="hljs-symbol">1847 </span>        struct sk_buff *skb = tcp_send_head(sk);<br><span class="hljs-number">1848</span><br><span class="hljs-symbol">1849 </span>        BUG_ON(!skb || skb-&gt;<span class="hljs-keyword">len</span> &lt; mss_now);<br><span class="hljs-number">1850</span><br><span class="hljs-symbol">1851 </span>        tcp_write_xmit(sk, mss_now, TCP_NAGLE_PUSH, <span class="hljs-number">1</span>, sk-&gt;sk_allocation);<br><span class="hljs-symbol">1852 </span>&#125;<br></code></pre></td></tr></table></figure>
+<h3 id="tcp-write-xmit">0.3.4. tcp_write_xmit</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1743</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">tcp_write_xmit</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> mss_now, <span class="hljs-type">int</span> nonagle,</span><br><span class="hljs-params"><span class="hljs-number">1744</span>                           <span class="hljs-type">int</span> push_one, <span class="hljs-type">gfp_t</span> gfp)</span><br>1745 &#123;<br>...<br><span class="hljs-number">1800</span>                 <span class="hljs-keyword">if</span> (unlikely(tcp_transmit_skb(sk, skb, <span class="hljs-number">1</span>, gfp)))<br><span class="hljs-number">1801</span>                         <span class="hljs-keyword">break</span>;<br></code></pre></td></tr></table></figure>
+<h3 id="tcp-transmit-skb">0.3.5. tcp_transmit_skb</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">796</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">tcp_transmit_skb</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-keyword">struct</span> sk_buff *skb, <span class="hljs-type">int</span> clone_it,</span><br><span class="hljs-params"> <span class="hljs-number">797</span>                             <span class="hljs-type">gfp_t</span> gfp_mask)</span><br> 798 &#123;<br> <span class="hljs-number">799</span>         <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">inet_connection_sock</span> *<span class="hljs-title">icsk</span> =</span> inet_csk(sk);<br>...<br> <span class="hljs-number">892</span>         icsk-&gt;icsk_af_ops-&gt;send_check(sk, skb);<br>...<br> <span class="hljs-number">904</span>         err = icsk-&gt;icsk_af_ops-&gt;queue_xmit(skb, &amp;inet-&gt;cork.fl);<br></code></pre></td></tr></table></figure>
+<h3 id="tcp-v4-init-sock">0.3.6. tcp_v4_init_sock</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1875</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">tcp_v4_init_sock</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sock *sk)</span><br>1876 &#123;<br><span class="hljs-number">1877</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">inet_connection_sock</span> *<span class="hljs-title">icsk</span> =</span> inet_csk(sk);<br><span class="hljs-number">1878</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">tcp_sock</span> *<span class="hljs-title">tp</span> =</span> tcp_sk(sk);<br><span class="hljs-number">1879</span><br><span class="hljs-number">1880</span>         skb_queue_head_init(&amp;tp-&gt;out_of_order_queue);<br><span class="hljs-number">1881</span>         tcp_init_xmit_timers(sk);<br><span class="hljs-number">1882</span>         tcp_prequeue_init(tp);<br><span class="hljs-number">1883</span><br><span class="hljs-number">1884</span>         icsk-&gt;icsk_rto = TCP_TIMEOUT_INIT;<br><span class="hljs-number">1885</span>         tp-&gt;mdev = TCP_TIMEOUT_INIT;<br><span class="hljs-number">1886</span><br><span class="hljs-number">1887</span>         <span class="hljs-comment">/* So many TCP implementations out there (incorrectly) count the</span><br><span class="hljs-comment">1888          * initial SYN frame in their delayed-ACK and congestion control</span><br><span class="hljs-comment">1889          * algorithms that we must have the following bandaid to talk</span><br><span class="hljs-comment">1890          * efficiently to them.  -DaveM</span><br><span class="hljs-comment">1891          */</span><br><span class="hljs-number">1892</span>         tp-&gt;snd_cwnd = TCP_INIT_CWND;<br><span class="hljs-number">1893</span><br><span class="hljs-number">1894</span>         <span class="hljs-comment">/* See draft-stevens-tcpca-spec-01 for discussion of the</span><br><span class="hljs-comment">1895          * initialization of these values.</span><br><span class="hljs-comment">1896          */</span><br><span class="hljs-number">1897</span>         tp-&gt;snd_ssthresh = TCP_INFINITE_SSTHRESH;<br><span class="hljs-number">1898</span>         tp-&gt;snd_cwnd_clamp = ~<span class="hljs-number">0</span>;<br><span class="hljs-number">1899</span>         tp-&gt;mss_cache = TCP_MSS_DEFAULT;<br><span class="hljs-number">1900</span><br><span class="hljs-number">1901</span>         tp-&gt;reordering = sysctl_tcp_reordering;<br><span class="hljs-number">1902</span>         icsk-&gt;icsk_ca_ops = &amp;tcp_init_congestion_ops;<br><span class="hljs-number">1903</span><br><span class="hljs-number">1904</span>         sk-&gt;sk_state = TCP_CLOSE;<br><span class="hljs-number">1905</span><br><span class="hljs-number">1906</span>         sk-&gt;sk_write_space = sk_stream_write_space;<br><span class="hljs-number">1907</span>         sock_set_flag(sk, SOCK_USE_WRITE_QUEUE);<br><span class="hljs-number">1908</span><br><span class="hljs-number">1909</span>         icsk-&gt;icsk_af_ops = &amp;ipv4_specific;<br><span class="hljs-number">1910</span>         icsk-&gt;icsk_sync_mss = tcp_sync_mss;<br></code></pre></td></tr></table></figure>
+<h3 id="inet-connection-sock-af-ops">0.3.7. inet_connection_sock_af_ops</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1844</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">inet_connection_sock_af_ops</span> <span class="hljs-title">ipv4_specific</span> =</span> &#123;<br><span class="hljs-number">1845</span>         .queue_xmit        = ip_queue_xmit,<br><span class="hljs-number">1846</span>         .send_check        = tcp_v4_send_check,<br><span class="hljs-number">1847</span>         .rebuild_header    = inet_sk_rebuild_header,<br><span class="hljs-number">1848</span>         .conn_request      = tcp_v4_conn_request,<br><span class="hljs-number">1849</span>         .syn_recv_sock     = tcp_v4_syn_recv_sock,<br><span class="hljs-number">1850</span>         .get_peer          = tcp_v4_get_peer,<br><span class="hljs-number">1851</span>         .net_header_len    = <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> iphdr),<br><span class="hljs-number">1852</span>         .setsockopt        = ip_setsockopt,<br><span class="hljs-number">1853</span>         .getsockopt        = ip_getsockopt,<br><span class="hljs-number">1854</span>         .addr2sockaddr     = inet_csk_addr2sockaddr,<br><span class="hljs-number">1855</span>         .sockaddr_len      = <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> sockaddr_in),<br><span class="hljs-number">1856</span>         .bind_conflict     = inet_csk_bind_conflict,<br><span class="hljs-number">1857</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_COMPAT</span><br><span class="hljs-number">1858</span>         .compat_setsockopt = compat_ip_setsockopt,<br><span class="hljs-number">1859</span>         .compat_getsockopt = compat_ip_getsockopt,<br><span class="hljs-number">1860</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">1861</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h3 id="tcp-v4-send-check">0.3.8. tcp_v4_send_check</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">546</span> <span class="hljs-comment">/* This routine computes an IPv4 TCP checksum. */</span><br><span class="hljs-number">547</span> <span class="hljs-type">void</span> <span class="hljs-title function_">tcp_v4_send_check</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-keyword">struct</span> sk_buff *skb)</span><br>548 &#123;<br><span class="hljs-number">549</span>         <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">inet_sock</span> *<span class="hljs-title">inet</span> =</span> inet_sk(sk);<br><span class="hljs-number">550</span><br><span class="hljs-number">551</span>         __tcp_v4_send_check(skb, inet-&gt;inet_saddr, inet-&gt;inet_daddr);<br><span class="hljs-number">552</span> &#125;<br></code></pre></td></tr></table></figure>
+<h3 id="tcp-v4-send-check-1">0.3.9. __tcp_v4_send_check</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">529</span> <span class="hljs-type">static</span> <span class="hljs-type">void</span> __tcp_v4_send_check(<span class="hljs-keyword">struct</span> sk_buff *skb,<br><span class="hljs-number">530</span>                                 __be32 saddr, __be32 daddr)<br><span class="hljs-number">531</span> &#123;<br><span class="hljs-number">532</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">tcphdr</span> *<span class="hljs-title">th</span> =</span> tcp_hdr(skb);<br><span class="hljs-number">533</span><br><span class="hljs-number">534</span>         <span class="hljs-keyword">if</span> (skb-&gt;ip_summed == CHECKSUM_PARTIAL) &#123;<br><span class="hljs-number">535</span>                 th-&gt;check = ~tcp_v4_check(skb-&gt;len, saddr, daddr, <span class="hljs-number">0</span>);<br><span class="hljs-number">536</span>                 skb-&gt;csum_start = skb_transport_header(skb) - skb-&gt;head;<br><span class="hljs-number">537</span>                 skb-&gt;csum_offset = offsetof(<span class="hljs-keyword">struct</span> tcphdr, check);<br><span class="hljs-number">538</span>         &#125; <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-number">539</span>                 th-&gt;check = tcp_v4_check(skb-&gt;len, saddr, daddr,<br><span class="hljs-number">540</span>                                          csum_partial(th,<br><span class="hljs-number">541</span>                                                       th-&gt;doff &lt;&lt; <span class="hljs-number">2</span>,<br><span class="hljs-number">542</span>                                                       skb-&gt;csum));<br><span class="hljs-number">543</span>         &#125;<br><span class="hljs-number">544</span> &#125;<br></code></pre></td></tr></table></figure>
+<p>neigh operations</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">129</span> <span class="hljs-type">static</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">neigh_ops</span> <span class="hljs-title">arp_generic_ops</span> =</span> &#123;<br><span class="hljs-number">130</span>         .family =               AF_INET,<br><span class="hljs-number">131</span>         .solicit =              arp_solicit,<br><span class="hljs-number">132</span>         .error_report =         arp_error_report,<br><span class="hljs-number">133</span>         .output =               neigh_resolve_output,<br><span class="hljs-number">134</span>         .connected_output =     neigh_connected_output,<br><span class="hljs-number">135</span> &#125;;<br><span class="hljs-number">136</span><br><span class="hljs-number">137</span> <span class="hljs-type">static</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">neigh_ops</span> <span class="hljs-title">arp_hh_ops</span> =</span> &#123;<br><span class="hljs-number">138</span>         .family =               AF_INET,<br><span class="hljs-number">139</span>         .solicit =              arp_solicit,<br><span class="hljs-number">140</span>         .error_report =         arp_error_report,<br><span class="hljs-number">141</span>         .output =               neigh_resolve_output,<br><span class="hljs-number">142</span>         .connected_output =     neigh_resolve_output,<br><span class="hljs-number">143</span> &#125;;<br><span class="hljs-number">144</span><br><span class="hljs-number">145</span> <span class="hljs-type">static</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">neigh_ops</span> <span class="hljs-title">arp_direct_ops</span> =</span> &#123;<br><span class="hljs-number">146</span>         .family =               AF_INET,<br><span class="hljs-number">147</span>         .output =               neigh_direct_output,<br><span class="hljs-number">148</span>         .connected_output =     neigh_direct_output,<br><span class="hljs-number">149</span> &#125;;<br><span class="hljs-number">150</span><br><span class="hljs-number">151</span> <span class="hljs-type">static</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">neigh_ops</span> <span class="hljs-title">arp_broken_ops</span> =</span> &#123;<br><span class="hljs-number">152</span>         .family =               AF_INET,<br><span class="hljs-number">153</span>         .solicit =              arp_solicit,<br><span class="hljs-number">154</span>         .error_report =         arp_error_report,<br><span class="hljs-number">155</span>         .output =               neigh_compat_output,<br><span class="hljs-number">156</span>         .connected_output =     neigh_compat_output,<br><span class="hljs-number">157</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1280</span> <span class="hljs-type">int</span> <span class="hljs-title function_">neigh_resolve_output</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> neighbour *neigh, <span class="hljs-keyword">struct</span> sk_buff *skb)</span><br>1281 &#123;<br>...<br><span class="hljs-number">1304</span>                 <span class="hljs-keyword">if</span> (err &gt;= <span class="hljs-number">0</span>)<br><span class="hljs-number">1305</span>                         rc = dev_queue_xmit(skb);<br></code></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2511</span> <span class="hljs-type">int</span> <span class="hljs-title function_">dev_queue_xmit</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sk_buff *skb)</span><br>2512 &#123;<br>...<br><span class="hljs-number">2561</span>                                 rc = dev_hard_start_xmit(skb, dev, txq);<br></code></pre></td></tr></table></figure>
+
+<h3 id="dev-hard-start-xmit">0.3.10. dev_hard_start_xmit</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2184</span> <span class="hljs-type">int</span> <span class="hljs-title function_">dev_hard_start_xmit</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sk_buff *skb, <span class="hljs-keyword">struct</span> net_device *dev,</span><br><span class="hljs-params"><span class="hljs-number">2185</span>                         <span class="hljs-keyword">struct</span> netdev_queue *txq)</span><br>2186 &#123;<br>...<br><span class="hljs-number">2204</span>                 features = netif_skb_features(skb);<br>...<br><span class="hljs-number">2215</span>                 <span class="hljs-keyword">if</span> (netif_needs_gso(skb, features)) &#123;<br><span class="hljs-number">2216</span>                         <span class="hljs-keyword">if</span> (unlikely(dev_gso_segment(skb, features)))<br><span class="hljs-number">2217</span>                                 <span class="hljs-keyword">goto</span> out_kfree_skb;<br><span class="hljs-number">2218</span>                         <span class="hljs-keyword">if</span> (skb-&gt;next)<br><span class="hljs-number">2219</span>                                 <span class="hljs-keyword">goto</span> gso;<br><span class="hljs-number">2220</span>                 &#125; <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-number">2221</span>                         <span class="hljs-keyword">if</span> (skb_needs_linearize(skb, features) &amp;&amp;<br><span class="hljs-number">2222</span>                             __skb_linearize(skb))<br><span class="hljs-number">2223</span>                                 <span class="hljs-keyword">goto</span> out_kfree_skb;<br><span class="hljs-number">2224</span><br><span class="hljs-number">2225</span>                         <span class="hljs-comment">/* If packet is not checksummed and device does not</span><br><span class="hljs-comment">2226                          * support checksumming for this protocol, complete</span><br><span class="hljs-comment">2227                          * checksumming here.</span><br><span class="hljs-comment">2228                          */</span><br><span class="hljs-number">2229</span>                         <span class="hljs-keyword">if</span> (skb-&gt;ip_summed == CHECKSUM_PARTIAL) &#123;<br><span class="hljs-number">2230</span>                                 skb_set_transport_header(skb,<br><span class="hljs-number">2231</span>                                         skb_checksum_start_offset(skb));<br><span class="hljs-number">2232</span>                                 <span class="hljs-keyword">if</span> (!(features &amp; NETIF_F_ALL_CSUM) &amp;&amp;<br><span class="hljs-number">2233</span>                                      skb_checksum_help(skb))<br><span class="hljs-number">2234</span>                                         <span class="hljs-keyword">goto</span> out_kfree_skb;<br><span class="hljs-number">2235</span>                         &#125;<br><span class="hljs-number">2236</span>                 &#125;<br>...<br><span class="hljs-number">2239</span>                 rc = ops-&gt;ndo_start_xmit(skb, dev);<br></code></pre></td></tr></table></figure>
+<h3 id="nic-dirver-e1000">0.3.11. nic dirver e1000</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">847</span> <span class="hljs-type">static</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net_device_ops</span> <span class="hljs-title">e1000_netdev_ops</span> =</span> &#123;<br><span class="hljs-number">848</span>         .ndo_open               = e1000_open,<br><span class="hljs-number">849</span>         .ndo_stop               = e1000_close,<br><span class="hljs-number">850</span>         .ndo_start_xmit         = e1000_xmit_frame,<br><span class="hljs-number">851</span>         .ndo_get_stats          = e1000_get_stats,<br><span class="hljs-number">852</span>         .ndo_set_rx_mode        = e1000_set_rx_mode,<br><span class="hljs-number">853</span>         .ndo_set_mac_address    = e1000_set_mac,<br><span class="hljs-number">854</span>         .ndo_tx_timeout         = e1000_tx_timeout,<br><span class="hljs-number">855</span>         .ndo_change_mtu         = e1000_change_mtu,<br><span class="hljs-number">856</span>         .ndo_do_ioctl           = e1000_ioctl,<br><span class="hljs-number">857</span>         .ndo_validate_addr      = eth_validate_addr,<br><span class="hljs-number">858</span>         .ndo_vlan_rx_add_vid    = e1000_vlan_rx_add_vid,<br><span class="hljs-number">859</span>         .ndo_vlan_rx_kill_vid   = e1000_vlan_rx_kill_vid,<br><span class="hljs-number">860</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_NET_POLL_CONTROLLER</span><br><span class="hljs-number">861</span>         .ndo_poll_controller    = e1000_netpoll,<br><span class="hljs-number">862</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">863</span>         .ndo_fix_features       = e1000_fix_features,<br><span class="hljs-number">864</span>         .ndo_set_features       = e1000_set_features,<br><span class="hljs-number">865</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">5013</span> <span class="hljs-type">static</span> <span class="hljs-type">netdev_tx_t</span> <span class="hljs-title function_">e1000_xmit_frame</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sk_buff *skb,</span><br><span class="hljs-params"><span class="hljs-number">5014</span>                                     <span class="hljs-keyword">struct</span> net_device *netdev)</span><br>5015 &#123;<br>...<br><span class="hljs-number">5113</span>         <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (e1000_tx_csum(tx_ring, skb))<br><span class="hljs-number">5114</span>                 tx_flags |= E1000_TX_FLAGS_CSUM;<br></code></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2781</span> <span class="hljs-type">static</span> <span class="hljs-type">bool</span> <span class="hljs-title function_">e1000_tx_csum</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> e1000_adapter *adapter,</span><br><span class="hljs-params"><span class="hljs-number">2782</span>                           <span class="hljs-keyword">struct</span> e1000_tx_ring *tx_ring, <span class="hljs-keyword">struct</span> sk_buff *skb)</span><br>2783 &#123;<br><span class="hljs-number">2784</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">e1000_context_desc</span> *<span class="hljs-title">context_desc</span>;</span><br><span class="hljs-number">2785</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">e1000_buffer</span> *<span class="hljs-title">buffer_info</span>;</span><br><span class="hljs-number">2786</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> i;<br><span class="hljs-number">2787</span>         u8 css;<br><span class="hljs-number">2788</span>         u32 cmd_len = E1000_TXD_CMD_DEXT;<br><span class="hljs-number">2789</span><br><span class="hljs-number">2790</span>         <span class="hljs-keyword">if</span> (skb-&gt;ip_summed != CHECKSUM_PARTIAL)<br><span class="hljs-number">2791</span>                 <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;<br><span class="hljs-number">2792</span><br><span class="hljs-number">2793</span>         <span class="hljs-keyword">switch</span> (skb-&gt;protocol) &#123;<br><span class="hljs-number">2794</span>         <span class="hljs-keyword">case</span> <span class="hljs-title function_">cpu_to_be16</span><span class="hljs-params">(ETH_P_IP)</span>:<br>2795                 <span class="hljs-title function_">if</span> <span class="hljs-params">(ip_hdr(skb)-&gt;protocol == IPPROTO_TCP)</span><br>2796                         cmd_len |= E1000_TXD_CMD_TCP;<br><span class="hljs-number">2797</span>                 <span class="hljs-keyword">break</span>;<br><span class="hljs-number">2798</span>         <span class="hljs-keyword">case</span> <span class="hljs-title function_">cpu_to_be16</span><span class="hljs-params">(ETH_P_IPV6)</span>:<br>2799                 <span class="hljs-comment">/* XXX not handling all IPV6 headers */</span><br>2800                 <span class="hljs-title function_">if</span> <span class="hljs-params">(ipv6_hdr(skb)-&gt;nexthdr == IPPROTO_TCP)</span><br>2801                         cmd_len |= E1000_TXD_CMD_TCP;<br><span class="hljs-number">2802</span>                 <span class="hljs-keyword">break</span>;<br><span class="hljs-number">2803</span>         <span class="hljs-keyword">default</span>:<br><span class="hljs-number">2804</span>                 <span class="hljs-keyword">if</span> (unlikely(net_ratelimit()))<br><span class="hljs-number">2805</span>                         e_warn(drv, <span class="hljs-string">&quot;checksum_partial proto=%x!\n&quot;</span>,<br><span class="hljs-number">2806</span>                                skb-&gt;protocol);<br><span class="hljs-number">2807</span>                 <span class="hljs-keyword">break</span>;<br><span class="hljs-number">2808</span>         &#125;<br><span class="hljs-number">2809</span><br><span class="hljs-number">2810</span>         css = skb_checksum_start_offset(skb);<br><span class="hljs-number">2811</span><br><span class="hljs-number">2812</span>         i = tx_ring-&gt;next_to_use;<br><span class="hljs-number">2813</span>         buffer_info = &amp;tx_ring-&gt;buffer_info[i];<br><span class="hljs-number">2814</span>         context_desc = E1000_CONTEXT_DESC(*tx_ring, i);<br><span class="hljs-number">2815</span><br><span class="hljs-number">2816</span>         context_desc-&gt;lower_setup.ip_config = <span class="hljs-number">0</span>;<br><span class="hljs-number">2817</span>         context_desc-&gt;upper_setup.tcp_fields.tucss = css;<br><span class="hljs-number">2818</span>         context_desc-&gt;upper_setup.tcp_fields.tucso =<br><span class="hljs-number">2819</span>                 css + skb-&gt;csum_offset;<br><span class="hljs-number">2820</span>         context_desc-&gt;upper_setup.tcp_fields.tucse = <span class="hljs-number">0</span>;<br><span class="hljs-number">2821</span>         context_desc-&gt;tcp_seg_setup.data = <span class="hljs-number">0</span>;<br><span class="hljs-number">2822</span>         context_desc-&gt;cmd_and_length = cpu_to_le32(cmd_len);<br><span class="hljs-number">2823</span><br><span class="hljs-number">2824</span>         buffer_info-&gt;time_stamp = jiffies;<br><span class="hljs-number">2825</span>         buffer_info-&gt;next_to_watch = i;<br><span class="hljs-number">2826</span><br><span class="hljs-number">2827</span>         <span class="hljs-keyword">if</span> (unlikely(++i == tx_ring-&gt;count)) i = <span class="hljs-number">0</span>;<br></code></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">201</span> <span class="hljs-type">static</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">pci_driver</span> <span class="hljs-title">e1000_driver</span> =</span> &#123;<br><span class="hljs-number">202</span>         .name     = e1000_driver_name,<br><span class="hljs-number">203</span>         .id_table = e1000_pci_tbl,<br><span class="hljs-number">204</span>         .probe    = e1000_probe,<br><span class="hljs-number">205</span>         .remove   = __devexit_p(e1000_remove),<br><span class="hljs-number">206</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_PM</span><br><span class="hljs-number">207</span>         <span class="hljs-comment">/* Power Management Hooks */</span><br><span class="hljs-number">208</span>         .suspend  = e1000_suspend,<br><span class="hljs-number">209</span>         .resume   = e1000_resume,<br><span class="hljs-number">210</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">211</span>         .shutdown = e1000_shutdown,<br><span class="hljs-number">212</span>         .err_handler = &amp;e1000_err_handler<br><span class="hljs-number">213</span> &#125;;<br></code></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">942</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> __devinit <span class="hljs-title function_">e1000_probe</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> pci_dev *pdev,</span><br><span class="hljs-params"> <span class="hljs-number">943</span>                                  <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> pci_device_id *ent)</span><br> 944 &#123;<br> <span class="hljs-number">945</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net_device</span> *<span class="hljs-title">netdev</span>;</span><br> <span class="hljs-number">946</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">e1000_adapter</span> *<span class="hljs-title">adapter</span>;</span><br>...<br><span class="hljs-number">1065</span>         <span class="hljs-keyword">if</span> (hw-&gt;mac_type &gt;= e1000_82543) &#123;<br><span class="hljs-number">1066</span>                 netdev-&gt;hw_features = NETIF_F_SG |<br><span class="hljs-number">1067</span>                                    NETIF_F_HW_CSUM |<br><span class="hljs-number">1068</span>                                    NETIF_F_HW_VLAN_RX;<br><span class="hljs-number">1069</span>                 netdev-&gt;features = NETIF_F_HW_VLAN_TX |<br><span class="hljs-number">1070</span>                                    NETIF_F_HW_VLAN_FILTER;<br><span class="hljs-number">1071</span>         &#125;<br><span class="hljs-number">1072</span><br><span class="hljs-number">1073</span>         <span class="hljs-keyword">if</span> ((hw-&gt;mac_type &gt;= e1000_82544) &amp;&amp;<br><span class="hljs-number">1074</span>            (hw-&gt;mac_type != e1000_82547))<br><span class="hljs-number">1075</span>                 netdev-&gt;hw_features |= NETIF_F_TSO;<br><span class="hljs-number">1076</span><br><span class="hljs-number">1077</span>         netdev-&gt;priv_flags |= IFF_SUPP_NOFCS;<br><span class="hljs-number">1078</span><br><span class="hljs-number">1079</span>         netdev-&gt;features |= netdev-&gt;hw_features;<br><span class="hljs-number">1080</span>         netdev-&gt;hw_features |= NETIF_F_RXCSUM;<br><span class="hljs-number">1081</span>         netdev-&gt;hw_features |= NETIF_F_RXFCS;<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/TCP/" class="category-chain-item">TCP</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/checksum/" class="print-no-link">#checksum</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>Tcp Checksum in Send Direction</div>
+      <div>https://martinbj2008.github.io/2012/07/13/2012-07-13-tcpchecksum/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>July 13, 2012</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2012/07/29/2012-07-29-git-reflog/" title="通过git reflog 找回的commit">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">通过git reflog 找回的commit</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2012/06/01/2012-06-01-lfs-binutils-gcc-glibc/" title="LFS中Binutils,GCC,Glibc三者之间的关系">
+                        <span class="hidden-mobile">LFS中Binutils,GCC,Glibc三者之间的关系</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

@@ -1,0 +1,938 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. 使用场景接上篇文章，我们提到在网口eth1 上增加一个 ip 地址，内核会生成 3 个路由。  local 路由表：增加&#x2F;32 主机路由 main 路由表：增加本网段前缀的网络路由  为什么需要使用local&#x2F;main 两个路由表呢？ ip地址引发的路由变化或者手动添加一个目的网段的路由，这些场景看起来，完全可以使用一个路由表就能满足场景需求。那内核为什么要支持多个路">
+<meta property="og:type" content="article">
+<meta property="og:title" content="linux内核多路由表与策略路由的实现">
+<meta property="og:url" content="https://martinbj2008.github.io/2026/03/01/fib-how-ipv4-lookup-route-with-rule-route/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. 使用场景接上篇文章，我们提到在网口eth1 上增加一个 ip 地址，内核会生成 3 个路由。  local 路由表：增加&#x2F;32 主机路由 main 路由表：增加本网段前缀的网络路由  为什么需要使用local&#x2F;main 两个路由表呢？ ip地址引发的路由变化或者手动添加一个目的网段的路由，这些场景看起来，完全可以使用一个路由表就能满足场景需求。那内核为什么要支持多个路">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/route/ip.rule.show.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/route/ip.rule.route.png">
+<meta property="article:published_time" content="2026-02-28T18:55:14.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.753Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="fib">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/route/ip.rule.show.png">
+  
+  
+  
+  <title>linux内核多路由表与策略路由的实现 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="linux内核多路由表与策略路由的实现"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2026-03-01 02:55" pubdate>
+          March 1, 2026 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          9k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          75 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">linux内核多路由表与策略路由的实现</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="使用场景">0.1. 使用场景</h2><p>接上篇文章，我们提到在网口eth1 上增加一个 ip 地址，内核会生成 3 个路由。</p>
+<ul>
+<li>local 路由表：增加&#x2F;32 主机路由</li>
+<li>main 路由表：增加本网段前缀的网络路由</li>
+</ul>
+<p>为什么需要使用local&#x2F;main 两个路由表呢？ ip地址引发的路由变化或者手动添加一个目的网段的路由，这些场景看起来，完全可以使用一个路由表就能满足场景需求。那内核为什么要支持多个路由表？</p>
+<p>其中一个场景就是 <strong>策略路由</strong>。<br>比如公司有两个网关， 其中一个网关GW1，网络质量比较高。我们希望对网络质量有较高要求的个别网段的外访流量，走GW1.其他网段都用 GW2.<br>这时，我们就不能仅仅依赖目前 IP 去做路由。我们需要：</p>
+<ul>
+<li>先根据源 IP 地址做一次筛选，选中的这部分流量，缺省路由到GW1.</li>
+<li>没有选中的走我们的正常路由查找，其中缺省路由到GW2。</li>
+<li>这两个缺省路由只能放到两个单独的路由表里。</li>
+</ul>
+<p>那下面详细展开介绍下策略路由及内核实现。</p>
+<h2 id="策略路由">0.2. 策略路由</h2><p>策略路由是一个按优先级排列的规则链表。路由查找时，按优先级顺序遍历链。</p>
+<p>每个策略路由规则，由match+action两部分组成。 match 也被称为<code>SELECTOR</code>。</p>
+<ol>
+<li>每个规则的match条件，可以支持多种字段，如源IP&#x2F;协议&#x2F;协议源端口&#x2F;目的端口等，也可以这多个字段的组合。如果满足规则匹配条件就执行规则指定的动作。</li>
+<li>每个策略路由的action有下面几种：<ul>
+<li>table X：查找对应的路由表 table X。X 是 table ID 或者 table 名字。</li>
+<li>goto xx：跳转到更低优先级到规则。</li>
+<li>nat …：ip地址替换</li>
+</ul>
+</li>
+<li>所有的策略路由通过 IP rule 命令添加。</li>
+<li>策略路由按照优先级插入到一个链表里。</li>
+<li>按照优先级从高（数值最小）到低（数值大）按顺序排列。</li>
+<li>通过 <code>ip rule show</code>命令我们可以看到每条rule对应的优先级。添加rule时候，默认的是当前除0以外最高优先级的值-1， 即默认新建的rule优先级高。</li>
+</ol>
+<p>这部分用法详见ip rule命令帮助手册，<br><code>https://man7.org/linux/man-pages/man8/ip-rule.8.html</code></p>
+<span id="more"></span>
+
+<h4 id="默认的三条策略路由：-local-main-default">0.2.0.1. 默认的三条策略路由： local&#x2F;main&#x2F;default</h4><p>默认三条规则，是任意匹配条件。 规则的动作也是查找指定的路由表。<br>即：遍历策略路由链表，依次在 local&#x2F;main&#x2F;default三张路由表里查询路由。</p>
+<ol>
+<li>如果有匹配路由，路由查找成功，停止遍历策略路由链表，并返回对应路由。</li>
+<li>没有找到路由，下一张表（即下一个路由策略里指定的表）。</li>
+<li>如果最终没有找到（没有缺省路由），返回路由查找失败。</li>
+</ol>
+<p><img src="/images/route/ip.rule.show.png" srcset="/img/loading.gif" lazyload alt="默认三条策略路由"></p>
+<p>通过命令，我们可以看到 local表优先级最高。<br>main 和 default 优先级低。后续新增的策略路由，优先级会是 main 优先级-1（即 32765&#x3D; 32766-1）</p>
+<h4 id="策略路由查找">0.2.0.2. 策略路由查找</h4><p>策略路由本身是有序链表，各个节点按照从高到低的优先级排序。路由查找时，按顺序遍历策略路由节点。遍历到每个节点，先检查是否满足当前节点的match 条件。</p>
+<ul>
+<li>如果不满足match 条件，那么继续遍历下一个节点，直到全部节点执行完成。</li>
+<li>如果满足 match 条件，则执行当前节点对应的 action。根据 action 情况，返回查找结果。<ul>
+<li>如果 action 是 goto，那么就跳转到对应的策略路由节点。这里 goto 只能往低优先级跳转，因此不会出现环的问题. goto 会跳过并忽略中间节点。</li>
+<li>如果 action 是 table，到指定到 table 里去查找路由，<ul>
+<li>如果找到了，就终止遍历，把路由结果返回。</li>
+<li>如果没有查找到，继续遍历下一个策略路由（更低优先级）。</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h3 id="内核实现">0.2.1. 内核实现</h3><p><img src="/images/route/ip.rule.route.png" srcset="/img/loading.gif" lazyload alt="内核策略路由数据结构"></p>
+<h4 id="数据结构">0.2.1.1. 数据结构</h4><h5 id="struct-netns-ipv4">0.2.1.1.1. struct netns_ipv4</h5><p>每个netns下有个IPv4相关的路由信息变量<code>struct netns_ipv4 ipv4</code>,</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">61</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net</span> &#123;</span><br>...<br><span class="hljs-number">125</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">rules_ops</span>;</span><br>...<br><span class="hljs-number">134</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">netns_ipv4</span>       <span class="hljs-title">ipv4</span>;</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">44</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">netns_ipv4</span> &#123;</span><br>...<br><span class="hljs-number">59</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_IP_MULTIPLE_TABLES</span><br><span class="hljs-number">60</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">fib_rules_ops</span>    *<span class="hljs-title">rules_ops</span>;</span><br><span class="hljs-number">61</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">fib_table</span> __<span class="hljs-title">rcu</span>  *<span class="hljs-title">fib_main</span>;</span><br><span class="hljs-number">62</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">fib_table</span> __<span class="hljs-title">rcu</span>  *<span class="hljs-title">fib_default</span>;</span><br><span class="hljs-number">63</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span>            fib_rules_require_fldissect;<br><span class="hljs-number">64</span>         <span class="hljs-type">bool</span>                    fib_has_custom_rules;<br><span class="hljs-number">65</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">66</span>         <span class="hljs-type">bool</span>                    fib_has_custom_local_routes;<br></code></pre></td></tr></table></figure>
+
+<h5 id="struct-fib-rules-ops">0.2.1.1.2. struct fib_rules_ops</h5><p>然后通过<code>rules_ops</code>指向IPv4对应的<code>struct fib_rules_ops</code>.<br>在这个ops下有一个<code>rules_list</code>链表，串联了所有的策略路由。<br>这个结构体里，还包括几个非常重要的函数指针，后面结合 IPv4 的 rule op一起解释。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">60</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">fib_rules_ops</span> &#123;</span><br> <span class="hljs-number">61</span>         <span class="hljs-type">int</span>                     family;<br> <span class="hljs-number">62</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">list</span>;</span><br>...<br> <span class="hljs-number">74</span>         <span class="hljs-type">int</span>                     (*match)(<span class="hljs-keyword">struct</span> fib_rule *,<br> <span class="hljs-number">75</span>                                          <span class="hljs-keyword">struct</span> flowi *, <span class="hljs-type">int</span>);<br> <span class="hljs-number">76</span>         <span class="hljs-type">int</span>                     (*configure)(<span class="hljs-keyword">struct</span> fib_rule *,<br> <span class="hljs-number">77</span>                                              <span class="hljs-keyword">struct</span> sk_buff *,<br> <span class="hljs-number">78</span>                                              <span class="hljs-keyword">struct</span> fib_rule_hdr *,<br> <span class="hljs-number">79</span>                                              <span class="hljs-keyword">struct</span> nlattr **,<br> <span class="hljs-number">80</span>                                              <span class="hljs-keyword">struct</span> netlink_ext_ack *);<br>...<br> <span class="hljs-number">92</span><br> <span class="hljs-number">94</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">rules_list</span>;</span><br> ...<br><span class="hljs-number">98</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h5 id="struct-fib-rule">0.2.1.1.3. struct fib_rule</h5><p>每个rule对应一个结构体<code>struct fib_rule</code>。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">20</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">fib_rule</span> &#123;</span><br> <span class="hljs-number">21</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">list</span>;</span><br> <span class="hljs-number">22</span>         <span class="hljs-type">int</span>                     iifindex;<br>...<br> <span class="hljs-number">27</span>         u32                     table;<br> <span class="hljs-number">28</span>         u8                      action;<br><span class="hljs-number">33</span>         __be64                  tun_id;<br> <span class="hljs-number">34</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">fib_rule</span> __<span class="hljs-title">rcu</span>   *<span class="hljs-title">ctarget</span>;</span><br> <span class="hljs-number">35</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net</span>              *<span class="hljs-title">fr_net</span>;</span><br>...<br> <span class="hljs-number">47</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h4 id="初始化">0.2.1.2. 初始化</h4><p>如果是新建的 netns，会调用<code>fib_net_init &gt;&gt; ip_fib_net_init &gt;&gt; fib4_rules_init</code><br>如果是初始 netns，直接调用初始化函数 <code>fib4_rules_init</code></p>
+<h5 id="fib4-rules-init-初始化">0.2.1.2.1. fib4_rules_init: 初始化</h5><p>系统初始化时候，在<code>fib4_rules_init</code>里，通过复制模版创建一个ops，并把net信息记录到’ops’里。<br>这个新创建的’ops’又被挂到’net’下的<code>rule_ops</code>链表里. 最后这个ops被保存到’IPv4’下的<code>rules_ops</code></p>
+<p>每次更新rule规则时候，<code>struct netns_ipv4</code>里的变量<code>fib_has_custom_rules</code>被更新为true，以记录规则路由被启用了。</p>
+<figure class="highlight rust"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs rust">fib4_rules_init<br>-<span class="hljs-punctuation">-&gt;</span> <span class="hljs-title function_ invoke__">fib_rules_register</span>(&amp;fib4_rules_ops_template, net)<br>-<span class="hljs-punctuation">-&gt;</span> -<span class="hljs-punctuation">-&gt;</span> ops =  kmemdup &amp;&amp; ops<span class="hljs-punctuation">-&gt;</span>fro_net = net ;<span class="hljs-comment">//复制模版创建一个ops，并把net信息记录到ops里。</span><br>-<span class="hljs-punctuation">-&gt;</span> -<span class="hljs-punctuation">-&gt;</span> __fib_rules_register<br>-<span class="hljs-punctuation">-&gt;</span> <span class="hljs-title function_ invoke__">fib_default_rules_init</span>(ops); <span class="hljs-comment">// 依次初始化三个路由表</span><br>-<span class="hljs-punctuation">-&gt;</span> -<span class="hljs-punctuation">-&gt;</span> <span class="hljs-title function_ invoke__">fib_default_rule_add</span>(ops, <span class="hljs-number">0</span>, RT_TABLE_LOCAL);<br>-<span class="hljs-punctuation">-&gt;</span> -<span class="hljs-punctuation">-&gt;</span> <span class="hljs-title function_ invoke__">fib_default_rule_add</span>(ops, <span class="hljs-number">0x7FFE</span>, RT_TABLE_MAIN);<br>-<span class="hljs-punctuation">-&gt;</span> -<span class="hljs-punctuation">-&gt;</span> <span class="hljs-title function_ invoke__">fib_default_rule_add</span>(ops, <span class="hljs-number">0x7FFF</span>, RT_TABLE_DEFAULT);<br>-<span class="hljs-punctuation">-&gt;</span> net<span class="hljs-punctuation">-&gt;</span>ipv4.rules_ops = ops;<br>-<span class="hljs-punctuation">-&gt;</span> net<span class="hljs-punctuation">-&gt;</span>ipv4.fib_has_custom_rules = <span class="hljs-literal">false</span>;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">503</span> <span class="hljs-type">int</span> __net_init <span class="hljs-title function_">fib4_rules_init</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net *net)</span><br>504 &#123;<br>...<br><span class="hljs-number">508</span>         ops = fib_rules_register(&amp;fib4_rules_ops_template, net);<br>...<br><span class="hljs-number">512</span>         err = fib_default_rules_init(ops);<br>...<br><span class="hljs-number">515</span>         net-&gt;ipv4.rules_ops = ops;<br><span class="hljs-number">516</span>         net-&gt;ipv4.fib_has_custom_rules = <span class="hljs-literal">false</span>;<br><span class="hljs-number">517</span>         net-&gt;ipv4.fib_rules_require_fldissect = <span class="hljs-number">0</span>;<br><span class="hljs-number">518</span>         <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">487</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">fib_default_rules_init</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> fib_rules_ops *ops)</span><br>488 &#123;<br>...<br><span class="hljs-number">491</span>         err = fib_default_rule_add(ops, <span class="hljs-number">0</span>, RT_TABLE_LOCAL);<br>...<br><span class="hljs-number">494</span>         err = fib_default_rule_add(ops, <span class="hljs-number">0x7FFE</span>, RT_TABLE_MAIN);<br>...<br><span class="hljs-number">497</span>         err = fib_default_rule_add(ops, <span class="hljs-number">0x7FFF</span>, RT_TABLE_DEFAULT);<br>...<br><span class="hljs-number">500</span>         <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">501</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h5 id="fib4-rules-ops-template">0.2.1.2.2. fib4_rules_ops_template</h5><p>在系统初始化时候，注册的 IPv4 的策略路由 ops 模版，是非常重要的。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">470</span> <span class="hljs-type">static</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">fib_rules_ops</span> __<span class="hljs-title">net_initconst</span> <span class="hljs-title">fib4_rules_ops_template</span> =</span> &#123;<br><span class="hljs-number">471</span>         .family         = AF_INET,<br><span class="hljs-number">472</span>         .rule_size      = <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> fib4_rule),<br><span class="hljs-number">473</span>         .addr_size      = <span class="hljs-keyword">sizeof</span>(u32),<br><span class="hljs-number">474</span>         .action         = fib4_rule_action,<br><span class="hljs-number">475</span>         .suppress       = fib4_rule_suppress,<br><span class="hljs-number">476</span>         .match          = fib4_rule_match,<br><span class="hljs-number">477</span>         .configure      = fib4_rule_configure,<br><span class="hljs-number">478</span>         .delete         = fib4_rule_delete,<br><span class="hljs-number">479</span>         .compare        = fib4_rule_compare,<br><span class="hljs-number">480</span>         .fill           = fib4_rule_fill,<br><span class="hljs-number">481</span>         .nlmsg_payload  = fib4_rule_nlmsg_payload,<br><span class="hljs-number">482</span>         .flush_cache    = fib4_rule_flush_cache,<br><span class="hljs-number">483</span>         .nlgroup        = RTNLGRP_IPV4_RULE,<br><span class="hljs-number">484</span>         .owner          = THIS_MODULE,<br><span class="hljs-number">485</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<p>IPv4 的路由 ops 模板里包含了几个非常重要的函数指针。</p>
+<ul>
+<li><code>fib4_rule_match</code></li>
+<li><code>fib4_rule_action</code></li>
+<li><code>fib4_rule_configure</code></li>
+</ul>
+<h4 id="策略路由查找-1">0.2.1.3. 策略路由查找</h4><h5 id="函数调用">0.2.1.3.1. 函数调用</h5><p>对于策略路由的函数调用关系：</p>
+<figure class="highlight excel"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs excel">=&gt; fib_lookup<br>=&gt; =&gt; <span class="hljs-built_in">if</span> (net-&gt;ipv4.fib_has_custom_rules)<br>=&gt; =&gt; =&gt; return __fib_lookup(net, flp, res, flags);<br>=&gt; =&gt; =&gt; =&gt;  err = fib_rules_lookup(net-&gt;ipv4.rules_ops, flowi4_to_flowi(flp), <span class="hljs-number">0</span>, &amp;arg);<br>=&gt; =&gt; =&gt; =&gt; list_for_each_entry_rcu(rule, &amp;ops-&gt;rules_list, list) &#123;<br>=&gt; =&gt; =&gt; =&gt; =&gt; <span class="hljs-built_in">if</span> (!fib_rule_match(rule, ops, fl, flags, arg))<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; continue；//跳过 <span class="hljs-built_in">match</span> 不匹配的节点。<br>=&gt; =&gt; =&gt; =&gt; =&gt; err = INDIRECT_CALL_MT(ops-&gt;action,  //匹配的节点执行ops-&gt;action, 即fib4_rule_action<br>=&gt; =&gt; =&gt; =&gt; =&gt; fib4_rule_acti<span class="hljs-symbol">on:</span> 假如当前规则的action 是FR_ACT_TO_TBL<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; tb_id = fib_rule_get_table(rule, arg);<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; tbl = fib_get_table(rule-&gt;fr_net, tb_id);<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; err = fib_table_lookup(tbl, &amp;flp-&gt;u.<span class="hljs-symbol">ip4</span>,   //这个就是通用的根据一个 table 查到对应的路由。<br></code></pre></td></tr></table></figure>
+
+<h5 id="查找入口函数：fib-lookup">0.2.1.3.2. 查找入口函数：fib_lookup</h5><p>协议栈路由查找函数入口：<code>fib_lookup</code></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">374</span> <span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> <span class="hljs-type">int</span> <span class="hljs-title function_">fib_lookup</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net *net, <span class="hljs-keyword">struct</span> flowi4 *flp,</span><br><span class="hljs-params"><span class="hljs-number">375</span>                              <span class="hljs-keyword">struct</span> fib_result *res, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> flags)</span><br>376 &#123;<br>...<br><span class="hljs-number">381</span>         <span class="hljs-keyword">if</span> (net-&gt;ipv4.fib_has_custom_rules)<br><span class="hljs-number">382</span>                 <span class="hljs-keyword">return</span> __fib_lookup(net, flp, res, flags);<br>...<br><span class="hljs-number">388</span>         tb = rcu_dereference_rtnl(net-&gt;ipv4.fib_main);<br><span class="hljs-number">389</span>         <span class="hljs-keyword">if</span> (tb)<br><span class="hljs-number">390</span>                 err = fib_table_lookup(tb, flp, res, flags);<br>...<br><span class="hljs-number">395</span>         tb = rcu_dereference_rtnl(net-&gt;ipv4.fib_default);<br><span class="hljs-number">396</span>         <span class="hljs-keyword">if</span> (tb)<br><span class="hljs-number">397</span>                 err = fib_table_lookup(tb, flp, res, flags);<br><span class="hljs-number">405</span>         <span class="hljs-keyword">return</span> err;<br><span class="hljs-number">406</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<p>我们这里重点关注配置了策略路由的场景(<code>fib_has_custom_rules</code>：TRUE)。<br>TODO：支持策略路由，但是没有添加策略路由规则时候，会涉及到多路由表&#x2F;多table的场景优化。 我们放到跟不支持多路由场景一起讨论。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">83</span> <span class="hljs-type">int</span> __fib_lookup(<span class="hljs-keyword">struct</span> net *net, <span class="hljs-keyword">struct</span> flowi4 *flp,<br> <span class="hljs-number">84</span>                  <span class="hljs-keyword">struct</span> fib_result *res, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> flags)<br> <span class="hljs-number">85</span> &#123;<br>...<br> <span class="hljs-number">95</span>         err = fib_rules_lookup(net-&gt;ipv4.rules_ops, flowi4_to_flowi(flp), <span class="hljs-number">0</span>, &amp;arg);<br>...<br><span class="hljs-number">107</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h5 id="遍历策略规则：fib-rules-lookup">0.2.1.3.3. 遍历策略规则：fib_rules_lookup</h5><p>按优先级遍历策略路由规则（节点），直到 match 成功的规则，根据当前规则的 action，</p>
+<ul>
+<li>goto：跳到对应规则继续执行。</li>
+<li>FR_ACT_NOP：忽略，下一个节点</li>
+<li>其他：执行 action。即<code>fib4_rule_action</code></li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">313</span> <span class="hljs-type">int</span> <span class="hljs-title function_">fib_rules_lookup</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> fib_rules_ops *ops, <span class="hljs-keyword">struct</span> flowi *fl,</span><br><span class="hljs-params"> <span class="hljs-number">314</span>                      <span class="hljs-type">int</span> flags, <span class="hljs-keyword">struct</span> fib_lookup_arg *arg)</span><br> 315 &#123;<br>...<br> <span class="hljs-number">321</span>         list_for_each_entry_rcu(rule, &amp;ops-&gt;rules_list, <span class="hljs-built_in">list</span>) &#123;<br> <span class="hljs-number">322</span> jumped:<br> <span class="hljs-number">323</span>                 <span class="hljs-keyword">if</span> (!fib_rule_match(rule, ops, fl, flags, arg))<br> <span class="hljs-number">324</span>                         <span class="hljs-keyword">continue</span>;<br> <span class="hljs-number">325</span><br> <span class="hljs-number">326</span>                 <span class="hljs-keyword">if</span> (rule-&gt;action == FR_ACT_GOTO) &#123;<br> <span class="hljs-number">327</span>                         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">fib_rule</span> *<span class="hljs-title">target</span>;</span><br> <span class="hljs-number">328</span><br> <span class="hljs-number">329</span>                         target = rcu_dereference(rule-&gt;ctarget);<br> <span class="hljs-number">330</span>                         <span class="hljs-keyword">if</span> (target == <span class="hljs-literal">NULL</span>) &#123;<br> <span class="hljs-number">331</span>                                 <span class="hljs-keyword">continue</span>;<br> <span class="hljs-number">332</span>                         &#125; <span class="hljs-keyword">else</span> &#123;<br> <span class="hljs-number">333</span>                                 rule = target;<br> <span class="hljs-number">334</span>                                 <span class="hljs-keyword">goto</span> jumped;<br> <span class="hljs-number">335</span>                         &#125;<br> <span class="hljs-number">336</span>                 &#125; <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (rule-&gt;action == FR_ACT_NOP)<br> <span class="hljs-number">337</span>                         <span class="hljs-keyword">continue</span>;<br> <span class="hljs-number">338</span>                 <span class="hljs-keyword">else</span><br> <span class="hljs-number">339</span>                         err = INDIRECT_CALL_MT(ops-&gt;action,<br> <span class="hljs-number">340</span>                                                fib6_rule_action,<br> <span class="hljs-number">341</span>                                                fib4_rule_action,<br> <span class="hljs-number">342</span>                                                rule, fl, flags, arg);<br>...<br> <span class="hljs-number">358</span>         &#125;<br>...<br></code></pre></td></tr></table></figure>
+
+<h5 id="策略规则action：fib4-rule-action">0.2.1.3.4. 策略规则action：fib4_rule_action</h5><p>先处理一些简单 action场景：</p>
+<ul>
+<li>FR_ACT_UNREACHABLE</li>
+<li>FR_ACT_PROHIBIT</li>
+<li>FR_ACT_BLACKHOLE</li>
+</ul>
+<p>根据当前规则里定义的table id，找到对应 table，并在 table 里执行路由查找。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">110</span> INDIRECT_CALLABLE_SCOPE <span class="hljs-type">int</span> <span class="hljs-title function_">fib4_rule_action</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> fib_rule *rule,</span><br><span class="hljs-params"><span class="hljs-number">111</span>                                              <span class="hljs-keyword">struct</span> flowi *flp, <span class="hljs-type">int</span> flags,</span><br><span class="hljs-params"><span class="hljs-number">112</span>                                              <span class="hljs-keyword">struct</span> fib_lookup_arg *arg)</span><br>113 &#123;<br>...<br><span class="hljs-number">135</span>         tb_id = fib_rule_get_table(rule, arg);<br><span class="hljs-number">136</span>         tbl = fib_get_table(rule-&gt;fr_net, tb_id);<br><span class="hljs-number">137</span>         <span class="hljs-keyword">if</span> (tbl)<br><span class="hljs-number">138</span>                 err = fib_table_lookup(tbl, &amp;flp-&gt;u.ip4,<br><span class="hljs-number">139</span>                                        (<span class="hljs-keyword">struct</span> fib_result *)arg-&gt;result,<br><span class="hljs-number">140</span>                                        arg-&gt;flags);<br><span class="hljs-number">141</span><br><span class="hljs-number">142</span>         rcu_read_unlock();<br><span class="hljs-number">143</span>         <span class="hljs-keyword">return</span> err;<br><span class="hljs-number">144</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h4 id="策略路由增删">0.2.1.4. 策略路由增删</h4><h5 id="策略路由插入：fib-nl-newrule-fib-newrule">0.2.1.4.1. 策略路由插入：fib_nl_newrule&#x2F;fib_newrule</h5><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">996</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">fib_nl_newrule</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sk_buff *skb, <span class="hljs-keyword">struct</span> nlmsghdr *nlh,</span><br><span class="hljs-params"> <span class="hljs-number">997</span>                           <span class="hljs-keyword">struct</span> netlink_ext_ack *extack)</span><br> 998 &#123;<br> <span class="hljs-number">999</span>         <span class="hljs-keyword">return</span> fib_newrule(sock_net(skb-&gt;sk), skb, nlh, extack, <span class="hljs-literal">false</span>);<br><span class="hljs-number">1000</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">873</span> <span class="hljs-type">int</span> <span class="hljs-title function_">fib_newrule</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net *net, <span class="hljs-keyword">struct</span> sk_buff *skb, <span class="hljs-keyword">struct</span> nlmsghdr *nlh,</span><br><span class="hljs-params"> <span class="hljs-number">874</span>                 <span class="hljs-keyword">struct</span> netlink_ext_ack *extack, <span class="hljs-type">bool</span> rtnl_held)</span><br> 875 &#123;<br> <span class="hljs-number">889</span>         ops = lookup_rules_ops(net, frh-&gt;family);<br> <span class="hljs-number">903</span>         err = fib_nl2rule(net, nlh, extack, ops, tb, &amp;rule, &amp;user_priority);<br>...<br> <span class="hljs-number">910</span>         err = fib_nl2rule_rtnl(rule, ops, tb, extack);<br>...<br> <span class="hljs-number">920</span>         err = ops-&gt;configure(rule, skb, frh, tb, extack);<br>...<br> <span class="hljs-number">924</span>         err = call_fib_rule_notifiers(net, FIB_EVENT_RULE_ADD, rule, ops,<br> <span class="hljs-number">925</span>                                       extack);<br>...<br> <span class="hljs-number">945</span>         <span class="hljs-keyword">if</span> (last)<br> <span class="hljs-number">946</span>                 list_add_rcu(&amp;rule-&gt;<span class="hljs-built_in">list</span>, &amp;last-&gt;<span class="hljs-built_in">list</span>);<br> <span class="hljs-number">947</span>         <span class="hljs-keyword">else</span><br> <span class="hljs-number">948</span>                 list_add_rcu(&amp;rule-&gt;<span class="hljs-built_in">list</span>, &amp;ops-&gt;rules_list);<br> ...<br> <span class="hljs-number">980</span>         notify_rule_change(RTM_NEWRULE, rule, ops, nlh, NETLINK_CB(skb).portid);<br></code></pre></td></tr></table></figure>
+
+<p>重点关注下<code>ops-&gt;configure</code>, 如之前初始化里提到，等同于<code>fib4_rule_configure</code></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">920</span>         err = ops-&gt;configure(rule, skb, frh, tb, extack);<br></code></pre></td></tr></table></figure>
+
+<h5 id="策略路由删除：fib-nl-delrule-fib-delrule">0.2.1.4.2. 策略路由删除：fib_nl_delrule&#x2F;fib_delrule</h5><p>跟 insert 相对应，逻辑比较简单。</p>
+<h5 id="策略路由-dump：fib-nl-dumprule">0.2.1.4.3. 策略路由 dump：fib_nl_dumprule</h5><figure class="highlight excel"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs excel">=&gt; fib_nl_dumprule<br>=&gt; =&gt; dump_rules<br>=&gt; =&gt; =&gt; fib_nl_fill_rule<br></code></pre></td></tr></table></figure>
+
+<p>正常 netlink dump逻辑，不展开讨论。</p>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/FIB/" class="category-chain-item">FIB</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/fib/" class="print-no-link">#fib</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>linux内核多路由表与策略路由的实现</div>
+      <div>https://martinbj2008.github.io/2026/03/01/fib-how-ipv4-lookup-route-with-rule-route/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>March 1, 2026</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2026/03/01/fib-data-struct/" title="fib data struct">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">fib data struct</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2025/10/02/2025-10-02-kernel-local-route-table-management/" title="内核如何管理 local(主机)路由表">
+                        <span class="hidden-mobile">内核如何管理 local(主机)路由表</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

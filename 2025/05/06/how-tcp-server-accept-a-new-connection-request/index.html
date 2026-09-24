@@ -1,0 +1,997 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. 概要：十年演进对比0.1.1. 历史实现(v4.3)网上大部分文档这部分内容讲的比较多，简单来说，可以把半链接队列的逻辑概括如下:  收到syn报文，查找listen socket。 创建一个半链接socket(req socket)，并放入listen socket的半链接队列里，发送syn+ack报文 收到client回复的ack报文，查找到对应的半链接socket(req so">
+<meta property="og:type" content="article">
+<meta property="og:title" content="tcp三次握手 --- 逐渐消失的tcp半链接队列">
+<meta property="og:url" content="https://martinbj2008.github.io/2025/05/06/how-tcp-server-accept-a-new-connection-request/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. 概要：十年演进对比0.1.1. 历史实现(v4.3)网上大部分文档这部分内容讲的比较多，简单来说，可以把半链接队列的逻辑概括如下:  收到syn报文，查找listen socket。 创建一个半链接socket(req socket)，并放入listen socket的半链接队列里，发送syn+ack报文 收到client回复的ack报文，查找到对应的半链接socket(req so">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/sock/tcp_handshake_summary.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/sock/tcp_lockless_git_repo.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/sock/tcp_ehash_hlist.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/sock/struct_tcp_sock.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/sock/russian.jpg">
+<meta property="og:image" content="https://martinbj2008.github.io/images/sock/struct_tcp_request_sock.png">
+<meta property="article:published_time" content="2025-05-06T06:29:11.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.754Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IPv4">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/sock/tcp_handshake_summary.png">
+  
+  
+  
+  <title>tcp三次握手 --- 逐渐消失的tcp半链接队列 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="tcp三次握手 --- 逐渐消失的tcp半链接队列"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2025-05-06 14:29" pubdate>
+          May 6, 2025 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          9.9k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          83 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">tcp三次握手 --- 逐渐消失的tcp半链接队列</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <!-- toc -->
+
+<h2 id="概要：十年演进对比">0.1. 概要：十年演进对比</h2><h3 id="历史实现-v4-3">0.1.1. 历史实现(v4.3)</h3><p>网上大部分文档这部分内容讲的比较多，简单来说，可以把半链接队列的逻辑概括如下:</p>
+<ul>
+<li>收到syn报文，查找listen socket。</li>
+<li>创建一个半链接socket(req socket)，并放入listen socket的半链接队列里，发送syn+ack报文</li>
+<li>收到client回复的ack报文，查找到对应的半链接socket(req socket)</li>
+<li>基于半链接socket和ack报文创建child socket</li>
+<li>把child socket(req)加入到accept队列中，等待accept系统调用&#x2F;激活</li>
+</ul>
+<h3 id="当前实现-v6-14">0.1.2. 当前实现(v6.14)</h3><p>在v6.14内核里，三次握手的处理流程如下：</p>
+<ul>
+<li>step1：收到一个syn请求报文：查找到对应的listen socket</li>
+<li>step2：创建一个半链接socket(req socket)，记录 syn 请求的一些字段信息，如seq, mss等。</li>
+<li>step3：构造并发送syn+ack报文</li>
+<li>step4:  把半链接socket(req socket)放入全局(netns)的ehash链表中，并统计半链接socket个数。通常说的半链接队列长度。<br> + 全局：确切说是，当前netns(net namesapce)。一般默认是指当前物理机的内核协议栈。当有 docker实例（启用网络隔离）时候，全局则是指当前 docker 实例的内核协议栈。docker如何使用netsns隔离，不展开。为了理解方便，这里我们以没有docker 隔离的场景为例。<br> + ehash链表：一个hash 链表，存放有全部establish状态的socket，当然tw状态的也在这个链表里。关联度不高，不展开。<br> <em><strong>不同点 ：使用全局ehash链表，而不是 listen socket的半链接队列</strong></em></li>
+<li>step5：收到client回复的ack报文，查找到对应的半链接socket(req socket)</li>
+<li>step6：基于半链接socket 和ack报文创建child socket</li>
+<li>step7：把新创建的child socket 插入到 ehash链表中。同时把req socket从链上摘掉。</li>
+<li>step8：把req socket加入到listen socket的accept队列中，同时让req下的关联<code>socket</code>指针指向child。</li>
+<li>step9： 发送listen socket的data_ready消息给应用程序， 等待listen socket上的accept系统调用&#x2F;激活。</li>
+<li>step10： accept系统调用把req socket从accept队列上拆除。同时，封装child socket，给用户返回其对应的fd.</li>
+</ul>
+<p> <img src="/images/sock/tcp_handshake_summary.png" srcset="/img/loading.gif" lazyload alt="tcp三次握手概要图"></p>
+<h3 id="差异点">0.1.3. 差异点</h3><ul>
+<li>使用全局ehash 链表而不是listen socket 下的半链接队列, 来存放半链接(req) socket。<br>  队列只是一个习惯性的叫法，严格意义上说不合适。很早(20+年)之前，内核就已经使用hash链接替换队列存放半链接socket了。</li>
+<li>长度检查：半链接个数(队列长度)和accept队列长度的检查</li>
+<li>ack报文处理逻辑：查找半链接socket，减少锁listen socket的时长。</li>
+</ul>
+<span id="more"></span>
+
+<h3 id="对应内核patch">0.1.4. 对应内核patch</h3><p>2015年（没错十年前）内核加入了组性能优化的patch，将半链接socket(req socket)放到了一个全局的hash链表里。之前半链接socket是存放到对应listen socket下的半链接hash链表里(syn_table)。<br>这个系列的patch的主要目的是为了优化性能，但在patch里也改变了长度判断。</p>
+<p>其中 在patch里明确提到半链接socket的变化<em><strong>tcp&#x2F;dccp: install syn_recv requests into ehash table</strong></em></p>
+<figure class="highlight pgsql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs pgsql"><span class="hljs-keyword">In</span> this patch, we <span class="hljs-keyword">insert</span> request sockets <span class="hljs-keyword">into</span> TCP/DCCP regular ehash <span class="hljs-keyword">table</span> (<span class="hljs-keyword">where</span> ESTABLISHED <span class="hljs-keyword">and</span> TIMEWAIT sockets are) <span class="hljs-keyword">instead</span> <span class="hljs-keyword">of</span> <span class="hljs-keyword">using</span> the per listener hash <span class="hljs-keyword">table</span>.<br>ACK packets find SYN_RECV pseudo sockets <span class="hljs-keyword">without</span> <span class="hljs-keyword">having</span> <span class="hljs-keyword">to</span> find <span class="hljs-keyword">and</span> <span class="hljs-keyword">lock</span> the listener. <span class="hljs-keyword">In</span> nominal conditions, this halves pressure <span class="hljs-keyword">on</span> listener <span class="hljs-keyword">lock</span>. <br>Note that this will allow <span class="hljs-keyword">for</span> SO_REUSEPORT refinements, so that we can <span class="hljs-keyword">select</span> a listener <span class="hljs-keyword">using</span> cpu/numa affinities <span class="hljs-keyword">instead</span> <span class="hljs-keyword">of</span> the prior <span class="hljs-string">&#x27;consistent hash&#x27;</span>,<br>since <span class="hljs-keyword">only</span> SYN packets will apply this selection logic. We will shrink listen_sock <span class="hljs-keyword">in</span> the <span class="hljs-keyword">following</span> patch <span class="hljs-keyword">to</span> ease code review.<br></code></pre></td></tr></table></figure>
+
+<p>详见链接<br><a target="_blank" rel="noopener" href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/log/?h=v6.15-rc4&ofs=799322">内核patch：tcp lockless</a><br><img src="/images/sock/tcp_lockless_git_repo.png" srcset="/img/loading.gif" lazyload alt="tcp lockless patch 截图"></p>
+<h2 id="内核实现">0.2. 内核实现</h2><p>内核实现里，相关数据结构和函数总结如下<br><em><strong>数据结构：</strong></em></p>
+<ul>
+<li>一个 hash 链表： 全局(per ns)ehash 链表</li>
+<li>三个 socket：半链接 socket(req),  child socket，listen socket。后两个都是tcp sock</li>
+<li>每个listensocket 下：<ul>
+<li>一个 accept 队列</li>
+<li>一个半链接socket 个数统计</li>
+</ul>
+</li>
+</ul>
+<p><em><strong>关键函数：</strong></em></p>
+<ul>
+<li>tcp_v4_rcv&#x2F;tcp_v4_do_rcv:  协议栈里 tcp 报文入口函数</li>
+<li>tcp_connet_requst：SYN 报文处理核心函数</li>
+<li>tcp_v4_syn_recv_sock:  ACK报文处理核心函数</li>
+</ul>
+<h3 id="数据结构">0.2.1. 数据结构</h3><h4 id="ehash链表">0.2.1.1. ehash链表</h4><p>一个全局的 hash 链表，存放有全部establish状态的socket，当然tw状态的也在这个链表里。关联度不高，不展开。<br><img src="/images/sock/tcp_ehash_hlist.png" srcset="/img/loading.gif" lazyload alt="tcp ehash 链表"></p>
+<h4 id="tcp-sock">0.2.1.2. tcp_sock</h4><p>tcp socket 可以通过两种方式创建，</p>
+<ul>
+<li>系统调用：<code>socket(AF_INET, SOCK_STREAM, 0)</code></li>
+<li>系统调用accept：<br>系统调用返回给用户空间的fd是一个整数。每个fd在内核都对应一个结构体<code>struct tcp_sock</code>， 我们称之为 tcp socket。从 fd 到<code>tcp_sock</code>的映射比较繁琐，这里不展开介绍。</li>
+</ul>
+<h5 id="tcp-sock-结构体定义">0.2.1.2.1. tcp_sock 结构体定义</h5><p>具体内容如下图所示：<br><img src="/images/sock/struct_tcp_sock.png" srcset="/img/loading.gif" lazyload alt="tcp_sock"></p>
+<h5 id="tcp-sock的套娃式变形">0.2.1.2.2. tcp_sock的套娃式变形</h5><p><img src="/images/sock/russian.jpg" srcset="/img/loading.gif" lazyload alt="俄罗斯套娃"></p>
+<figure class="highlight gauss"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs gauss"><span class="hljs-number">194</span> <span class="hljs-keyword">struct</span> <span class="hljs-type">tcp_sock</span> &#123;<br>...<br><span class="hljs-number">200</span>         <span class="hljs-comment">/* inet_connection_sock has to be the first member of tcp_sock */</span><br><span class="hljs-number">201</span>         <span class="hljs-keyword">struct</span> <span class="hljs-type">inet_connection_sock</span>     inet_conn;<br><span class="hljs-number">202</span><br><span class="hljs-number">203</span>         <span class="hljs-comment">/* TX read-mostly hotpath cache lines */</span><br><span class="hljs-number">204</span>         <span class="hljs-built_in">__cacheline_group_begin</span>(tcp_sock_read_tx);<br></code></pre></td></tr></table></figure>
+<p>在内核协议栈这部分代码的各类socket结构体定义里，套娃模式被广泛使用。以<code>tcp_sock</code>为例， 大部分的tcp处理函数，传递参数时候并不是使用的<code>tcp_sock</code>这个类型，而是使用起下面的子类型，<code>struct sock *</code>等. 比如 tcp 协议处理的主函数 <code>tcp_v4_do_rcv</code>。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-function"><span class="hljs-type">int</span> <span class="hljs-title">tcp_v4_do_rcv</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-keyword">struct</span> sk_buff *skb)</span></span><br></code></pre></td></tr></table></figure>
+<p>  当需要读写<code>tcp_sock</code>下数据时候，才会通过宏换到<code>tcp_sock</code>.</p>
+<ul>
+<li>tcp_sk(ptr):</li>
+<li>inet_csk(ptr): 借助<code>icsk_inet.sk</code>，<code>sock</code> –&gt; <code>inet_connection_sock</code>.  </li>
+<li>req_to_sk(req)：</li>
+<li></li>
+</ul>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs dns">#define tcp_sk<span class="hljs-punctuation">(</span><span class="hljs-keyword">ptr</span><span class="hljs-punctuation">)</span> container_of_const<span class="hljs-punctuation">(</span><span class="hljs-keyword">ptr</span>, struct tcp_sock, inet_conn.icsk_inet.sk<span class="hljs-punctuation">)</span><br></code></pre></td></tr></table></figure>
+
+<h4 id="半链接-socket-req-socket">0.2.1.3. 半链接 socket(req socket)</h4><p><img src="/images/sock/struct_tcp_request_sock.png" srcset="/img/loading.gif" lazyload alt="tcp半链接socket"></p>
+<h3 id="SYN报文的处理流程">0.2.2. SYN报文的处理流程</h3><h4 id="tcp-v4-rcv调用栈">0.2.2.1. tcp_v4_rcv调用栈</h4><figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs dns">tcp_v4_rcv<span class="hljs-punctuation">(</span>struct sk_buff *skb<span class="hljs-punctuation">)</span><br> |--&gt; sk = __inet_lookup_skb<span class="hljs-punctuation">(</span>&amp;tcp_hashinfo, skb, th-&gt;source, th-&gt;dest<span class="hljs-punctuation">)</span><span class="hljs-comment">; </span><br> |--&gt; tcp_v4_do_rcv<span class="hljs-punctuation">(</span>sk, skb<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>       |--&gt; struct sock *nsk = tcp_v4_hnd_req<span class="hljs-punctuation">(</span>sk, skb<span class="hljs-punctuation">)</span><br>       |--&gt; tcp_rcv_state_process<br>             |--&gt; if <span class="hljs-punctuation">(</span>icsk-&gt;icsk_af_ops-&gt;conn_request<span class="hljs-punctuation">(</span>sk, skb<span class="hljs-punctuation">)</span> &lt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> 相当 tcp_v4_conn_request<br></code></pre></td></tr></table></figure>
+<h4 id="tcp-v4-conn-request调用栈">0.2.2.2. tcp_v4_conn_request调用栈</h4><figure class="highlight gherkin"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs gherkin">tcp_v4_conn_request<br> |<span class="hljs-string">--&gt; tcp_conn_request(&amp;tcp_request_sock_ops, &amp;tcp_request_sock_ipv4_ops, sk, skb);</span><br>       |<span class="hljs-string">--&gt; tcp_v4_conn_request(&amp;tcp_request_sock_ops, &amp;tcp_request_sock_ipv4_ops, sk, skb);</span><br>             |<span class="hljs-string">--&gt; sk_acceptq_is_full(sk)</span><br>             |<span class="hljs-string">--&gt; req = inet_reqsk_alloc(rsk_ops, sk, !want_cookie);</span><br>                   |<span class="hljs-string">--&gt; struct request_sock *req = reqsk_alloc(ops, sk_listener, attach_listener);</span><br>                   |<span class="hljs-string">--&gt; ireq-&gt;ireq_state = TCP_NEW_SYN_RECV; //ireq = inet_rsk(req); #define ireq_state req.__req_common.skc_state</span><br>             |<span class="hljs-string">--&gt; tcp_openreq_init(req, &amp;tmp_opt, skb);</span><br>             |<span class="hljs-string">--&gt; inet_csk_reqsk_queue_hash_add(sk, req, req-&gt;timeout)</span><br>                  |<span class="hljs-string">--&gt; reqsk_queue_hash_req(req, timeout)</span><br>                        |<span class="hljs-string">--&gt; inet_ehash_insert(req_to_sk(req), NULL, &amp;found_dup_sk) //将 req sock放到 establish hash链表里</span><br>                  |<span class="hljs-string">--&gt; inet_csk_reqsk_queue_added</span><br>                        |<span class="hljs-string">--&gt; reqsk_queue_added(&amp;inet_csk(sk)-&gt;icsk_accept_queue); //半链接队列，真实名字叫 accept。功能也只有计数能力了，没有队列了。</span><br>                              |<span class="hljs-string">--&gt; atomic_inc(&amp;queue-&gt;qlen);</span><br>             |<span class="hljs-string">--&gt; af_ops-&gt;send_synack  //发送synack报文</span><br></code></pre></td></tr></table></figure>
+
+<h4 id="tcp的入口函数-tcp-v4-rcv">0.2.2.3. tcp的入口函数: tcp_v4_rcv</h4><p><code>tcp_v4_rcv</code>是协议栈的处理tcp协议(ipv4)的入口函数。类似，ipv6的tcp处理函数<code>tcp_v6_rcv</code>。所有的发往本地的ipv4+tcp报文，在IP协议处理完成后，都会走到<code>tcp_v4_rcv</code> 这个入口函数里。<br>这个函数代码内容比较多，三次握手逻辑，重点关注step1 和 step3:</p>
+<ul>
+<li>step1：根据syn报文五元组，查找到对应的socket，初次 syn 报文应该是listen socket。简单起见，不考虑SYN<br>报文重传。<em><strong>与 ACK 报文不一样</strong></em></li>
+<li>step2：基本检查：按流程协议栈首先做一些基本的校验和检查，比如，报文长度，tcp checksum等。不展开跳过。</li>
+<li>step3：调用<code>tcp_v4_do_rcv</code> 处理 syn 报文。</li>
+</ul>
+<p>几点解释：</p>
+<ul>
+<li>根据 tcp 报文里的五元组信息的不同组合查找对应的 sk，如果找不到 sk，则丢弃报文。</li>
+<li>*** sk_state***  socket的状态。根据 sk 的状态<code>sk_state</code>又区分为几个场景，<ul>
+<li>tw(<code>TCP_TIME_WAIT</code>) socket : 与主题无关，略过。</li>
+<li>半链接(<code>TCP_NEW_SYN_RECV</code>) socket : 三次握手时候ACK报文场景， 后面展开。 </li>
+<li>其他(如 listen， establish）：做一些通用和统计后，调用<code>tcp_v4_do_rcv</code> 统一处理。</li>
+</ul>
+</li>
+</ul>
+<p><em><strong>备注：</strong></em></p>
+<ul>
+<li><p>如果socket 被用户空间调用临时锁住，会放到待处理队列backlog里，等释放sk锁后再处理。</p>
+</li>
+<li><p>socket 查找： 单独展开讲述。</p>
+<ul>
+<li>按五元组查找：establish、tw、半链接</li>
+<li>listensocket 的查找：对应 listen 调用时候的两种使用方式。<ul>
+<li>按 ip&#x2F;port：指定 IP+port。</li>
+<li>按port： 不指定 IP(参数里使用 any 或0），仅指定port</li>
+</ul>
+</li>
+</ul>
+<p>  【备注 1】通用检查包括：<br>      + xfrm4_policy_check：vpn相关的场景。当前 socket有ipsec规则和sa配置的场景，或者支持xfrm 卸载场景等。<br>      + tcp_inbound_hash：MD5类检查， 具体没展开看。<br>      + tcp_filter: 运行附着在 socket 上的 ebfp程序，做 socket 过滤。<br>      + tcp_segs_in：统计socket 收到的 tso 报文个数。</p>
+</li>
+</ul>
+<h4 id="tcp-v4-do-rcv">0.2.2.4. tcp_v4_do_rcv</h4><p>先处理<code>TCP_ESTABLISHED</code>和<code>TCP_LISTEN</code>两类状态下的 tcp socket， 其他状态的 socket会被<code>tcp_rcv_state_process</code>处理。</p>
+<ul>
+<li>TCP_ESTABLISHED：tcp_rcv_established处理数据报文，超时、乱序等。不展开</li>
+<li>TCP_LISTEN： <code>tcp_v4_cookie_check</code> 和<code>tcp_child_process</code>。对应场景是，启用了 cookie下的 ack报文，这时候没有半链接 socket，所以会走到listen socket场景下处理。并产生一个 child socket。关联低，不展开。 我们这个场景下，SYN 报文不会进入这个逻辑。这里代码比较绕，<br><em><strong>小心掉坑</strong></em>。 cookie检查只针对非 SYN 报文，所以 SYN 报文在<code>tcp_v4_cookie_check</code>返回的还是原来的 listen socket。只有返回的 socket 不是 listen socket 的 场景才会调用<code>tcp_child_process</code>。</li>
+</ul>
+<h5 id="tcp-rcv-state-process">0.2.2.4.1. tcp_rcv_state_process</h5><p>这个函数，根据报文对应socket 的状态走不同分支。场景非常多，不逐一展开。 SYN 报文对应listen socket，因此走TCP_LISTEN分支。调用</p>
+<figure class="highlight xl"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs xl"><span class="hljs-function"><span class="hljs-title">icsk</span>-&gt;</span><span class="hljs-function"><span class="hljs-title">icsk_af_ops</span>-&gt;</span>conn_request(sk, skb);<br></code></pre></td></tr></table></figure>
+<p>这里等同于调用<code>tcp_v4_conn_request(sk, skb)</code>。</p>
+<h4 id="核心函数-tcp-v4-conn-request-tcp-conn-request">0.2.2.5. 核心函数: tcp_v4_conn_request &amp; tcp_conn_request</h4><p>tcp_v4_conn_request<code>&amp;</code>tcp_conn_request&#96; 是SYN报文处理的核心， 我们按代码顺序讲解</p>
+<ul>
+<li>step1：半链接和accpet 队列长度检查，这部分确保队列不溢出。 后面展开讲。</li>
+<li>step2：创建一个类型为<code>struct request_sock</code>的半链接 socket <code>req</code>, 并设置状态为***<code>TCP_NEW_SYN_RECV</code>***</li>
+<li>step3：初始化半链接 socket <code>req</code>。 包括 SYN 报文里携带的信息，如seq(client侧)、tcp mss、时间戳、win scale等。</li>
+<li>step4： 初始化<code>req</code>的路由。根据五元组、网口等信息，查找路由并缓存，为后续SYN_ACK准备。</li>
+<li>step5：<code>req</code>的其他初始化。如时间戳、seq、tos、window大小、record_syn等。关联度低，跳过。</li>
+<li>step6：****【核心】*** 把<code>req</code>插入到 ehash 队列里，并且把统计个数+1。对应实现函数<code>inet_csk_reqsk_queue_hash_add</code></li>
+<li>step7： 发送 SYN_ACK报文。<code>af_ops-&gt;send_synack</code>, 关联度低，跳过。</li>
+</ul>
+<p><em><strong>备注</strong></em></p>
+<ul>
+<li>fastopen场景：代码里会考虑对 fastopen 场景的支持，因为关联度低，简单起见，解释代码时跳过这部分逻辑。</li>
+</ul>
+<h4 id="inet-csk-reqsk-queue-hash-add">0.2.2.6. inet_csk_reqsk_queue_hash_add</h4><p>两个核心功能</p>
+<ul>
+<li><code>reqsk_queue_hash_req</code>: 插入 ehash 队列<ul>
+<li><code>inet_ehash_insert</code> </li>
+<li>更新半链接的定时器及引用计数</li>
+</ul>
+</li>
+<li><code>inet_csk_reqsk_queue_added</code>: 统计数增加。</li>
+</ul>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs dns">|--&gt; reqsk_queue_added<span class="hljs-punctuation">(</span>&amp;inet_csk<span class="hljs-punctuation">(</span>sk<span class="hljs-punctuation">)</span>-&gt;icsk_accept_queue<span class="hljs-punctuation">)</span><span class="hljs-comment">; </span><br>      |--&gt; atomic_inc<span class="hljs-punctuation">(</span>&amp;queue-&gt;qlen<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+<p><em><strong>备注</strong></em> </p>
+<ul>
+<li><code>reqsk_queue_added</code>: 函数名字还保留半链接队列，真正操作的其实是accept队列结构体里的字段。功能也保留统计计数的能力，没有队列了。</li>
+<li>此处要回顾下accept队列在 listensocket 中的位置。</li>
+</ul>
+<h3 id="ACK握手报文的处理流程">0.2.3. ACK握手报文的处理流程</h3><h4 id="tcp-v4-rcv调用栈-1">0.2.3.1. tcp_v4_rcv调用栈</h4><figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs dns">tcp_v4_rcv<span class="hljs-punctuation">(</span>struct sk_buff *skb<span class="hljs-punctuation">)</span><br> |--&gt; sk = __inet_lookup_skb<span class="hljs-punctuation">(</span>&amp;tcp_hashinfo, skb, th-&gt;source, th-&gt;dest<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br> |--&gt; if <span class="hljs-punctuation">(</span>sk-&gt;sk_state == TCP_NEW_SYN_RECV<span class="hljs-punctuation">)</span> //SYN报文创建req时设置的<br>       |--&gt; nsk = tcp_check_req<span class="hljs-punctuation">(</span>sk, skb, req, false, &amp;req_stolen<span class="hljs-punctuation">)</span><span class="hljs-comment">;  //前置条件：通过tcp_filter</span><br>             |--&gt; child = inet_csk<span class="hljs-punctuation">(</span>sk<span class="hljs-punctuation">)</span>-&gt;icsk_af_ops-&gt;syn_recv_sock<span class="hljs-punctuation">(</span>sk, skb, req, NULL<span class="hljs-punctuation">)</span><span class="hljs-comment">; //tcpv4对应函数tcp_v4_syn_recv_sock</span><br>             |--&gt; inet_csk_complete_hashdance<span class="hljs-punctuation">(</span>sk, child, req, own_req<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>       |--&gt; tcp_child_process<span class="hljs-punctuation">(</span>sk, nsk, skb<span class="hljs-punctuation">)</span><br>             |--&gt; tcp_rcv_state_process<span class="hljs-punctuation">(</span>child, skb, tcp_hdr<span class="hljs-punctuation">(</span>skb<span class="hljs-punctuation">)</span>,<br>                   |--&gt; tcp_set_state<span class="hljs-punctuation">(</span>sk, TCP_ESTABLISHED<span class="hljs-punctuation">)</span><span class="hljs-comment">; </span><br>             |--&gt; parent-&gt;sk_data_ready<span class="hljs-punctuation">(</span>parent<span class="hljs-punctuation">)</span><span class="hljs-comment">;//唤醒accept等待进程</span><br></code></pre></td></tr></table></figure>
+<h4 id="tcp-v4-syn-recv-sock调用栈">0.2.3.2. tcp_v4_syn_recv_sock调用栈</h4><figure class="highlight gherkin"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs gherkin">tcp_v4_syn_recv_sock<br>  |<span class="hljs-string">--&gt; sk_acceptq_is_full //检查accept队列长度，如果满了，则丢弃。</span><br>        |<span class="hljs-string">--&gt; sk-&gt;sk_ack_backlog &gt; sk-&gt;sk_max_ack_backlog ;</span><br>  |<span class="hljs-string">--&gt; newsk = tcp_create_openreq_child(sk, req, skb); //newsk是新创建的child socket。</span><br>        |<span class="hljs-string">--&gt; newsk = inet_csk_clone_lock(sk, req, GFP_ATOMIC); //复制一个socket并加锁</span><br>        |<span class="hljs-string">--&gt; __TCP_INC_STATS(sock_net(sk), TCP_MIB_PASSIVEOPENS); </span><br>  |<span class="hljs-string">--&gt; __inet_inherit_port</span><br>  |<span class="hljs-string">--&gt; inet_ehash_nolisten(newsk, req_to_sk(req_unhash), &amp;found_dup_sk)</span><br>        |<span class="hljs-string">--&gt; inet_ehash_insert(sk, osk, found_dup_sk);//在ehash表里，插入新的child socket， 并删去原有req sock</span><br>              |<span class="hljs-string">--&gt; sk_nulls_del_node_init_rcu(osk);  //将req从ehash链里摘除</span><br>              |<span class="hljs-string">--&gt; __sk_nulls_add_node_rcu(sk, list); //将child socket插入到ehash链里</span><br></code></pre></td></tr></table></figure>
+
+<h4 id="函数tcp-v4-rcv处理握手ACK">0.2.3.3. 函数tcp_v4_rcv处理握手ACK</h4><p>与 SYN 报文一样，ACK报文进入首先进入tcp协议栈入口函数<code>tcp_v4_rcv</code>。针对 ack 报文的主要处理步骤</p>
+<ul>
+<li>step1：根据ACK 报文五元组，查找到ehash 链表里的半链接 socket(req socket）。<br>  这部分跟之前逻辑变化比较大。4.3 以前的内核，比如3.10，内核协议栈根据ACK 报文先找到 listen socket，然后在listen socket 下的半链接队列里。<br>  而现在代码，req socket 被放到 ehash 链表中，所以直接查找到 req socket，而不需要像以前一样需要对 listen socket 进行加锁等操作。<br>  为了跟以前 req socket 的状态<code>TCP_SYN_RECV</code>进行区别，协议栈还特意为ehash里的req socket增加了一个新的 tcp状态编码<code>TCP_NEW_SYN_RECV</code>.</li>
+<li>step2:  进入<code>TCP_NEW_SYN_RECV</code>处理分支半链接 socket。</li>
+<li>step3： 调用tcp_check_req，创建一个child socket。把child socket插入到ehash链表，把req从 ehash 链表删除，放入accept 队列。后面在函数<code>tcp_v4_syn_recv_sock</code>里详述。</li>
+<li>step4：处理 child socket 状态转换，并激活在 listen socket 等待队列上等待的 accept调用进程。</li>
+</ul>
+<h4 id="核心函数tcp-v4-syn-recv-sock">0.2.3.4. 核心函数tcp_v4_syn_recv_sock</h4><p>握手ACK报文的核心处理函数是<code>tcp_v4_syn_recv_sock</code>，其主要处理步骤有三步：</p>
+<ul>
+<li>accept 队列检查it：确保队列没有溢出。具体判断条件，后续专门展开解释。</li>
+<li>创建 child socket：</li>
+<li>调整 req、child socket：<br>  在ehash表里，插入新的child socket， 并删去原有req socket。<br>  通过 req socket 下的 socket 指针指向 child，确保将来 accept时候，根据req 找到 child。<br>  把 req socket 挂载到 accept 队列尾部，等待 accept 系统调用。</li>
+</ul>
+<p>至此，其实针对 tcp 报文来说，child socket 已经建立完成了，并处于established状态，<br>所以即使没有accept，发往child socket的数据也不会丢失。</p>
+<p>放在 accept 队列里的其实是半链接 req socket。</p>
+<h4 id="查找skb的socket：-inet-lookup-skb">0.2.3.5. 查找skb的socket：__inet_lookup_skb</h4><p>当 tcp 协议栈收到一个报文时候，首先就要做的一件事就就是查找这个 skb 报文对应的 socket。<br>这个功能是在<code>__inet_lookup_skb</code>里实现的。这个查找是有两类查找组成。</p>
+<ul>
+<li>step1： 在ehash链表里查。查找的KEY是五元组。<br>  尽管这个名字叫 ehash，但是存放的 socket 不仅有established状态的，<br>  还有 Timewait状态的socket,<br>  还有我们刚讨论的<code>TCP_NEW_SYN_RECV</code>状态的半链接req socket。</li>
+<li>step2： 如果没有ehash 里没有找到，继续在listen socket 里查找。这里我们回忆下bind调用时的两种bind形式<ul>
+<li>绑定到指定IP+port：查找时候KEY是IP+PORT。</li>
+<li>绑定到指定port, IP任意：查找时候KEY是PORT。IP是0.</li>
+</ul>
+</li>
+</ul>
+<p>解释：<br>inet_ehash_insert 对 req 和 child 的区别， 一个只增加， 一个要删除旧的再加新的</p>
+<h3 id="accpet队列和半链接个数溢出的新标准">0.2.4. accpet队列和半链接个数溢出的新标准</h3><p> <a href="/2025/04/03/2025-04-03-req-queue-length-check/">tcp 队列长度检查</a></p>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/TCP/" class="category-chain-item">TCP</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/IPv4/" class="print-no-link">#IPv4</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>tcp三次握手 --- 逐渐消失的tcp半链接队列</div>
+      <div>https://martinbj2008.github.io/2025/05/06/how-tcp-server-accept-a-new-connection-request/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>May 6, 2025</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2025/05/07/tcp-paws-check/" title="PAWS 在tcp协议栈中的实现">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">PAWS 在tcp协议栈中的实现</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2025/05/05/tcp-req-queue-length-check/" title="创建req scoket时的三个长度检查">
+                        <span class="hidden-mobile">创建req scoket时的三个长度检查</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

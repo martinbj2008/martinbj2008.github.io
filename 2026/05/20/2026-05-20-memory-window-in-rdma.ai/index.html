@@ -1,0 +1,920 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="MR Window（Memory Window，MW，内存窗口） 是 RDMA 里绑定在 MR 上的、可动态授权&#x2F;回收的细粒度访问控制对象，用来解决”大 MR、多租户、动态权限”问题。可以理解成：MR 是整片内存，MW 是从 MR 里切出来的、能单独控制权限的小窗口。 0.1. 一、MR 与 MW 的关系0.1.1. MR（Memory Region，内存区域） 把一段内存注册给 RNI">
+<meta property="og:type" content="article">
+<meta property="og:title" content="RDMA学习2：memory window in rdma">
+<meta property="og:url" content="https://martinbj2008.github.io/2026/05/20/2026-05-20-memory-window-in-rdma.ai/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="MR Window（Memory Window，MW，内存窗口） 是 RDMA 里绑定在 MR 上的、可动态授权&#x2F;回收的细粒度访问控制对象，用来解决”大 MR、多租户、动态权限”问题。可以理解成：MR 是整片内存，MW 是从 MR 里切出来的、能单独控制权限的小窗口。 0.1. 一、MR 与 MW 的关系0.1.1. MR（Memory Region，内存区域） 把一段内存注册给 RNI">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-05-20T07:34:15.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.752Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="ai">
+<meta property="article:tag" content="rdma">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>RDMA学习2：memory window in rdma - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="RDMA学习2：memory window in rdma"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2026-05-20 15:34" pubdate>
+          May 20, 2026 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          3.4k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          29 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">RDMA学习2：memory window in rdma</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <p><strong>MR Window（Memory Window，MW，内存窗口）</strong> 是 RDMA 里<strong>绑定在 MR 上的、可动态授权&#x2F;回收的细粒度访问控制对象</strong>，用来解决”大 MR、多租户、动态权限”问题。可以理解成：<strong>MR 是整片内存，MW 是从 MR 里切出来的、能单独控制权限的小窗口</strong>。</p>
+<h2 id="一、MR-与-MW-的关系">0.1. 一、MR 与 MW 的关系</h2><h3 id="MR（Memory-Region，内存区域）">0.1.1. MR（Memory Region，内存区域）</h3><ul>
+<li>把一段内存注册给 RNIC（远程直接内存访问网卡），<strong>pin 住内存、禁止换页</strong>，由硬件维护内存地址映射关系。</li>
+<li>一个 MR 对应一套固定权限（本地访问、远程读、远程写、原子操作等），以及一个唯一的 <strong>rkey（远程访问凭证）</strong>。</li>
+<li>核心问题：MR 粒度较粗，rkey 固定不变，若需修改访问权限，必须重新注册 MR，操作开销较大。</li>
+</ul>
+<h3 id="MW（Memory-Window，内存窗口）">0.1.2. MW（Memory Window，内存窗口）</h3><ul>
+<li><strong>必须绑定到一个已存在的 MR</strong>，本质是 MR 的<strong>子集</strong>，包含指定的地址区间和独立的访问权限。</li>
+<li>一个 MR 可以绑定<strong>多个 MW</strong>，每个 MW 拥有自己独立的起始地址、内存长度、访问权限和 rkey。</li>
+<li>核心价值：无需重新注册 MR，即可实现<strong>权限动态调整、rkey 动态作废</strong>，大幅降低操作开销。</li>
+</ul>
+<h2 id="二、MW-的两种类型（IB-规范定义，MLX-适配说明）">0.2. 二、MW 的两种类型（IB 规范定义，MLX 适配说明）</h2><h3 id="1-Type-1-MW（传统类型，硬件管理-rkey）">0.2.1. 1. Type 1 MW（传统类型，硬件管理 rkey）</h3><ul>
+<li>绑定方式：通过 <code>ibv_bind_mw</code> 接口，将 MW 绑定到指定的 MR 和 QP（队列对），<strong>rkey 由硬件或驱动自动分配</strong>。</li>
+<li>生命周期：与绑定的 QP 绑定，QP 销毁时，MW 自动失效；<strong>无法单独使 rkey 作废</strong>。</li>
+<li>适用场景：访问场景固定、QP 生命周期较长、权限变更频率低的场景。</li>
+<li>MLX 说明：MLX 官方不主推该类型，性能和灵活性不如 Type2，生产环境建议优先使用 Type2 MW。</li>
+</ul>
+<h3 id="2-Type-2-MW（动态类型，用户控制-rkey，MLX-推荐）">0.2.2. 2. Type 2 MW（动态类型，用户控制 rkey，MLX 推荐）</h3><ul>
+<li>绑定方式：MLX 标准用法为直接构造 BIND_MW WR（无 <code>ibv_bind_mw</code> 封装函数），绑定到 MR，<strong>rkey 可由用户自定义指定</strong>（如随机生成，提升安全性）。</li>
+<li>生命周期：<strong>可通过构造 INVALIDATE_MW WR 单独作废 rkey</strong>，不影响绑定的 MR 和 QP；作废后可重新绑定新的权限和 rkey。</li>
+<li>适用场景：多租户场景、动态授权需求、临时访问场景、权限频繁变更的场景（如分布式内存池、分布式存储），MLX ConnectX 系列硬件原生优化适配。</li>
+</ul>
+ <span id="more"></span>
+
+<h2 id="三、MW-的核心作用（为什么需要使用-MW）">0.3. 三、MW 的核心作用（为什么需要使用 MW）</h2><ol>
+<li><strong>细粒度权限隔离</strong>：同一 MR 内存区域内，不同 MW 可分配给不同远端节点，设置不同访问权限（如节点 A 只读、节点 B 读写、节点 C 可执行原子操作），实现精准权限控制。</li>
+<li><strong>动态安全控制</strong>：可随时作废某个 MW 的 rkey（Type2 可通过 INVALIDATE_MW WR），<strong>立即回收远端节点的访问权限</strong>，无需修改 MR 本身，响应速度快、安全性高。</li>
+<li><strong>减少 MR 注册开销</strong>：对于大容量内存，只需注册一次 MR（完成内存 pin 住、地址映射），后续通过切分多个 MW 分配给不同用户&#x2F;节点，避免频繁执行 MR 注册&#x2F;注销操作（减少 pin&#x2F;unpin 内存的开销）。</li>
+<li><strong>地址空间复用</strong>：MR 的地址范围固定，MW 可在 MR 内<strong>动态调整起始偏移、内存长度</strong>，灵活适配不同远端节点的访问需求，提升内存利用率。</li>
+</ol>
+<h2 id="四、Type2-MW-标准使用流程（MLX-推荐，固定-7-步）">0.4. 四、Type2 MW 标准使用流程（MLX 推荐，固定 7 步）</h2><ol>
+<li><p><strong>基础环境初始化</strong>：依次执行「打开 IB 设备 → 分配 PD（保护域） → 创建 CQ（完成队列） → 创建 QP（队列对）」，QP 需配置为 RC 类型（可靠连接），确保 Send&#x2F;Recv 队列、CQ 正常关联，为后续 MW 操作提供基础环境。</p>
+</li>
+<li><p><strong>内存注册（一次性操作，可复用）</strong>：先通过对齐分配（如 <code>aligned_alloc</code>）申请物理内存（需满足页对齐），再调用 <code>ibv_reg_mr</code> 接口注册 MR，注册时需指定 MR 的访问权限（至少包含本地写、远程读&#x2F;写，适配 MW 后续授权需求），注册后获得 MR 的 lkey、rkey 及内存地址信息。</p>
+</li>
+<li><p><strong>分配 Type2 MW 对象</strong>：调用 <code>ibv_alloc_mw(pd, IBV_MW_TYPE_2)</code>，传入 PD 和 Type2 类型标识，分配 MW 对象。注意：MW 必须关联 PD，且 Type2 为 MLX ConnectX 系列硬件最优支持类型，不可误设为 Type1。</p>
+</li>
+<li><p><strong>构造 BIND_MW WR（核心步骤）</strong>：</p>
+<ul>
+<li>绑定所属 MR：将步骤 2 注册的 MR 对象关联到 MW，确保 MW 在 MR 的地址范围内划分。</li>
+<li>指定 MR 内偏移：设置 MW 在 MR 中的起始地址偏移（需为页对齐，避免地址越界），明确 MW 的起始位置。</li>
+<li>指定窗口长度：定义 MW 占用的内存大小（需为页对齐），长度不可超过 MR 剩余未分配的内存空间。</li>
+<li>设置远程访问权限：根据业务需求配置（如 <code>IBV_ACCESS_REMOTE_READ</code>、<code>IBV_ACCESS_REMOTE_WRITE</code>），权限需与 MR 注册时的权限兼容（不可超出 MR 的总权限）。</li>
+<li>填入自定义 rkey：用户自行生成唯一 rkey（如随机值），作为远端访问该 MW 的凭证，这是 Type2 MW 的核心特性，便于权限管控和多租户隔离。</li>
+</ul>
+</li>
+<li><p><strong>下发 WR 完成 MW 绑定</strong>：调用 <code>ibv_post_send(qp, &amp;wr, &amp;bad_wr)</code>，将构造好的 BIND_MW WR 下发到 QP 的发送队列（SQ），待 CQ 收到完成通知后，MW 绑定生效，远端可通过自定义 rkey 访问该 MW。</p>
+</li>
+<li><p><strong>远端 RDMA 访问</strong>：远端节点获取「MR 虚拟地址 + MW 偏移」「MW 自定义 rkey」后，构造 RDMA Read&#x2F;Write WR，下发后即可访问 MW 对应的内存区域，硬件会自动校验 rkey 有效性、地址范围和访问权限（三层校验：MR 地址范围、MW 地址范围、rkey 有效性）。</p>
+</li>
+<li><p><strong>权限回收与资源释放（动态可控）</strong>：</p>
+<ul>
+<li>回收权限：构造 <code>IBV_WR_INVALIDATE_MW</code> 类型 WR，指定需作废的 rkey，通过 <code>ibv_post_send</code> 下发，rkey 立即失效，远端再使用该 rkey 发起访问会直接报错，无需修改 MR 或其他 MW。</li>
+<li>解绑与销毁：调用 <code>ibv_dealloc_mw</code> 接口，释放 MW 对象资源，绑定的 MR 不受影响，可继续用于绑定其他 MW。</li>
+</ul>
+</li>
+</ol>
+<h2 id="五、关键接口-Opcode（MLX-标准，必记）">0.5. 五、关键接口&#x2F;Opcode（MLX 标准，必记）</h2><table>
+<thead>
+<tr>
+<th>接口 &#x2F; Opcode</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ibv_alloc_mw(pd, IBV_MW_TYPE_2)</code></td>
+<td>核心接口，用于创建 Type2 MW 对象，依赖 PD，分配失败返回 NULL。</td>
+</tr>
+<tr>
+<td><code>IBV_WR_BIND_MW</code>（WR opcode）</td>
+<td>无封装库函数，需手动构造 WR 结构体，指定 MR、MW、偏移、长度、权限和自定义 rkey（MLX 标准用法）。</td>
+</tr>
+<tr>
+<td><code>IBV_WR_INVALIDATE_MW</code>（WR opcode）</td>
+<td>构造该类型 WR，传入需作废的 rkey，下发后立即回收权限，操作轻量无额外开销。</td>
+</tr>
+<tr>
+<td><code>ibv_post_send(qp, &amp;wr, &amp;bad_wr)</code></td>
+<td>用于下发 BIND_MW、INVALIDATE_MW 等 WR，需传入 QP、WR 结构体和错误 WR 指针，返回 0 表示下发成功。</td>
+</tr>
+<tr>
+<td><code>ibv_reg_mr(pd, buf, len, perm)</code></td>
+<td>注册物理内存为 MR，为 MW 提供基础内存空间。</td>
+</tr>
+<tr>
+<td><code>ibv_dealloc_mw(mw)</code></td>
+<td>释放 MW 资源，不影响关联的 MR。</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>注意</strong>：全程不使用 <code>ibv_bind_mw</code> 函数（MLX 官方不主推，该函数仅适配 Type1 MW，且性能和灵活性不如直接构造 WR，生产环境不建议使用）。</p>
+</blockquote>
+<h2 id="六、使用约束（MLX-硬件适配，必遵守）">0.6. 六、使用约束（MLX 硬件适配，必遵守）</h2><ul>
+<li><strong>依赖约束</strong>：MW 不能独立存在，必须依附于某个已注册且未注销的 MR，MR 注销后，其关联的所有 MW 会自动失效。</li>
+<li><strong>数量约束</strong>：一个 MR 可划分多个 MW，多个 MW 可共享同一 MR 的内存空间，但各 MW 的地址区间不可重叠（避免访问冲突）。</li>
+<li><strong>地址约束</strong>：MW 的地址区间（MR 起始地址 + MW 偏移）必须完全在所属 MR 的地址范围内，不可越界，否则下发 BIND_MW WR 会失败。</li>
+<li><strong>权限约束</strong>：MW 的远程访问权限不可超出其所属 MR 的注册权限，否则硬件校验会失败，远端无法访问。</li>
+<li><strong>作废约束</strong>：<code>IBV_WR_INVALIDATE_MW</code> 仅作废当前 MW 的 rkey，不影响原 MR 的正常使用，也不影响该 MR 关联的其他 MW，权限回收精准可控。</li>
+<li><strong>修改约束</strong>：如需调整 MW 的偏移、长度或访问权限，无需重注册 MR，只需重新构造 BIND_MW WR（传入新参数）并下发，即可覆盖原有配置。</li>
+<li><strong>内存对齐约束</strong>：MW 的偏移和长度需满足页对齐要求，否则会导致绑定失败或硬件访问异常（适配 MLX 硬件要求）。</li>
+</ul>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/AI/" class="category-chain-item">AI</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/rdma/" class="print-no-link">#rdma</a>
+      
+        <a href="/tags/ai/" class="print-no-link">#ai</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>RDMA学习2：memory window in rdma</div>
+      <div>https://martinbj2008.github.io/2026/05/20/2026-05-20-memory-window-in-rdma.ai/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>May 20, 2026</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2026/06/26/2026-06-26-as100-ibgp-ospf-notes.ai/" title="EBGP：跨AZ的路由学习心得">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">EBGP：跨AZ的路由学习心得</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2026/05/17/2026-05-17-gid-in-rdma.ai/" title="rmda学习1：深入理解GID">
+                        <span class="hidden-mobile">rmda学习1：深入理解GID</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

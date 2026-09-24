@@ -1,0 +1,911 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.0.0.1. operstate的小插曲2006年内核引入operstate特性，在当时协议栈的维护者中也是颇有争议的！！！引入operstat特性的patch  0.1. 标志位IFF_UP0.1.1. 设置&#x2F;清除标志位IFF_UPip link set eth0 up:  每个eth口在内核里有对应的struct net_device。 每个netdev设备里有一个上的fla">
+<meta property="og:type" content="article">
+<meta property="og:title" content="网口状态标志位解析part2: 内核如何维护网卡carrier的状态">
+<meta property="og:url" content="https://martinbj2008.github.io/2025/05/03/netdev-state-flags-part2/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.0.0.1. operstate的小插曲2006年内核引入operstate特性，在当时协议栈的维护者中也是颇有争议的！！！引入operstat特性的patch  0.1. 标志位IFF_UP0.1.1. 设置&#x2F;清除标志位IFF_UPip link set eth0 up:  每个eth口在内核里有对应的struct net_device。 每个netdev设备里有一个上的fla">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/operstate.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/ip_link/ioctl.cmd.png">
+<meta property="og:image" content="https://docs.kernel.org/networking/operstates.html">
+<meta property="article:published_time" content="2025-05-03T09:23:04.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.754Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="netdev">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/ip_link/operstate.png">
+  
+  
+  
+  <title>网口状态标志位解析part2: 内核如何维护网卡carrier的状态 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="网口状态标志位解析part2: 内核如何维护网卡carrier的状态"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2025-05-03 17:23" pubdate>
+          May 3, 2025 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          7.6k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          63 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">网口状态标志位解析part2: 内核如何维护网卡carrier的状态</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <!-- TOC -->
+
+<h4 id="operstate的小插曲">0.0.0.1. operstate的小插曲</h4><p>2006年内核引入<code>operstate</code>特性，在当时协议栈的维护者中也是颇有争议的！！！<br><a target="_blank" rel="noopener" href="https://web.git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=b00055aa">引入operstat特性的patch</a><br> <img src="/images/ip_link/operstate.png" srcset="/img/loading.gif" lazyload alt="图4: 2006年协议栈加入operstate 特性"></p>
+<h2 id="标志位IFF-UP">0.1. 标志位IFF_UP</h2><h3 id="设置-清除标志位IFF-UP">0.1.1. 设置&#x2F;清除标志位IFF_UP</h3><p><code>ip link set eth0 up</code>:</p>
+<ul>
+<li>每个<code>eth</code>口在内核里有对应的<code>struct net_device</code>。</li>
+<li>每个<code>netdev</code>设备里有一个上的flags用来存放标志位</li>
+<li><code>ip link set eth0 up</code> 设置 eth0口对应的<code>IFF_UP</code>标志。</li>
+<li><code>ip link set eth0 down</code>清除对应的<code>IFF_UP</code>标记。</li>
+</ul>
+<h3 id="ip-link源码实现">0.1.2. ip link源码实现</h3><p><code>ip link set eth0 up</code>命令实现：</p>
+<ul>
+<li>通过ioctol获取eth0口对应的flags，</li>
+<li>然后将<code>IFF_UP</code>标志位设置到 flags 上，</li>
+<li>再通过ioctol 命令<code>SIOCSIFFLAGS</code>下发会内核。</li>
+</ul>
+<p>具体实现在函数<code>do_set</code>和<code>do_chflags</code>中。</p>
+<ol>
+<li><code>do_set</code>：  解析命令，转换为需要设置的标志位。</li>
+</ol>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">1370</span> static int do_set<span class="hljs-punctuation">(</span>int argc, char **argv<span class="hljs-punctuation">)</span><br><span class="hljs-number">1371</span> &#123;<br>...<br><span class="hljs-number">1383</span>         while <span class="hljs-punctuation">(</span>argc &gt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> &#123;<br><span class="hljs-number">1384</span>                 if <span class="hljs-punctuation">(</span>strcmp<span class="hljs-punctuation">(</span>*argv, <span class="hljs-string">&quot;up&quot;</span><span class="hljs-punctuation">)</span> == <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> &#123;<br><span class="hljs-number">1385</span>                         mask |= IFF_UP<span class="hljs-comment">;</span><br><span class="hljs-number">1386</span>                         flags |= IFF_UP<span class="hljs-comment">;</span><br><span class="hljs-number">1387</span>                 &#125; else if <span class="hljs-punctuation">(</span>strcmp<span class="hljs-punctuation">(</span>*argv, <span class="hljs-string">&quot;down&quot;</span><span class="hljs-punctuation">)</span> == <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> &#123;<br><span class="hljs-number">1388</span>                         mask |= IFF_UP<span class="hljs-comment">;</span><br><span class="hljs-number">1389</span>                         flags &amp;= ~IFF_UP<span class="hljs-comment">;</span><br>...<br><span class="hljs-number">1536</span>         if <span class="hljs-punctuation">(</span>mask<span class="hljs-punctuation">)</span><br><span class="hljs-number">1537</span>                 return do_chflags<span class="hljs-punctuation">(</span>dev, flags, mask<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+
+<ol start="2">
+<li><code>do_chflags</code>: 借助<code>ioctl</code>函数接口，与内核交互。<ul>
+<li>首先，读取内核的网口标志位<code>netdev-&gt;flags</code>，</li>
+<li>把期望更新的标志位更新成期望值。</li>
+<li>最后，把期望的标志位状态下发回内核。</li>
+</ul>
+</li>
+</ol>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs dns">static int do_chflags<span class="hljs-punctuation">(</span>const char *dev, __u32 flags, __u32 mask<span class="hljs-punctuation">)</span><br>...<br>        err = ioctl<span class="hljs-punctuation">(</span>fd, SIOCGIFFLAGS, &amp;ifr<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>...<br>        if <span class="hljs-punctuation">(</span><span class="hljs-punctuation">(</span>ifr.ifr_flags^flags<span class="hljs-punctuation">)</span>&amp;mask<span class="hljs-punctuation">)</span> &#123;<br>                ifr.ifr_flags &amp;= ~mask<span class="hljs-comment">;</span><br>                ifr.ifr_flags |= mask&amp;flags<span class="hljs-comment">;</span><br>                err = ioctl<span class="hljs-punctuation">(</span>fd, SIOCSIFFLAGS, &amp;ifr<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>...<br></code></pre></td></tr></table></figure>
+
+<p>*** 注意: *** ioctol命令参数里，获取和设置的命令名字, 只有一个字母<code>G</code>和<code>S</code>的差别。<br><img src="/images/ip_link/ioctl.cmd.png" srcset="/img/loading.gif" lazyload></p>
+<h4 id="内核代码实现">0.1.2.1. 内核代码实现</h4><p>ioctl在内核的对应实现比较复杂, 避免歪楼，单拉一篇去介绍实现吧。</p>
+<p>内核如何维护网卡设备的RUNNING 状态</p>
+<h3 id="流程概述">0.1.3. 流程概述</h3><p>主要几个部分：</p>
+<ol>
+<li>网卡驱动有个看门狗：不同网卡驱动实现可能不太一样 ，功能负责监控网卡硬件上网线的状态， 当网线状态变换的时候，会激发内核的 carrier 处理函数。</li>
+<li>内核两个通用的处理函数：<code>netif_carrier_on</code>和<code>netif_carrier_off</code>。这个函数会<ul>
+<li>设置或者清除<code>netdev-&gt;state</code>上的<code>__LINK_STATE_NOCARRIER</code>标志位。</li>
+<li>发送事件消息给linkwatch，做后续处理.</li>
+<li>如果是网线插好了状态， 会启动一个通用的看门狗，这个看门狗是负责检测tx队列是否’HUNG’了， 如果’HUNG’了就调用网卡对应的处理函数<code>ndo_tx_timeout</code>， 做一些应急补救，比如对网卡队列复位等操作。这里的看门狗跟网卡驱动里的看门狗还不是同一个看门狗。具体差别待研究。</li>
+</ul>
+</li>
+<li>linkwath模块：linkwatch本身是个workqueue 队列，对接受到的消息按照，分为紧急和非紧急两类。紧急的决定立即处理，非紧急的则挂到一个链表里，等定时器超时后，再集中处理。所有事件处理，最终都交给<code>linkwatch_do_dev(struct net_device *dev)</code>函数进行处理。 该函数更新<code>netdev-&gt;operate</code>标志位。同时调用通用的<code>dev_activate</code>或者<code>dev_deactivate</code>对网卡做网卡队列进行处理。 我们这里重点关注跟网卡状态位有管的部分，忽略跟网卡队列的处理。<br> 这里有两个重要函数<code>rfc2863_policy</code>和<code>default_operstate</code> 后面我们重点介绍。</li>
+</ol>
+<h4 id="carrier-on-和-off-函数">0.1.3.1. carrier on 和 off 函数</h4><p><code>netif_carrier_on</code>和<code>netif_carrier_off</code>: 内核里的两个通用的处理函数，功能基本对称</p>
+<h5 id="carrier标志位">0.1.3.1.1. carrier标志位</h5><p>总结：<br>	<code>dev-&gt;state</code>下的<code>__LINK_STATE_NOCARRIER</code>是 carrier是否OK 的唯一判断标准。</p>
+<span id="more"></span>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">4390 </span>static inline bool netif_carrier_ok(const struct net_device *dev)<br><span class="hljs-symbol">4391 </span>&#123;<br><span class="hljs-symbol">4392 </span>        <span class="hljs-keyword">return</span> !test_bit(__LINK_STATE_NOCARRIER, &amp;dev-&gt;state);<br><span class="hljs-symbol">4393 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<h5 id="carrier-on函数解析">0.1.3.1.2. carrier on函数解析</h5><p>总结：<code>netif_carrier_on</code>主要依次做下面三个操作:</p>
+<ul>
+<li><code>__LINK_STATE_NOCARRIER</code>: 设置<code>netdev-&gt;state</code>上的<code>__LINK_STATE_NOCARRIER</code>标志位。这个标志位很关键，后续判断carrier 是否 OK，就看这个标志位。<br>如果是从无到有这个标志位，则执行下面两步，否则就可以 return 结束了。</li>
+<li>计数: 增加网卡设备下的<code>dev-&gt;carrier_up_count</code>的计数次数。</li>
+<li>发送事件消息给linkwatch：让他做后续处理。激发动作有两部分</li>
+<li>如果是网线插好了状态， 会启动一个网卡的看门狗，这个看门狗是负责检测tx队列是否’HUNG’了， 如果’HUNG’了就调用网卡对应的处理函数<code>ndo_tx_timeout</code>， 做一些应急补救，比如对网卡队列复位等操作。</li>
+</ul>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">581 </span>void netif_carrier_on(struct net_device *dev)<br><span class="hljs-symbol">582 </span>&#123;<br><span class="hljs-symbol">583 </span>        <span class="hljs-keyword">if</span> (test_and_clear_bit(__LINK_STATE_NOCARRIER, &amp;dev-&gt;state)) &#123;<br><span class="hljs-symbol">584 </span>                <span class="hljs-keyword">if</span> (dev-&gt;reg_state == NETREG_UNINITIALIZED)<br><span class="hljs-symbol">585 </span>                        <span class="hljs-keyword">return</span>;<br><span class="hljs-symbol">586 </span>                atomic_inc(&amp;dev-&gt;carrier_up_count);<br><span class="hljs-symbol">587 </span>                linkwatch_fire_event(dev);<br><span class="hljs-symbol">588 </span>                <span class="hljs-keyword">if</span> (netif_running(dev))<br><span class="hljs-symbol">589 </span>                        netdev_watchdog_up(dev);<br><span class="hljs-symbol">590 </span>        &#125;<br><span class="hljs-symbol">591 </span>&#125;<br><span class="hljs-symbol">592 </span>EXPORT_SYMBOL(netif_carrier_on);<br></code></pre></td></tr></table></figure>
+
+<h5 id="carrier-off函数解析">0.1.3.1.3. carrier off函数解析</h5><p>跟<code>netif_carrier_on</code>函数对称，唯一差别是不会处理看门狗的部分。</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">600 </span>void netif_carrier_off(struct net_device *dev)<br><span class="hljs-symbol">601 </span>&#123;<br><span class="hljs-symbol">602 </span>        <span class="hljs-keyword">if</span> (!test_and_set_bit(__LINK_STATE_NOCARRIER, &amp;dev-&gt;state)) &#123;<br><span class="hljs-symbol">603 </span>                <span class="hljs-keyword">if</span> (dev-&gt;reg_state == NETREG_UNINITIALIZED)<br><span class="hljs-symbol">604 </span>                        <span class="hljs-keyword">return</span>;<br><span class="hljs-symbol">605 </span>                atomic_inc(&amp;dev-&gt;carrier_down_count);<br><span class="hljs-symbol">606 </span>                linkwatch_fire_event(dev);<br><span class="hljs-symbol">607 </span>        &#125;<br><span class="hljs-symbol">608 </span>&#125;<br><span class="hljs-symbol">609 </span>EXPORT_SYMBOL(netif_carrier_off);<br></code></pre></td></tr></table></figure>
+
+<h4 id="link-watch函数">0.1.3.2. link watch函数</h4><h5 id="link-watch时间激发函数">0.1.3.2.1. link watch时间激发函数</h5><p>link watch事件在被激发后，会设置一个标志位<code>__LINK_STATE_LINKWATCH_PENDING</code><br>然后通过<code>linkwatch_add_event</code>, 把 link watch事件相关的 netdev 设备挂载到一个全局链表上。</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">291 </span>void linkwatch_fire_event(struct net_device *dev)<br><span class="hljs-symbol">292 </span>&#123;<br><span class="hljs-symbol">293 </span>        bool urgent = linkwatch_urgent_event(dev);<br><span class="hljs-number">294</span><br><span class="hljs-symbol">295 </span>        <span class="hljs-keyword">if</span> (!test_and_set_bit(__LINK_STATE_LINKWATCH_PENDING, &amp;dev-&gt;state)) &#123;<br><span class="hljs-symbol">296 </span>                linkwatch_add_event(dev);<br><span class="hljs-symbol">297 </span>        &#125; <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (!urgent)<br><span class="hljs-symbol">298 </span>                <span class="hljs-keyword">return</span>;<br><span class="hljs-number">299</span><br><span class="hljs-symbol">300 </span>        linkwatch_schedule_work(urgent);<br><span class="hljs-symbol">301 </span>&#125;<br></code></pre></td></tr></table></figure>
+<h5 id="linkwatch-add-event">0.1.3.2.2. linkwatch_add_event</h5><p>将 netdev 增加到链表中</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">124 </span>static void linkwatch_add_event(struct net_device *dev)<br><span class="hljs-symbol">125 </span>&#123;<br><span class="hljs-symbol">126 </span>        unsigned long flags;<br><span class="hljs-number">127</span><br><span class="hljs-symbol">128 </span>        spin_lock_irqsave(&amp;lweventlist_lock, flags);<br><span class="hljs-symbol">129 </span>        <span class="hljs-keyword">if</span> (list_empty(&amp;dev-&gt;link_watch_list)) &#123;<br><span class="hljs-symbol">130 </span>                list_add_tail(&amp;dev-&gt;link_watch_list, &amp;lweventlist);<br><span class="hljs-symbol">131 </span>                netdev_hold(dev, &amp;dev-&gt;linkwatch_dev_tracker, GFP_ATOMIC);<br><span class="hljs-symbol">132 </span>        &#125;<br><span class="hljs-symbol">133 </span>        spin_unlock_irqrestore(&amp;lweventlist_lock, flags);<br><span class="hljs-symbol">134 </span>&#125;<br></code></pre></td></tr></table></figure>
+<h5 id="link-watch的workqueue">0.1.3.2.3. link watch的workqueue</h5><p>link watch 的workqueue 处理函数，把dev从链表上摘下来，逐个调用<code>linkwatch_do_dev</code>处理。</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">194</span> static void __linkwatch_run_queue<span class="hljs-punctuation">(</span>int urgent_only<span class="hljs-punctuation">)</span><br><span class="hljs-number">195</span> &#123;<br>...<br><span class="hljs-number">224</span>         spin_lock_irq<span class="hljs-punctuation">(</span>&amp;lweventlist_lock<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">225</span>         list_splice_init<span class="hljs-punctuation">(</span>&amp;lweventlist, &amp;wrk<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">226</span><br><span class="hljs-number">227</span>         while <span class="hljs-punctuation">(</span>!list_empty<span class="hljs-punctuation">(</span>&amp;wrk<span class="hljs-punctuation">)</span> &amp;&amp; do_dev &gt; <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> &#123;<br><span class="hljs-number">229</span><br><span class="hljs-number">230</span>                 dev = list_first_entry<span class="hljs-punctuation">(</span>&amp;wrk, struct net_device, link_watch_list<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>...<br><span class="hljs-number">243</span>                 linkwatch_do_dev<span class="hljs-punctuation">(</span>dev<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>...<br><span class="hljs-number">246</span>         &#125;<br>...<br><span class="hljs-number">254</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h5 id="link-watch的最终处理逻辑">0.1.3.2.4. link watch的最终处理逻辑</h5><p>在<code>linkwatch_do_dev</code>里, 才执行真正的网口设备状态处理。</p>
+<ul>
+<li>清除<code>__LINK_STATE_LINKWATCH_PENDING</code>标志位，在这个标准位在事件被激发时候，被设置到netdevice上。</li>
+<li>更新 netdev设备状态<code>dev-&gt;operstate</code>: 核心函数<code>rfc2863_policy</code>，后续详解</li>
+<li>网卡状态变换通知：如果网卡是 UP 状态下， 出现 carrier 状态变换，网卡active&#x2F;deactive，，并通知响应的回调模块。</li>
+</ul>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">166</span> static void linkwatch_do_dev<span class="hljs-punctuation">(</span>struct net_device *dev<span class="hljs-punctuation">)</span><br><span class="hljs-number">167</span> &#123;<br>...<br><span class="hljs-number">177</span>         clear_bit<span class="hljs-punctuation">(</span>__LINK_STATE_LINKWATCH_PENDING, &amp;dev-&gt;state<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">178</span><br><span class="hljs-number">179</span>         rfc2863_policy<span class="hljs-punctuation">(</span>dev<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">180</span>         if <span class="hljs-punctuation">(</span>dev-&gt;flags &amp; IFF_UP<span class="hljs-punctuation">)</span> &#123;<br><span class="hljs-number">181</span>                 if <span class="hljs-punctuation">(</span>netif_carrier_ok<span class="hljs-punctuation">(</span>dev<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><br><span class="hljs-number">182</span>                         dev_activate<span class="hljs-punctuation">(</span>dev<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">183</span>                 else<br><span class="hljs-number">184</span>                         dev_deactivate<span class="hljs-punctuation">(</span>dev<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">185</span><br><span class="hljs-number">186</span>                 netdev_state_change<span class="hljs-punctuation">(</span>dev<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">187</span>         &#125;<br>...<br><span class="hljs-number">192</span> &#125;<br></code></pre></td></tr></table></figure>
+
+
+<h5 id="网卡的状态维护核心函数">0.1.3.2.5. 网卡的状态维护核心函数</h5><p>两个核心函数<code>rfc2863_policy</code>和<code>default_operstate</code></p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">74 </span>static void rfc2863_policy(struct net_device *dev)<br><span class="hljs-symbol">75 </span>&#123;<br><span class="hljs-symbol">76 </span>        unsigned <span class="hljs-keyword">int</span> operstate = default_operstate(dev);<br><span class="hljs-number">77</span><br><span class="hljs-symbol">78 </span>        <span class="hljs-keyword">if</span> (operstate == READ_ONCE(dev-&gt;operstate))<br><span class="hljs-symbol">79 </span>                <span class="hljs-keyword">return</span>;<br><span class="hljs-number">80</span><br><span class="hljs-symbol">81 </span>        switch(dev-&gt;link_mode) &#123;<br><span class="hljs-symbol">82 </span>        case IF_LINK_MODE_TESTING:<br><span class="hljs-symbol">83 </span>                <span class="hljs-keyword">if</span> (operstate == IF_OPER_UP)<br><span class="hljs-symbol">84 </span>                        operstate = IF_OPER_TESTING;<br><span class="hljs-symbol">85 </span>                break;<br><span class="hljs-number">86</span><br><span class="hljs-symbol">87 </span>        case IF_LINK_MODE_DORMANT:<br><span class="hljs-symbol">88 </span>                <span class="hljs-keyword">if</span> (operstate == IF_OPER_UP)<br><span class="hljs-symbol">89 </span>                        operstate = IF_OPER_DORMANT;<br><span class="hljs-symbol">90 </span>                break;<br><span class="hljs-symbol">91 </span>        case IF_LINK_MODE_DEFAULT:<br><span class="hljs-symbol">92 </span>        default:<br><span class="hljs-symbol">93 </span>                break;<br><span class="hljs-symbol">94 </span>        &#125;<br><span class="hljs-number">95</span><br><span class="hljs-symbol">96 </span>        WRITE_ONCE(dev-&gt;operstate, operstate);<br><span class="hljs-symbol">97 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">36 </span>static unsigned <span class="hljs-keyword">int</span> default_operstate(const struct net_device *dev)<br><span class="hljs-symbol">37 </span>&#123;<br><span class="hljs-symbol">38 </span>        <span class="hljs-keyword">if</span> (netif_testing(dev))<br><span class="hljs-symbol">39 </span>                <span class="hljs-keyword">return</span> IF_OPER_TESTING;<br><span class="hljs-number">40</span><br><span class="hljs-symbol">41 </span>        /* Some uppers (DSA) have additional sources <span class="hljs-keyword">for</span> being down, so<br><span class="hljs-symbol">42 </span>         * first check whether lower is indeed the source of its down state.<br><span class="hljs-symbol">43 </span>         */<br><span class="hljs-symbol">44 </span>        <span class="hljs-keyword">if</span> (!netif_carrier_ok(dev)) &#123;<br><span class="hljs-symbol">45 </span>                struct net_device *peer;<br><span class="hljs-symbol">46 </span>                <span class="hljs-keyword">int</span> iflink;<br><span class="hljs-number">47</span><br><span class="hljs-symbol">48 </span>                /* <span class="hljs-keyword">If</span> called from netdev_run_todo()/linkwatch_sync_dev(),<br><span class="hljs-symbol">49 </span>                 * dev_net(dev) can be already freed, <span class="hljs-keyword">and</span> RTNL is <span class="hljs-keyword">not</span> held.<br><span class="hljs-symbol">50 </span>                 */<br><span class="hljs-symbol">51 </span>                <span class="hljs-keyword">if</span> (dev-&gt;reg_state &lt;= NETREG_REGISTERED)<br><span class="hljs-symbol">52 </span>                        iflink = dev_get_iflink(dev);<br><span class="hljs-symbol">53 </span>                <span class="hljs-keyword">else</span><br><span class="hljs-symbol">54 </span>                        iflink = dev-&gt;ifindex;<br><span class="hljs-number">55</span><br><span class="hljs-symbol">56 </span>                <span class="hljs-keyword">if</span> (iflink == dev-&gt;ifindex)<br><span class="hljs-symbol">57 </span>                        <span class="hljs-keyword">return</span> IF_OPER_DOWN;<br><span class="hljs-number">58</span><br><span class="hljs-symbol">59 </span>                ASSERT_RTNL();<br><span class="hljs-symbol">60 </span>                peer = __dev_get_by_index(dev_net(dev), iflink);<br><span class="hljs-symbol">61 </span>                <span class="hljs-keyword">if</span> (!peer)<br><span class="hljs-symbol">62 </span>                        <span class="hljs-keyword">return</span> IF_OPER_DOWN;<br><span class="hljs-number">63</span><br><span class="hljs-symbol">64 </span>                <span class="hljs-keyword">return</span> netif_carrier_ok(peer) ? IF_OPER_DOWN :<br><span class="hljs-symbol">65 </span>                                                IF_OPER_LOWERLAYERDOWN;<br><span class="hljs-symbol">66 </span>        &#125;<br><span class="hljs-number">67</span><br><span class="hljs-symbol">68 </span>        <span class="hljs-keyword">if</span> (netif_dormant(dev))<br><span class="hljs-symbol">69 </span>                <span class="hljs-keyword">return</span> IF_OPER_DORMANT;<br><span class="hljs-number">70</span><br><span class="hljs-symbol">71 </span>        <span class="hljs-keyword">return</span> IF_OPER_UP;<br><span class="hljs-symbol">72 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<p>依照上面的逻辑，当 veth1 up 后， veth0 口的 operate 状态应该是<code>LOWERLAYERDOWN</code>。但是在命令显示里， 是<code>DOWN</code>。。。</p>
+<p>如果网口没有启动(RUNNING)，返回的operate状态是<em><strong>IF_OPER_DOWN</strong></em></p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">2017</span> static int rtnl_fill_ifinfo<span class="hljs-punctuation">(</span>struct sk_buff *skb,<br><span class="hljs-number">2018</span>                             struct net_device *dev, struct net *src_net,<br>...<br><span class="hljs-number">2050</span>             nla_put_u8<span class="hljs-punctuation">(</span>skb, IFLA_OPERSTATE,<br><span class="hljs-number">2051</span>                        netif_running<span class="hljs-punctuation">(</span>dev<span class="hljs-punctuation">)</span> ? READ_ONCE<span class="hljs-punctuation">(</span>dev-&gt;operstate<span class="hljs-punctuation">)</span> :<br><span class="hljs-number">2052</span>                                             IF_OPER_DOWN<span class="hljs-punctuation">)</span> ||<br><span class="hljs-number">2053</span>             nla_put_u8<span class="hljs-punctuation">(</span>skb, IFLA_LINKMODE, READ_ONCE<span class="hljs-punctuation">(</span>dev-&gt;link_mode<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> ||<br></code></pre></td></tr></table></figure>
+<h4 id="回调函数-待细看">0.1.3.3. 回调函数 (待细看)</h4><p>这部分代码要涉及到 netdev的callback链和 rtnetlin 消息通知。<br>是网卡设备状态变换后的消息通知和处理工作。</p>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1530 </span>void netdev_state_change(struct net_device *dev)<br><span class="hljs-symbol">1531 </span>&#123;<br><span class="hljs-symbol">1532 </span>        <span class="hljs-keyword">if</span> (dev-&gt;flags &amp; IFF_UP) &#123;<br><span class="hljs-symbol">1533 </span>                struct netdev_notifier_change_info change_info = &#123;<br><span class="hljs-symbol">1534 </span>                        .info.dev = dev,<br><span class="hljs-symbol">1535 </span>                &#125;;<br><span class="hljs-number">1536</span><br><span class="hljs-symbol">1537 </span>                call_netdevice_notifiers_info(NETDEV_CHANGE,<br><span class="hljs-symbol">1538 </span>                                              &amp;change_info.info);<br><span class="hljs-symbol">1539 </span>                rtmsg_ifinfo(RTM_NEWLINK, dev, <span class="hljs-number">0</span>, GFP_KERNEL, <span class="hljs-number">0</span>, NULL);<br><span class="hljs-symbol">1540 </span>        &#125;<br><span class="hljs-symbol">1541 </span>&#125;<br><span class="hljs-symbol">1542 </span>EXPORT_SYMBOL(netdev_state_change);<br></code></pre></td></tr></table></figure>
+
+<p>另：<br><img src="https://docs.kernel.org/networking/operstates.html" srcset="/img/loading.gif" lazyload alt="kernel: operate的帮助文档"></p>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Netdev/" class="category-chain-item">Netdev</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/netdev/" class="print-no-link">#netdev</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>网口状态标志位解析part2: 内核如何维护网卡carrier的状态</div>
+      <div>https://martinbj2008.github.io/2025/05/03/netdev-state-flags-part2/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>May 3, 2025</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2025/05/05/tcp-req-queue-length-check/" title="创建req scoket时的三个长度检查">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">创建req scoket时的三个长度检查</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2025/05/01/netdev-state-flags-part1/" title="网口状态标志位详解(Part 1/2)">
+                        <span class="hidden-mobile">网口状态标志位详解(Part 1/2)</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

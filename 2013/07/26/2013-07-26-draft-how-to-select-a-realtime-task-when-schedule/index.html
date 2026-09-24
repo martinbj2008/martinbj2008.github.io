@@ -1,0 +1,843 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. summaryThere is a struct rt_rq in struct rq. struct rt_rq is used to store allthe realtime task in current struct rq. which has a struct rt_prio_array active.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="draft: how to select a realtime task when schedule">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/07/26/2013-07-26-draft-how-to-select-a-realtime-task-when-schedule/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. summaryThere is a struct rt_rq in struct rq. struct rt_rq is used to store allthe realtime task in current struct rq. which has a struct rt_prio_array active.">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2013-07-26T01:00:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.748Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="sched">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>draft: how to select a realtime task when schedule - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="draft: how to select a realtime task when schedule"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2013-07-26 09:00" pubdate>
+          July 26, 2013 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          3.2k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          28 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">draft: how to select a realtime task when schedule</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="summary">0.1. summary</h2><p>There is a <code>struct rt_rq</code> in <code>struct rq</code>. <code>struct rt_rq</code> is used to store all<br>the realtime task in current <code>struct rq</code>. which has a <code>struct rt_prio_array active</code>.</p>
+<span id="more"></span>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rq</span> &#123;</span><br>	...<br>	<span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rt_rq</span> &#123;</span><br>		...<br>		<span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rt_prio_array</span> <span class="hljs-title">active</span> &#123;</span><br>			DECLARE_BITMAP(bitmap, MAX_RT_PRIO+<span class="hljs-number">1</span>); <span class="hljs-comment">/* include 1 bit for delimiter */</span><br>			<span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span> <span class="hljs-title">queue</span>[<span class="hljs-title">MAX_RT_PRIO</span>];</span><br>		&#125;<br>		...<br>	&#125;<br>	...<br>&#125;<br></code></pre></td></tr></table></figure>
+
+<p><em>for a</em> <code>rq</code>:<br>All the realtime tasks are stored by a bit map and a list array.</p>
+<ol>
+<li><p><code>DECLARE_BITMAP(bitmap, MAX_RT_PRIO+1)</code><br>This is a bit map to show if a priority level has task to be selected.<br>One bit set to 1 means one or more task(s).</p>
+</li>
+<li><p><code>struct list_head queue[MAX_RT_PRIO]</code><br>This is list array, each element is a list head.<br>All tasks are linked into different lists according their priority by<br>  <code>struct sched_rt_entity</code>‘s <code>struct list_head run_list</code>.</p>
+</li>
+</ol>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1001</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sched_rt_entity</span> &#123;</span><br><span class="hljs-number">1002</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span> <span class="hljs-title">run_list</span></span><br></code></pre></td></tr></table></figure>
+<p>   Each list has a corresponding bit in previous bitmap.</p>
+<p>When we need pick a task, we find find the first bit in the map,<br>and then select one task from the corresponding list.</p>
+<p>Q1: what is group_rt_rq? what is it used for?<br>  CONFIG_RT_GROUP_SCHED??</p>
+<h3 id="Call-Trac">0.1.1. Call Trac</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs c">&gt; pick_next_task<br>&gt; &gt; for_each_class(class) &#123;<br>        p = class-&gt;pick_next_task(rq);<br>&gt; &gt; &gt; pick_next_task_rt<br>&gt; &gt; &gt; &gt; _pick_next_task_rt<br>&gt; &gt; &gt; &gt; &gt; pick_next_rt_entity<br>&gt; &gt; &gt; &gt; &gt; &gt; sched_find_first_bit(<span class="hljs-built_in">array</span>-&gt;bitmap);<br>&gt; &gt; &gt; &gt; &gt; &gt; &gt; list_entry(<span class="hljs-built_in">queue</span>-&gt;next, <span class="hljs-keyword">struct</span> sched_rt_entity, run_list);<br></code></pre></td></tr></table></figure>
+
+<h2 id="Data-Structure">0.2. Data Structure</h2><h3 id="realtime-runqueue-struct-rt-rq">0.2.1. realtime runqueue struct rt_rq</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">332</span> <span class="hljs-comment">/* Real-Time classes&#x27; related field in a runqueue: */</span><br><span class="hljs-number">333</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rt_rq</span> &#123;</span><br><span class="hljs-number">334</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rt_prio_array</span> <span class="hljs-title">active</span>;</span><br><span class="hljs-number">335</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> rt_nr_running;<br><span class="hljs-number">336</span> <span class="hljs-meta">#<span class="hljs-keyword">if</span> defined CONFIG_SMP || defined CONFIG_RT_GROUP_SCHED</span><br><span class="hljs-number">337</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> &#123;</span><br><span class="hljs-number">338</span>                 <span class="hljs-type">int</span> curr; <span class="hljs-comment">/* highest queued rt task prio */</span><br><span class="hljs-number">339</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_SMP</span><br><span class="hljs-number">340</span>                 <span class="hljs-type">int</span> next; <span class="hljs-comment">/* next highest */</span><br><span class="hljs-number">341</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">342</span>         &#125; highest_prio;<br><span class="hljs-number">343</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">344</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_SMP</span><br><span class="hljs-number">345</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> rt_nr_migratory;<br><span class="hljs-number">346</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> rt_nr_total;<br><span class="hljs-number">347</span>         <span class="hljs-type">int</span> overloaded;<br><span class="hljs-number">348</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">plist_head</span> <span class="hljs-title">pushable_tasks</span>;</span><br><span class="hljs-number">349</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">350</span>         <span class="hljs-type">int</span> rt_throttled;<br><span class="hljs-number">351</span>         u64 rt_time;<br><span class="hljs-number">352</span>         u64 rt_runtime;<br><span class="hljs-number">353</span>         <span class="hljs-comment">/* Nests inside the rq lock: */</span><br><span class="hljs-number">354</span>         <span class="hljs-type">raw_spinlock_t</span> rt_runtime_lock;<br><span class="hljs-number">355</span> <br><span class="hljs-number">356</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_RT_GROUP_SCHED</span><br><span class="hljs-number">357</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> rt_nr_boosted;<br><span class="hljs-number">358</span> <br><span class="hljs-number">359</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rq</span> *<span class="hljs-title">rq</span>;</span><br><span class="hljs-number">360</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">task_group</span> *<span class="hljs-title">tg</span>;</span><br><span class="hljs-number">361</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">362</span> &#125;;<br><span class="hljs-number">363</span> <br></code></pre></td></tr></table></figure>
+
+<h3 id="struct-rt-prio-array">0.2.2. struct rt_prio_array</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">95</span> <span class="hljs-comment">/*</span><br><span class="hljs-comment"> 96  * This is the priority-queue data structure of the RT scheduling class:</span><br><span class="hljs-comment"> 97  */</span><br> <span class="hljs-number">98</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rt_prio_array</span> &#123;</span><br> <span class="hljs-number">99</span>         DECLARE_BITMAP(bitmap, MAX_RT_PRIO+<span class="hljs-number">1</span>); <span class="hljs-comment">/* include 1 bit for delimiter */</span><br><span class="hljs-number">100</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span> <span class="hljs-title">queue</span>[<span class="hljs-title">MAX_RT_PRIO</span>];</span><br><span class="hljs-number">101</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1001</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sched_rt_entity</span> &#123;</span><br><span class="hljs-number">1002</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span> <span class="hljs-title">run_list</span>;</span><br><span class="hljs-number">1003</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> timeout;  <br><span class="hljs-number">1004</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> watchdog_stamp;<br><span class="hljs-number">1005</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> time_slice;<br><span class="hljs-number">1006</span> <br><span class="hljs-number">1007</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sched_rt_entity</span> *<span class="hljs-title">back</span>;</span><br><span class="hljs-number">1008</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_RT_GROUP_SCHED</span><br><span class="hljs-number">1009</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sched_rt_entity</span>  *<span class="hljs-title">parent</span>;</span><br><span class="hljs-number">1010</span>         <span class="hljs-comment">/* rq on which this entity is (to be) queued: */</span><br><span class="hljs-number">1011</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rt_rq</span>            *<span class="hljs-title">rt_rq</span>;</span><br><span class="hljs-number">1012</span>         <span class="hljs-comment">/* rq &quot;owned&quot; by this entity/group: */</span><br><span class="hljs-number">1013</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">rt_rq</span>            *<span class="hljs-title">my_q</span>;</span><br><span class="hljs-number">1014</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">1015</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+
+<h3 id="pick-next-task-rt">0.2.3. pick_next_task_rt</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1323</span> <span class="hljs-type">static</span> <span class="hljs-keyword">struct</span> task_struct *<span class="hljs-title function_">pick_next_task_rt</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> rq *rq)</span><br>1324 &#123;<br><span class="hljs-number">1325</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">task_struct</span> *<span class="hljs-title">p</span> =</span> _pick_next_task_rt(rq);<br><span class="hljs-number">1326</span> <br><span class="hljs-number">1327</span>         <span class="hljs-comment">/* The running task is never eligible for pushing */</span><br><span class="hljs-number">1328</span>         <span class="hljs-keyword">if</span> (p)<br><span class="hljs-number">1329</span>                 dequeue_pushable_task(rq, p);<br><span class="hljs-number">1330</span> <br><span class="hljs-number">1331</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_SMP</span><br><span class="hljs-number">1332</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment">1333          * We detect this state here so that we can avoid taking the RQ</span><br><span class="hljs-comment">1334          * lock again later if there is no need to push</span><br><span class="hljs-comment">1335          */</span><br><span class="hljs-number">1336</span>         rq-&gt;post_schedule = has_pushable_tasks(rq);<br><span class="hljs-number">1337</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">1338</span> <br><span class="hljs-number">1339</span>         <span class="hljs-keyword">return</span> p;<br><span class="hljs-number">1340</span> &#125;<br></code></pre></td></tr></table></figure>
+
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Sched/" class="category-chain-item">Sched</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/sched/" class="print-no-link">#sched</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>draft: how to select a realtime task when schedule</div>
+      <div>https://martinbj2008.github.io/2013/07/26/2013-07-26-draft-how-to-select-a-realtime-task-when-schedule/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>July 26, 2013</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2013/08/02/2013-08-02-unregister-a-new-device/" title="unregister a net device">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">unregister a net device</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2013/07/26/2013-07-26-how-to-pick-next-task/" title="draft: how to pick next task">
+                        <span class="hidden-mobile">draft: how to pick next task</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

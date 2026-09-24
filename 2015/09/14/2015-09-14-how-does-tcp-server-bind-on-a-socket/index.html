@@ -1,0 +1,842 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="bind的port是通过tcp_hashinfo里的bhash管理的。跟tcp client的端口号管理有一样。 注：bind 系统调用时，还不会把当前的socket挂载到listen队列上，需要等待listen系统调用。bind系统调用只是把对应的这个端口給占用上了， 其他程序没发bind。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="how does tcp server bind on a socket">
+<meta property="og:url" content="https://martinbj2008.github.io/2015/09/14/2015-09-14-how-does-tcp-server-bind-on-a-socket/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="bind的port是通过tcp_hashinfo里的bhash管理的。跟tcp client的端口号管理有一样。 注：bind 系统调用时，还不会把当前的socket挂载到listen队列上，需要等待listen系统调用。bind系统调用只是把对应的这个端口給占用上了， 其他程序没发bind。">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2015-09-14T02:10:13.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.752Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IPv4">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>how does tcp server bind on a socket - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="how does tcp server bind on a socket"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2015-09-14 10:10" pubdate>
+          September 14, 2015 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          8k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          67 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">how does tcp server bind on a socket</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <p>bind的port是通过<code>tcp_hashinfo</code>里的bhash管理的。<br>跟tcp client的端口号管理有一样。</p>
+<p>注：bind 系统调用时，还不会把当前的socket挂载到listen队列上，需要等待listen系统调用。<br>bind系统调用只是把对应的这个端口給占用上了， 其他程序没发bind。</p>
+<span id="more"></span>
+
+<h5 id="call-trace">0.0.0.0.1. call trace</h5><p>case1: 如果是第一次bind，并且没有client占用这个port。<br>在<a href>inet_csk_get_port</a>遍历bhash里对应的hash链表，<br>因为首次bind，所以tb没有找到。<br>[inet_bind_bucket_create]创建tb并挂载到bhash的链表里。<br>[inet_bind_hash]将socket挂载到tb对应的ownerlist上。</p>
+<figure class="highlight elm"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs elm"><span class="hljs-title">system</span> call bind<br>  inet_bind<br>    sk-&gt;sk_prot-&gt;get_<span class="hljs-keyword">port</span> 相当于 inet_csk_get_port<br>      inet_bind_bucket_create<br>      inet_bind_hash<br></code></pre></td></tr></table></figure>
+
+<p>case 2: bind+reuseport。close socket后再次bind一个新的soket到同一个port<br>通过<code>inet_csk_bind_conflict</code>保证port之间冲突的检查。</p>
+<figure class="highlight xl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs xl">system call bind<br>  inet_bind<br>    <span class="hljs-function"><span class="hljs-title">sk</span>-&gt;</span><span class="hljs-function"><span class="hljs-title">sk_prot</span>-&gt;</span>get_port 相当于 inet_csk_get_port<br>      <span class="hljs-function"><span class="hljs-title">inet_csk</span>(sk)-&gt;</span><span class="hljs-function"><span class="hljs-title">icsk_af_ops</span>-&gt;</span>bind_conflict 相当于inet_csk_bind_conflict<br></code></pre></td></tr></table></figure>
+
+<p>case 3: 如果bind的port，之前已经有client使用了。<br>那么对应tb的<code>fastreuse</code>应该是-1,所以可以重用。<br>这个复用是有条件的，需要两个socket都设置为reuse才可以。<br>原理：<br>    每个client socket在创建时候，都会在bhash的下挂载一个port占用信息。<br>    listen socket在调用bind之前，会做检查，如果bhash下有socket占用了，<br>    则绑定失败。</p>
+<h4 id>0.0.0.1. </h4><figure class="highlight verilog"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs verilog"><span class="hljs-number">1361</span> <span class="hljs-comment">/*</span><br><span class="hljs-comment">1362  *      Bind a name to a socket. Nothing much to do here since it&#x27;s</span><br><span class="hljs-comment">1363  *      the protocol&#x27;s responsibility to handle the local address.</span><br><span class="hljs-comment">1364  *</span><br><span class="hljs-comment">1365  *      We move the socket address to kernel space before we call</span><br><span class="hljs-comment">1366  *      the protocol layer (having also checked the address is ok).</span><br><span class="hljs-comment">1367  */</span><br><span class="hljs-number">1368</span><br><span class="hljs-number">1369</span> SYSCALL_DEFINE3(<span class="hljs-keyword">bind</span>, <span class="hljs-keyword">int</span>, fd, <span class="hljs-keyword">struct</span> sockaddr __user *, umyaddr, <span class="hljs-keyword">int</span>, addrlen)<br><span class="hljs-number">1370</span> &#123;<br>...<br><span class="hljs-number">1383</span>                                 err = sock-&gt;ops-&gt;<span class="hljs-keyword">bind</span>(sock,<br><span class="hljs-number">1384</span>                                                       (<span class="hljs-keyword">struct</span> sockaddr *)<br><span class="hljs-number">1385</span>                                                       &amp;address, addrlen);<br>...<br><span class="hljs-number">1390</span> &#125;<br></code></pre></td></tr></table></figure>
+<h4 id="-1">0.0.0.2. </h4><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">901 </span>const struct proto_ops inet_stream_ops = &#123;<br><span class="hljs-symbol">902 </span>        .family            = PF_INET,<br><span class="hljs-symbol">903 </span>        .owner             = THIS_MODULE,<br><span class="hljs-symbol">904 </span>        .release           = inet_release,<br><span class="hljs-symbol">905 </span>        .bind              = inet_bind,<br></code></pre></td></tr></table></figure>
+
+<span id="inetBind">
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">423 </span><span class="hljs-keyword">int</span> inet_bind(struct socket *sock, struct sockaddr *uaddr, <span class="hljs-keyword">int</span> addr_len)<br><span class="hljs-symbol">424 </span>&#123;<br><span class="hljs-symbol">425 </span>        struct sockaddr_in *addr = (struct sockaddr_in *)uaddr;<br><span class="hljs-symbol">426 </span>        struct sock *sk = sock-&gt;sk;<br><span class="hljs-symbol">427 </span>        struct inet_sock *inet = inet_sk(sk);<br><span class="hljs-symbol">428 </span>        struct net *net = sock_net(sk);<br><span class="hljs-symbol">429 </span>        unsigned short snum;<br><span class="hljs-symbol">430 </span>        <span class="hljs-keyword">int</span> chk_addr_ret;<br><span class="hljs-symbol">431 </span>        u32 tb_id = RT_TABLE_LOCAL;<br><span class="hljs-symbol">432 </span>        <span class="hljs-keyword">int</span> <span class="hljs-keyword">err</span>;<br><span class="hljs-number">433</span><br><span class="hljs-symbol">434 </span>        /* <span class="hljs-keyword">If</span> the socket has its own bind function <span class="hljs-keyword">then</span> use it. (RAW) */<br><span class="hljs-symbol">435 </span>        <span class="hljs-keyword">if</span> (sk-&gt;sk_prot-&gt;bind) &#123;<br><span class="hljs-symbol">436 </span>                <span class="hljs-keyword">err</span> = sk-&gt;sk_prot-&gt;bind(sk, uaddr, addr_len);<br><span class="hljs-symbol">437 </span>                <span class="hljs-keyword">goto</span> <span class="hljs-keyword">out</span>;<br><span class="hljs-symbol">438 </span>        &#125;<br><span class="hljs-symbol">439 </span>        <span class="hljs-keyword">err</span> = -EINVAL;<br><span class="hljs-symbol">440 </span>        <span class="hljs-keyword">if</span> (addr_len &lt; sizeof(struct sockaddr_in))<br><span class="hljs-symbol">441 </span>                <span class="hljs-keyword">goto</span> <span class="hljs-keyword">out</span>;<br><span class="hljs-number">442</span><br><span class="hljs-symbol">443 </span>        <span class="hljs-keyword">if</span> (addr-&gt;sin_family != AF_INET) &#123;<br><span class="hljs-symbol">444 </span>                /* Compatibility games : accept AF_UNSPEC (mapped <span class="hljs-keyword">to</span> AF_INET)<br><span class="hljs-symbol">445 </span>                 * only <span class="hljs-keyword">if</span> s_addr is INADDR_ANY.<br><span class="hljs-symbol">446 </span>                 */<br><span class="hljs-symbol">447 </span>                <span class="hljs-keyword">err</span> = -EAFNOSUPPORT;<br><span class="hljs-symbol">448 </span>                <span class="hljs-keyword">if</span> (addr-&gt;sin_family != AF_UNSPEC ||<br><span class="hljs-symbol">449 </span>                    addr-&gt;sin_addr.s_addr != htonl(INADDR_ANY))<br><span class="hljs-symbol">450 </span>                        <span class="hljs-keyword">goto</span> <span class="hljs-keyword">out</span>;<br><span class="hljs-symbol">451 </span>        &#125;<br><span class="hljs-number">452</span><br><span class="hljs-symbol">453 </span>        tb_id = vrf_dev_table_ifindex(net, sk-&gt;sk_bound_dev_if) ? : tb_id;<br><span class="hljs-symbol">454 </span>        chk_addr_ret = inet_addr_type_table(net, addr-&gt;sin_addr.s_addr, tb_id);<br><span class="hljs-number">455</span><br><span class="hljs-symbol">456 </span>        /* <span class="hljs-keyword">Not</span> specified by any standard per-se, however it breaks too<br><span class="hljs-symbol">457 </span>         * many applications when <span class="hljs-comment">removed.  It is unfortunate since</span><br><span class="hljs-symbol">458 </span>         * allowing applications <span class="hljs-keyword">to</span> make a non-local bind solves<br><span class="hljs-symbol">459 </span>         * several problems with systems <span class="hljs-keyword">using</span> dynamic addressing.<br><span class="hljs-symbol">460 </span>         * (ie. your servers still start up even <span class="hljs-keyword">if</span> your ISDN link<br><span class="hljs-symbol">461 </span>         *  is temporarily down)<br><span class="hljs-symbol">462 </span>         */<br><span class="hljs-symbol">463 </span>        <span class="hljs-keyword">err</span> = -EADDRNOTAVAIL;<br><span class="hljs-symbol">464 </span>        <span class="hljs-keyword">if</span> (!net-&gt;ipv4.sysctl_ip_nonlocal_bind &amp;&amp;<br><span class="hljs-symbol">465 </span>            !(inet-&gt;freebind || inet-&gt;transparent) &amp;&amp;<br><span class="hljs-symbol">466 </span>            addr-&gt;sin_addr.s_addr != htonl(INADDR_ANY) &amp;&amp;<br><span class="hljs-symbol">467 </span>            chk_addr_ret != RTN_LOCAL &amp;&amp;<br><span class="hljs-symbol">468 </span>            chk_addr_ret != RTN_MULTICAST &amp;&amp;<br><span class="hljs-symbol">469 </span>            chk_addr_ret != RTN_BROADCAST)<br><span class="hljs-symbol">470 </span>                <span class="hljs-keyword">goto</span> <span class="hljs-keyword">out</span>;<br><span class="hljs-number">471</span><br><span class="hljs-symbol">472 </span>        snum = ntohs(addr-&gt;sin_port);<br><span class="hljs-symbol">473 </span>        <span class="hljs-keyword">err</span> = -EACCES;<br><span class="hljs-symbol">474 </span>        <span class="hljs-keyword">if</span> (snum &amp;&amp; snum &lt; PROT_SOCK &amp;&amp;<br><span class="hljs-symbol">475 </span>            !ns_capable(net-&gt;user_ns, CAP_NET_BIND_SERVICE))<br><span class="hljs-symbol">476 </span>                <span class="hljs-keyword">goto</span> <span class="hljs-keyword">out</span>;<br><span class="hljs-number">477</span><br><span class="hljs-symbol">478 </span>        /*      We keep a pair of addresses. rcv_saddr is the one<br><span class="hljs-symbol">479 </span>         *      used by hash lookups, <span class="hljs-keyword">and</span> saddr is used <span class="hljs-keyword">for</span> transmit.<br><span class="hljs-symbol">480 </span>         *<br><span class="hljs-symbol">481 </span>         *      In the BSD API these are the same except where it<br><span class="hljs-symbol">482 </span>         *      would be illegal <span class="hljs-keyword">to</span> use them (multicast/broadcast) in<br><span class="hljs-symbol">483 </span>         *      which case the sending device address is used.<br><span class="hljs-symbol">484 </span>         */<br><span class="hljs-symbol">485 </span>        lock_sock(sk);<br><span class="hljs-number">486</span><br><span class="hljs-symbol">487 </span>        /* Check these errors (active socket, double bind). */<br><span class="hljs-symbol">488 </span>        <span class="hljs-keyword">err</span> = -EINVAL;<br><span class="hljs-symbol">489 </span>        <span class="hljs-keyword">if</span> (sk-&gt;sk_state != TCP_CLOSE || inet-&gt;inet_num)<br><span class="hljs-symbol">490 </span>                <span class="hljs-keyword">goto</span> out_release_sock;<br><span class="hljs-number">491</span><br><span class="hljs-symbol">492 </span>        inet-&gt;inet_rcv_saddr = inet-&gt;inet_saddr = addr-&gt;sin_addr.s_addr;<br><span class="hljs-symbol">493 </span>        <span class="hljs-keyword">if</span> (chk_addr_ret == RTN_MULTICAST || chk_addr_ret == RTN_BROADCAST)<br><span class="hljs-symbol">494 </span>                inet-&gt;inet_saddr = <span class="hljs-number">0</span>;  /* Use device */<br><span class="hljs-number">495</span><br><span class="hljs-symbol">496 </span>        /* Make sure we are allowed <span class="hljs-keyword">to</span> bind here. */<br><span class="hljs-symbol">497 </span>        <span class="hljs-keyword">if</span> ((snum || !inet-&gt;bind_address_no_port) &amp;&amp;<br><span class="hljs-symbol">498 </span>            sk-&gt;sk_prot-&gt;get_port(sk, snum)) &#123;<br><span class="hljs-symbol">499 </span>                inet-&gt;inet_saddr = inet-&gt;inet_rcv_saddr = <span class="hljs-number">0</span>;<br><span class="hljs-symbol">500 </span>                <span class="hljs-keyword">err</span> = -EADDRINUSE;<br><span class="hljs-symbol">501 </span>                <span class="hljs-keyword">goto</span> out_release_sock;<br><span class="hljs-symbol">502 </span>        &#125;<br><span class="hljs-number">503</span><br><span class="hljs-symbol">504 </span>        <span class="hljs-keyword">if</span> (inet-&gt;inet_rcv_saddr)<br><span class="hljs-symbol">505 </span>                sk-&gt;sk_userlocks |= SOCK_BINDADDR_LOCK;<br><span class="hljs-symbol">506 </span>        <span class="hljs-keyword">if</span> (snum)<br><span class="hljs-symbol">507 </span>                sk-&gt;sk_userlocks |= SOCK_BINDPORT_LOCK;<br><span class="hljs-symbol">508 </span>        inet-&gt;inet_sport = htons(inet-&gt;inet_num);<br><span class="hljs-symbol">509 </span>        inet-&gt;inet_daddr = <span class="hljs-number">0</span>;<br><span class="hljs-symbol">510 </span>        inet-&gt;inet_dport = <span class="hljs-number">0</span>;<br><span class="hljs-symbol">511 </span>        sk_dst_reset(sk);<br><span class="hljs-symbol">512 </span>        <span class="hljs-keyword">err</span> = <span class="hljs-number">0</span>;<br><span class="hljs-symbol">513 </span>out_release_sock:<br><span class="hljs-symbol">514 </span>        release_sock(sk);<br><span class="hljs-symbol">515 </span><span class="hljs-keyword">out</span>:<br><span class="hljs-symbol">516 </span>        <span class="hljs-keyword">return</span> <span class="hljs-keyword">err</span>;<br><span class="hljs-symbol">517 </span>&#125;<br><span class="hljs-symbol">518 </span>EXPORT_SYMBOL(inet_bind);<br></code></pre></td></tr></table></figure>
+</span>
+
+<h4 id="inet-csk-get-port">0.0.0.3. &#96;&#96;inet_csk_get_port&#96;</h4><span id="inetCSKgetPort">
+<figure class="highlight xl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br></pre></td><td class="code"><pre><code class="hljs xl"> <span class="hljs-number">90</span> <span class="hljs-comment">/* Obtain a reference to a local port for the given sock,</span><br><span class="hljs-comment"> 91  * if snum is zero it means select any available local port.</span><br><span class="hljs-comment"> 92  */</span><br> <span class="hljs-number">93</span> int inet_csk_get_port(struct sock *sk, unsigned short snum)<br> <span class="hljs-number">94</span> &#123;<br> <span class="hljs-number">95</span>         <span class="hljs-function"><span class="hljs-title">struct</span> inet_hashinfo *hashinfo = sk-&gt;</span><span class="hljs-function"><span class="hljs-title">sk_prot</span>-&gt;</span>h.hashinfo;<br> <span class="hljs-number">96</span>         struct inet_bind_hashbucket *head;<br> <span class="hljs-number">97</span>         struct inet_bind_bucket *tb;<br> <span class="hljs-number">98</span>         int ret, attempts = <span class="hljs-number">5</span>;<br> <span class="hljs-number">99</span>         struct net *net = sock_net(sk);<br><span class="hljs-number">100</span>         int smallest_size = -<span class="hljs-number">1</span>, smallest_rover;<br><span class="hljs-number">101</span>         kuid_t uid = sock_i_uid(sk);<br><span class="hljs-number">102</span>         <span class="hljs-function"><span class="hljs-title">int</span> attempt_half = (sk-&gt;</span>sk_reuse == SK_CAN_REUSE) ? <span class="hljs-number">1</span> : <span class="hljs-number">0</span>;<br><span class="hljs-number">103</span><br><span class="hljs-number">104</span>         local_bh_disable();<br><span class="hljs-number">105</span>         <span class="hljs-keyword">if</span> (!snum) &#123; <br>...     <span class="hljs-comment">//bind传入固定的port值，snum不会为零，所以忽略自动分配port的情况，</span><br><span class="hljs-number">177</span>         &#125; <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-number">178</span> have_snum:<br><span class="hljs-number">179</span>                 <span class="hljs-function"><span class="hljs-title">head</span> = &amp;hashinfo-&gt;</span>bhash[inet_bhashfn(net, snum,<br><span class="hljs-number">180</span>                                 <span class="hljs-function"><span class="hljs-title">hashinfo</span>-&gt;</span>bhash_size)];<br><span class="hljs-number">181</span>                 <span class="hljs-function"><span class="hljs-title">spin_lock</span>(&amp;head-&gt;</span>lock);<br><span class="hljs-number">182</span>                 <span class="hljs-function"><span class="hljs-title">inet_bind_bucket_for_each</span>(tb, &amp;head-&gt;</span>chain)<br><span class="hljs-number">183</span>                         <span class="hljs-function"><span class="hljs-title">if</span> (net_eq(ib_net(tb), net) &amp;&amp; tb-&gt;</span>port == snum)<br><span class="hljs-number">184</span>                                 goto tb_found;<br><span class="hljs-number">185</span>         &#125;<br><span class="hljs-number">186</span>         tb = NULL;<br><span class="hljs-number">187</span>         goto tb_not_found;<br><span class="hljs-number">188</span> tb_found:<br><span class="hljs-number">189</span>         <span class="hljs-function"><span class="hljs-title">if</span> (!hlist_empty(&amp;tb-&gt;</span>owners)) &#123;<br><span class="hljs-number">190</span>                 <span class="hljs-function"><span class="hljs-title">if</span> (sk-&gt;</span>sk_reuse == SK_FORCE_REUSE)<br><span class="hljs-number">191</span>                         goto success;<br><span class="hljs-number">192</span><br><span class="hljs-number">193</span>                 <span class="hljs-function"><span class="hljs-title">if</span> (((tb-&gt;</span>fastreuse &gt; <span class="hljs-number">0</span> &amp;&amp;<br><span class="hljs-number">194</span>                       <span class="hljs-function"><span class="hljs-title">sk</span>-&gt;</span><span class="hljs-function"><span class="hljs-title">sk_reuse</span> &amp;&amp; sk-&gt;</span>sk_state != TCP_LISTEN) ||<br><span class="hljs-number">195</span>                      (<span class="hljs-function"><span class="hljs-title">tb</span>-&gt;</span>fastreuseport &gt; <span class="hljs-number">0</span> &amp;&amp;<br><span class="hljs-number">196</span>                       <span class="hljs-function"><span class="hljs-title">sk</span>-&gt;</span><span class="hljs-function"><span class="hljs-title">sk_reuseport</span> &amp;&amp; uid_eq(tb-&gt;</span>fastuid, uid))) &amp;&amp;<br><span class="hljs-number">197</span>                     smallest_size == -<span class="hljs-number">1</span>) &#123;<br><span class="hljs-number">198</span>                         goto success;<br><span class="hljs-number">199</span>                 &#125; <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-number">200</span>                         ret = <span class="hljs-number">1</span>;<br><span class="hljs-number">201</span>                         <span class="hljs-function"><span class="hljs-title">if</span> (inet_csk(sk)-&gt;</span><span class="hljs-function"><span class="hljs-title">icsk_af_ops</span>-&gt;</span>bind_conflict(sk, tb, <span class="hljs-literal">true</span>)) &#123;<br><span class="hljs-number">202</span>                                 <span class="hljs-function"><span class="hljs-title">if</span> (((sk-&gt;</span><span class="hljs-function"><span class="hljs-title">sk_reuse</span> &amp;&amp; sk-&gt;</span>sk_state != TCP_LISTEN) ||<br><span class="hljs-number">203</span>                                      (<span class="hljs-function"><span class="hljs-title">tb</span>-&gt;</span>fastreuseport &gt; <span class="hljs-number">0</span> &amp;&amp;<br><span class="hljs-number">204</span>                                       <span class="hljs-function"><span class="hljs-title">sk</span>-&gt;</span><span class="hljs-function"><span class="hljs-title">sk_reuseport</span> &amp;&amp; uid_eq(tb-&gt;</span>fastuid, uid))) &amp;&amp;<br><span class="hljs-number">205</span>                                     smallest_size != -<span class="hljs-number">1</span> &amp;&amp; --attempts &gt;= <span class="hljs-number">0</span>) &#123;<br><span class="hljs-number">206</span>                                         <span class="hljs-function"><span class="hljs-title">spin_unlock</span>(&amp;head-&gt;</span>lock);<br><span class="hljs-number">207</span>                                         goto again;<br><span class="hljs-number">208</span>                                 &#125;<br><span class="hljs-number">209</span><br><span class="hljs-number">210</span>                                 goto fail_unlock;<br><span class="hljs-number">211</span>                         &#125;<br><span class="hljs-number">212</span>                 &#125;<br><span class="hljs-number">213</span>         &#125;<br><span class="hljs-number">214</span> tb_not_found:<br><span class="hljs-number">215</span>         ret = <span class="hljs-number">1</span>;<br><span class="hljs-number">216</span>         <span class="hljs-function"><span class="hljs-title">if</span> (!tb &amp;&amp; (tb = inet_bind_bucket_create(hashinfo-&gt;</span>bind_bucket_cachep,<br><span class="hljs-number">217</span>                                         net, head, snum)) == NULL)<br><span class="hljs-number">218</span>                 goto fail_unlock;<br><span class="hljs-number">219</span>         <span class="hljs-function"><span class="hljs-title">if</span> (hlist_empty(&amp;tb-&gt;</span>owners)) &#123;<br><span class="hljs-number">220</span>                 <span class="hljs-function"><span class="hljs-title">if</span> (sk-&gt;</span><span class="hljs-function"><span class="hljs-title">sk_reuse</span> &amp;&amp; sk-&gt;</span>sk_state != TCP_LISTEN)<br><span class="hljs-number">221</span>                         <span class="hljs-function"><span class="hljs-title">tb</span>-&gt;</span>fastreuse = <span class="hljs-number">1</span>;<br><span class="hljs-number">222</span>                 <span class="hljs-keyword">else</span><br><span class="hljs-number">223</span>                         <span class="hljs-function"><span class="hljs-title">tb</span>-&gt;</span>fastreuse = <span class="hljs-number">0</span>;<br><span class="hljs-number">224</span>                 <span class="hljs-function"><span class="hljs-title">if</span> (sk-&gt;</span>sk_reuseport) &#123;<br><span class="hljs-number">225</span>                         <span class="hljs-function"><span class="hljs-title">tb</span>-&gt;</span>fastreuseport = <span class="hljs-number">1</span>;<br><span class="hljs-number">226</span>                         <span class="hljs-function"><span class="hljs-title">tb</span>-&gt;</span>fastuid = uid;<br><span class="hljs-number">227</span>                 &#125; <span class="hljs-keyword">else</span><br><span class="hljs-number">228</span>                         <span class="hljs-function"><span class="hljs-title">tb</span>-&gt;</span>fastreuseport = <span class="hljs-number">0</span>;<br><span class="hljs-number">229</span>         &#125; <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-number">230</span>                 <span class="hljs-function"><span class="hljs-title">if</span> (tb-&gt;</span>fastreuse &amp;&amp;<br><span class="hljs-number">231</span>                     (!<span class="hljs-function"><span class="hljs-title">sk</span>-&gt;</span><span class="hljs-function"><span class="hljs-title">sk_reuse</span> || sk-&gt;</span>sk_state == TCP_LISTEN))<br><span class="hljs-number">232</span>                         <span class="hljs-function"><span class="hljs-title">tb</span>-&gt;</span>fastreuse = <span class="hljs-number">0</span>;<br><span class="hljs-number">233</span>                 <span class="hljs-function"><span class="hljs-title">if</span> (tb-&gt;</span>fastreuseport &amp;&amp;<br><span class="hljs-number">234</span>                     (!<span class="hljs-function"><span class="hljs-title">sk</span>-&gt;</span><span class="hljs-function"><span class="hljs-title">sk_reuseport</span> || !uid_eq(tb-&gt;</span>fastuid, uid)))<br><span class="hljs-number">235</span>                         <span class="hljs-function"><span class="hljs-title">tb</span>-&gt;</span>fastreuseport = <span class="hljs-number">0</span>;<br><span class="hljs-number">236</span>         &#125;<br><span class="hljs-number">237</span> success:<br><span class="hljs-number">238</span>         <span class="hljs-function"><span class="hljs-title">if</span> (!inet_csk(sk)-&gt;</span>icsk_bind_hash)<br><span class="hljs-number">239</span>                 inet_bind_hash(sk, tb, snum);<br><span class="hljs-number">240</span>         WARN_ON(<span class="hljs-function"><span class="hljs-title">inet_csk</span>(sk)-&gt;</span>icsk_bind_hash != tb);<br><span class="hljs-number">241</span>         ret = <span class="hljs-number">0</span>;<br><span class="hljs-number">242</span><br><span class="hljs-number">243</span> fail_unlock:<br><span class="hljs-number">244</span>         <span class="hljs-function"><span class="hljs-title">spin_unlock</span>(&amp;head-&gt;</span>lock);<br><span class="hljs-number">245</span> fail:<br><span class="hljs-number">246</span>         local_bh_enable();<br><span class="hljs-number">247</span>         return ret;<br><span class="hljs-number">248</span> &#125;<br><span class="hljs-number">249</span> EXPORT_SYMBOL_GPL(inet_csk_get_port);<br></code></pre></td></tr></table></figure>
+</span>
+
+<h4 id="inet-bind-bucket-create">0.0.0.4. inet_bind_bucket_create</h4><span id="inetBindBucketCreate">
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">57 </span>/*<br><span class="hljs-symbol">58 </span> * Allocate <span class="hljs-keyword">and</span> initialize a <span class="hljs-keyword">new</span> local port bind bucket.<br><span class="hljs-symbol">59 </span> * The bindhash mutex <span class="hljs-keyword">for</span> snum<span class="hljs-comment">&#x27;s hash chain must be held here.</span><br><span class="hljs-symbol">60 </span> */<br><span class="hljs-symbol">61 </span>struct inet_bind_bucket *inet_bind_bucket_create(struct kmem_cache *cachep,<br><span class="hljs-symbol">62 </span>                                                 struct net *net,<br><span class="hljs-symbol">63 </span>                                                 struct inet_bind_hashbucket *head,<br><span class="hljs-symbol">64 </span>                                                 const unsigned short snum)<br><span class="hljs-symbol">65 </span>&#123;<br><span class="hljs-symbol">66 </span>        struct inet_bind_bucket *tb = kmem_cache_alloc(cachep, GFP_ATOMIC);<br><span class="hljs-number">67</span><br><span class="hljs-symbol">68 </span>        <span class="hljs-keyword">if</span> (tb) &#123;<br><span class="hljs-symbol">69 </span>                write_pnet(&amp;tb-&gt;ib_net, net);<br><span class="hljs-symbol">70 </span>                tb-&gt;port      = snum;<br><span class="hljs-symbol">71 </span>                tb-&gt;fastreuse = <span class="hljs-number">0</span>;<br><span class="hljs-symbol">72 </span>                tb-&gt;fastreuseport = <span class="hljs-number">0</span>;<br><span class="hljs-symbol">73 </span>                tb-&gt;num_owners = <span class="hljs-number">0</span>;<br><span class="hljs-symbol">74 </span>                INIT_HLIST_HEAD(&amp;tb-&gt;owners);<br><span class="hljs-symbol">75 </span>                hlist_add_head(&amp;tb-&gt;node, <span class="hljs-number">&amp;head</span>-&gt;<span class="hljs-keyword">chain</span>);<br><span class="hljs-symbol">76 </span>        &#125;<br><span class="hljs-symbol">77 </span>        <span class="hljs-keyword">return</span> tb;<br><span class="hljs-symbol">78 </span>&#125;<br></code></pre></td></tr></table></figure>
+</span>
+
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Socket/" class="category-chain-item">Socket</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/IPv4/" class="print-no-link">#IPv4</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>how does tcp server bind on a socket</div>
+      <div>https://martinbj2008.github.io/2015/09/14/2015-09-14-how-does-tcp-server-bind-on-a-socket/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>September 14, 2015</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2015/09/14/2015-09-14-how-does-tcp-socket-listen/" title="how does tcp socket listen">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">how does tcp socket listen</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2015/09/11/2015-09-11-basic-data-structure-of-inet-socket-inetsw/" title="basic data structure of inet socket: inetsw">
+                        <span class="hidden-mobile">basic data structure of inet socket: inetsw</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

@@ -1,0 +1,994 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="姊妹篇 Linux 内核 PCI：pci_dev 是如何与 driver 建立绑定的 提到：当 pci_dev 枚举出来时，若对应驱动的 ko 还没加载，路径 A 会”空手而归”，pci_dev 只是”就位”等待。真正让这条链闭合的，是内核 → udev → kmod → modprobe → pci_register_driver → 路径 B 回补 probe 这一套用户态协作。 本文专门梳理">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Linux 驱动 ko 动态加载：uevent、udev、kmod 协作机制">
+<meta property="og:url" content="https://martinbj2008.github.io/2026/07/09/2026-07-09-linux-ko-dynamic-load.ai/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="姊妹篇 Linux 内核 PCI：pci_dev 是如何与 driver 建立绑定的 提到：当 pci_dev 枚举出来时，若对应驱动的 ko 还没加载，路径 A 会”空手而归”，pci_dev 只是”就位”等待。真正让这条链闭合的，是内核 → udev → kmod → modprobe → pci_register_driver → 路径 B 回补 probe 这一套用户态协作。 本文专门梳理">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-07-09T11:10:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.753Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="ai">
+<meta property="article:tag" content="hotplug">
+<meta property="article:tag" content="kmod">
+<meta property="article:tag" content="linux-kernel">
+<meta property="article:tag" content="modalias">
+<meta property="article:tag" content="udev">
+<meta property="article:tag" content="uevent">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>Linux 驱动 ko 动态加载：uevent、udev、kmod 协作机制 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="Linux 驱动 ko 动态加载：uevent、udev、kmod 协作机制"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2026-07-09 19:10" pubdate>
+          July 9, 2026 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          9.1k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          76 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">Linux 驱动 ko 动态加载：uevent、udev、kmod 协作机制</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <p>姊妹篇 <a href="/2026/07/09/2026-07-09-pci-dev-bind-driver.ai/">Linux 内核 PCI：pci_dev 是如何与 driver 建立绑定的</a> 提到：当 pci_dev 枚举出来时，若对应驱动的 ko 还没加载，路径 A 会”空手而归”，pci_dev 只是”就位”等待。真正让这条链闭合的，是内核 → udev → kmod → modprobe → <code>pci_register_driver</code> → 路径 B 回补 probe 这一套用户态协作。</p>
+<p>本文专门梳理这条链，特别是 <strong>MODALIAS 是如何生成、如何被用来找到正确的 ko</strong> 的。</p>
+<p>本文中所有代码引用均基于内核 <code>v7.2-rc2-22-g0e35b9b6ec0f</code> 的源码。【Claude-4.7-Opus】</p>
+<hr>
+<h2 id="一、总链路概览">0.1. 一、总链路概览</h2><figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><code class="hljs dns">config space <span class="hljs-punctuation">(</span>硬件<span class="hljs-punctuation">)</span><br>    │<br>    │  pci_setup_device<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span> 读出 vendor/device/subsystem_*/class<br>    ▼<br>pci_dev &#123; .vendor, .device, .subsystem_vendor, .subsystem_device, .class &#125;<br>    │<br>    │  device_add → kobject_uevent → bus-&gt;uevent = pci_uevent <span class="hljs-punctuation">(</span>pci-driver.c:<span class="hljs-number">1587</span><span class="hljs-punctuation">)</span><br>    │  用固定 printf 模板拼出 MODALIAS=pci:v%<span class="hljs-number">08</span>Xd%<span class="hljs-number">08</span>Xsv%<span class="hljs-number">08</span>Xsd%<span class="hljs-number">08</span>Xbc%<span class="hljs-number">02</span>Xsc%<span class="hljs-number">02</span>Xi%<span class="hljs-number">02</span>X<br>    ▼<br>netlink uevent 消息 <span class="hljs-punctuation">(</span>含 MODALIAS=pci:v0000...i00<span class="hljs-punctuation">)</span><br>    │<br>    │  systemd-udevd 收到，注入环境变量<br>    ▼<br>udev 规则 RUN&#123;builtin&#125;+=<span class="hljs-string">&quot;kmod load $env&#123;MODALIAS&#125;&quot;</span><br>    │<br>    │  fnmatch 匹配 /lib/modules/$<span class="hljs-punctuation">(</span>uname -r<span class="hljs-punctuation">)</span>/modules.alias<br>    │  <span class="hljs-punctuation">(</span>该文件由 depmod 扫描各 ko .modinfo 的 alias= 汇总而成，<br>    │   而每条 alias 来自驱动源码的 MODULE_DEVICE_TABLE<span class="hljs-punctuation">(</span>pci, ...<span class="hljs-punctuation">)</span> 宏展开<span class="hljs-punctuation">)</span><br>    ▼<br>modprobe &lt;modname&gt;<br>    │<br>    ▼<br>ko 加载 → pci_register_driver → bus_add_driver → driver_attach → 回补 probe<br></code></pre></td></tr></table></figure>
+
+<p><strong>核心事实</strong>：MODALIAS 不是 udev 拼的，是<strong>内核直接拼好塞给 udev 的</strong>。udev&#x2F;kmod 只做”字符串匹配 → 加载”，不做任何 PCI ID 到 MODALIAS 的转换。</p>
+<p>下面各节逐段展开。</p>
+<span id="more"></span>
+
+<hr>
+<h2 id="二、内核在-uevent-里就已经写好-MODALIAS">0.2. 二、内核在 uevent 里就已经写好 MODALIAS</h2><h3 id="2-1-pci-uevent-回调">0.2.1. 2.1 pci_uevent 回调</h3><p><code>drivers/pci/pci-driver.c</code></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1587</span>	<span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">pci_uevent</span><span class="hljs-params">(<span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> device *dev, <span class="hljs-keyword">struct</span> kobj_uevent_env *env)</span><br>1588	&#123;<br>...<br><span class="hljs-number">1599</span>		<span class="hljs-keyword">if</span> (add_uevent_var(env, <span class="hljs-string">&quot;PCI_CLASS=%04X&quot;</span>, pdev-&gt;class))<br><span class="hljs-number">1600</span>			<span class="hljs-keyword">return</span> -ENOMEM;<br><span class="hljs-number">1601</span><br><span class="hljs-number">1602</span>		<span class="hljs-keyword">if</span> (add_uevent_var(env, <span class="hljs-string">&quot;PCI_ID=%04X:%04X&quot;</span>, pdev-&gt;vendor, pdev-&gt;device))<br><span class="hljs-number">1603</span>			<span class="hljs-keyword">return</span> -ENOMEM;<br><span class="hljs-number">1604</span><br><span class="hljs-number">1605</span>		<span class="hljs-keyword">if</span> (add_uevent_var(env, <span class="hljs-string">&quot;PCI_SUBSYS_ID=%04X:%04X&quot;</span>, pdev-&gt;subsystem_vendor,<br><span class="hljs-number">1606</span>				   pdev-&gt;subsystem_device))<br><span class="hljs-number">1607</span>			<span class="hljs-keyword">return</span> -ENOMEM;<br><span class="hljs-number">1608</span><br><span class="hljs-number">1609</span>		<span class="hljs-keyword">if</span> (add_uevent_var(env, <span class="hljs-string">&quot;PCI_SLOT_NAME=%s&quot;</span>, pci_name(pdev)))<br><span class="hljs-number">1610</span>			<span class="hljs-keyword">return</span> -ENOMEM;<br><span class="hljs-number">1611</span><br><span class="hljs-number">1612</span>		<span class="hljs-keyword">if</span> (add_uevent_var(env, <span class="hljs-string">&quot;MODALIAS=pci:v%08Xd%08Xsv%08Xsd%08Xbc%02Xsc%02Xi%02X&quot;</span>,<br><span class="hljs-number">1613</span>				   pdev-&gt;vendor, pdev-&gt;device,<br><span class="hljs-number">1614</span>				   pdev-&gt;subsystem_vendor, pdev-&gt;subsystem_device,<br><span class="hljs-number">1615</span>				   (u8)(pdev-&gt;class &gt;&gt; <span class="hljs-number">16</span>), (u8)(pdev-&gt;class &gt;&gt; <span class="hljs-number">8</span>),<br><span class="hljs-number">1616</span>				   (u8)(pdev-&gt;class)))<br><span class="hljs-number">1617</span>			<span class="hljs-keyword">return</span> -ENOMEM;<br><span class="hljs-number">1618</span><br><span class="hljs-number">1619</span>		<span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">1620</span>	&#125;<br></code></pre></td></tr></table></figure>
+
+<p>该函数注册为 <code>pci_bus_type.uevent</code>（<code>pci-driver.c:1730</code>）。触发时机：</p>
+<ul>
+<li><code>device_add</code> 里发 <code>KOBJ_ADD</code> uevent；</li>
+<li>用户手动 <code>echo add &gt; /sys/bus/pci/devices/&lt;BDF&gt;/uevent</code>；</li>
+<li>hotplug&#x2F;rescan 路径上的其他 <code>kobject_uevent()</code> 调用。</li>
+</ul>
+<p>内核在把消息发给 netlink 之前，会调这个 <code>.uevent</code> 回调让 bus 补字段。PCI 侧就在这里生成：</p>
+<figure class="highlight freedesktop"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs freedesktop"><span class="hljs-attr">PCI_CLASS</span><span class="hljs-operator">=</span>020000<br><span class="hljs-attr">PCI_ID</span><span class="hljs-operator">=</span>8086:1533<br><span class="hljs-attr">PCI_SUBSYS_ID</span><span class="hljs-operator">=</span>8086:0001<br><span class="hljs-attr">PCI_SLOT_NAME</span><span class="hljs-operator">=</span>0000:03:00.0<br><span class="hljs-attr">MODALIAS</span><span class="hljs-operator">=</span>pci:v00008086d00001533sv00008086sd00000001bc02sc00i00<br></code></pre></td></tr></table></figure>
+
+<p>MODALIAS 里的字段来源就是 <code>pci_setup_device</code> 阶段从 config space 读到的 vendor id、device id、subsystem id 和 class code，按 <code>%08X</code> &#x2F; <code>%02X</code> 直接字符串化，<strong>没有别的转换</strong>。</p>
+<h3 id="2-2-sysfs-的-modalias-属性同格式">0.2.2. 2.2 sysfs 的 modalias 属性同格式</h3><p><code>drivers/pci/pci-sysfs.c</code></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">308</span>	<span class="hljs-type">static</span> <span class="hljs-type">ssize_t</span> <span class="hljs-title function_">modalias_show</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> device *dev, <span class="hljs-keyword">struct</span> device_attribute *attr,</span><br><span class="hljs-params"><span class="hljs-number">309</span>				     <span class="hljs-type">char</span> *buf)</span><br>310	&#123;<br><span class="hljs-number">311</span>		<span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">pci_dev</span> *<span class="hljs-title">pci_dev</span> =</span> to_pci_dev(dev);<br><span class="hljs-number">312</span><br><span class="hljs-number">313</span>		<span class="hljs-keyword">return</span> sysfs_emit(buf, <span class="hljs-string">&quot;pci:v%08Xd%08Xsv%08Xsd%08Xbc%02Xsc%02Xi%02X\n&quot;</span>,<br><span class="hljs-number">314</span>				  pci_dev-&gt;vendor, pci_dev-&gt;device,<br><span class="hljs-number">315</span>				  pci_dev-&gt;subsystem_vendor, pci_dev-&gt;subsystem_device,<br><span class="hljs-number">316</span>				  (u8)(pci_dev-&gt;class &gt;&gt; <span class="hljs-number">16</span>), (u8)(pci_dev-&gt;class &gt;&gt; <span class="hljs-number">8</span>),<br><span class="hljs-number">317</span>				  (u8)(pci_dev-&gt;class));<br><span class="hljs-number">318</span>	&#125;<br><span class="hljs-number">319</span>	<span class="hljs-type">static</span> <span class="hljs-title function_">DEVICE_ATTR_RO</span><span class="hljs-params">(modalias)</span>;<br></code></pre></td></tr></table></figure>
+
+<p>用同一个模板打印。可以随时验证：</p>
+<figure class="highlight sh"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs sh"><span class="hljs-built_in">cat</span> /sys/bus/pci/devices/0000:03:00.0/uevent<br><span class="hljs-built_in">cat</span> /sys/bus/pci/devices/0000:03:00.0/modalias<br></code></pre></td></tr></table></figure>
+
+<p>前者是 uevent 的持久化视图，后者是 <code>modalias_show</code> 单独打印，格式完全一致。</p>
+<h3 id="2-3-MODALIAS-字段模板拆解">0.2.3. 2.3 MODALIAS 字段模板拆解</h3><figure class="highlight vbnet"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs vbnet"><span class="hljs-symbol">pci:</span>v00008086d00001533sv00008086sd00000001bc02sc00i00<br>    │  │       │        │        │        │   │   │<br>    │  │       │        │        │        │   │   └─ i     Programming <span class="hljs-keyword">Interface</span> (<span class="hljs-keyword">class</span> &gt;&gt; <span class="hljs-number">0</span>  &amp; <span class="hljs-number">0</span>xFF)<br>    │  │       │        │        │        │   └───── sc    <span class="hljs-keyword">Sub</span>-<span class="hljs-keyword">class</span>              (<span class="hljs-keyword">class</span> &gt;&gt; <span class="hljs-number">8</span>  &amp; <span class="hljs-number">0</span>xFF)<br>    │  │       │        │        │        └───────── bc    Base <span class="hljs-keyword">class</span>             (<span class="hljs-keyword">class</span> &gt;&gt; <span class="hljs-number">16</span> &amp; <span class="hljs-number">0</span>xFF)<br>    │  │       │        │        └────────────────── sd    Subsystem Device ID<br>    │  │       │        └─────────────────────────── sv    Subsystem Vendor ID<br>    │  │       └──────────────────────────────────── d     Device ID<br>    │  └──────────────────────────────────────────── v     Vendor ID<br>    └─────────────────────────────────────────────── 前缀，标识总线类型<br></code></pre></td></tr></table></figure>
+
+<p>其他 bus 的 modalias 前缀不同：<code>usb:</code>、<code>platform:</code>、<code>of:</code>、<code>acpi:</code>、<code>i2c:</code> ……格式各由对应 bus 的 <code>.uevent</code> 决定。</p>
+<hr>
+<h2 id="三、netlink-uevent-消息与-udev-的处理">0.3. 三、netlink uevent 消息与 udev 的处理</h2><h3 id="3-1-消息通路">0.3.1. 3.1 消息通路</h3><p><code>kobject_uevent_env</code> → <code>netlink_broadcast</code> 通过 <code>NETLINK_KOBJECT_UEVENT</code>（family 15）把消息广播到用户态。<code>systemd-udevd</code>（或 eudev&#x2F;mdev）监听该 netlink socket。</p>
+<p>消息体大致像这样（<code>ACTION</code> + 若干 <code>KEY=VALUE</code>）：</p>
+<figure class="highlight apache"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs apache"><span class="hljs-attribute">ACTION</span>=add<br><span class="hljs-attribute">DEVPATH</span>=/devices/pci0000:<span class="hljs-number">00</span>/<span class="hljs-number">0000</span>:<span class="hljs-number">00</span>:<span class="hljs-number">1</span>c.<span class="hljs-number">0</span>/<span class="hljs-number">0000</span>:<span class="hljs-number">03</span>:<span class="hljs-number">00</span>.<span class="hljs-number">0</span><br><span class="hljs-attribute">SUBSYSTEM</span>=pci<br><span class="hljs-attribute">PCI_CLASS</span>=<span class="hljs-number">020000</span><br><span class="hljs-attribute">PCI_ID</span>=<span class="hljs-number">8086</span>:<span class="hljs-number">1533</span><br><span class="hljs-attribute">PCI_SUBSYS_ID</span>=<span class="hljs-number">8086</span>:<span class="hljs-number">0001</span><br><span class="hljs-attribute">PCI_SLOT_NAME</span>=<span class="hljs-number">0000</span>:<span class="hljs-number">03</span>:<span class="hljs-number">00</span>.<span class="hljs-number">0</span><br><span class="hljs-attribute">MODALIAS</span>=pci:v00008086d00001533sv00008086sd00000001bc02sc00i00<br></code></pre></td></tr></table></figure>
+
+<h3 id="3-2-udev-规则驱动-modprobe">0.3.2. 3.2 udev 规则驱动 modprobe</h3><p><code>systemd-udevd</code> 收到事件后，把这些 <code>KEY=VALUE</code> 注入 <code>.rules</code> 的匹配环境，然后运行匹配到的规则。发行版通用规则（Debian&#x2F;Ubuntu&#x2F;Fedora 都一样）里有这样一行：</p>
+<figure class="highlight dockerfile"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs dockerfile"><span class="hljs-comment"># /usr/lib/udev/rules.d/80-drivers.rules</span><br><span class="hljs-keyword">ENV</span>&#123;MODALIAS&#125;==<span class="hljs-string">&quot;?*&quot;</span>, <span class="hljs-keyword">RUN</span><span class="language-bash">&#123;<span class="hljs-built_in">builtin</span>&#125;+=<span class="hljs-string">&quot;kmod load <span class="hljs-variable">$env</span>&#123;MODALIAS&#125;&quot;</span></span><br></code></pre></td></tr></table></figure>
+
+<p>含义：只要 uevent 里 <code>MODALIAS</code> 非空，就调用 udev 的 <code>kmod</code> builtin，把 <code>MODALIAS</code> 字符串作为参数传进去。</p>
+<h3 id="3-3-coldplug：udevadm-trigger">0.3.3. 3.3 coldplug：udevadm trigger</h3><p>系统启动或运维手动 <code>udevadm trigger --action=add</code>，udev 会遍历 <code>/sys</code> 下的每个 kobject，往每个 <code>uevent</code> 文件写 <code>add</code>，从而<strong>让内核为每个已存在的设备重新发一次 uevent</strong>——这就是所谓 coldplug：把开机前就已经存在的硬件的 uevent 补跑一遍，触发对应 ko 加载。</p>
+<hr>
+<h2 id="四、kmod-load-如何找到目标-ko">0.4. 四、kmod load 如何找到目标 ko</h2><h3 id="4-1-modules-alias">0.4.1. 4.1 modules.alias</h3><p><code>kmod</code> 拿到 <code>pci:v00008086d00001533sv00008086sd00000001bc02sc00i00</code> 这个字符串，去查 <code>/lib/modules/$(uname -r)/modules.alias</code>（由 <code>depmod -a</code> 生成）。文件内容形如：</p>
+<figure class="highlight markdown"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs markdown">alias pci:v00008086d00001533sv<span class="hljs-emphasis">*sd*</span>bc<span class="hljs-emphasis">*sc*</span>i*  igb<br>alias pci:v00008086d00001521sv<span class="hljs-emphasis">*sd*</span>bc<span class="hljs-emphasis">*sc*</span>i*  igb<br>alias pci:v000010ECd00008168sv<span class="hljs-emphasis">*sd*</span>bc<span class="hljs-emphasis">*sc*</span>i*  r8169<br>alias pci:v0000144Dd0000A804sv<span class="hljs-emphasis">*sd*</span>bc<span class="hljs-emphasis">*sc*</span>i*  nvme<br>...<br></code></pre></td></tr></table></figure>
+
+<p>匹配采用 <strong>fnmatch 风格通配</strong>（<code>*</code> 匹配任意串）。上例 <code>pci:v00008086d00001533sv...bc02sc00i00</code> 匹配到第一条，模块名 <code>igb</code>。</p>
+<h3 id="4-2-匹配到之后">0.4.2. 4.2 匹配到之后</h3><p><code>kmod</code> 内部相当于执行 <code>modprobe igb</code>：</p>
+<ol>
+<li>递归解析依赖（<code>modules.dep</code>），加载所有 prerequisite；</li>
+<li><code>init_module</code> &#x2F; <code>finit_module</code> 系统调用把 ko 装入内核；</li>
+<li>ko 的初始化函数（<code>module_init</code>）跑起来，其中通常包含 <code>pci_register_driver(&amp;igb_driver)</code>。</li>
+</ol>
+<h3 id="4-3-触发路径-B（回补-probe）">0.4.3. 4.3 触发路径 B（回补 probe）</h3><p><code>pci_register_driver</code> 展开：</p>
+<figure class="highlight stylus"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs stylus"><span class="hljs-function"><span class="hljs-title">pci_register_driver</span><span class="hljs-params">(&amp;igb_driver)</span></span><br>  └─ __pci_register_driver<br>       └─ driver_register<br>            └─ bus_add_driver                               drivers/base/bus<span class="hljs-selector-class">.c</span>:<span class="hljs-number">732</span><br>                 ├─ <span class="hljs-built_in">klist_add_tail</span>(&amp;priv-&gt;knode_bus, &amp;sp-&gt;klist_drivers)<br>                 └─ <span class="hljs-keyword">if</span> (sp-&gt;drivers_autoprobe)<br>                      driver_attach                          drivers/base/<span class="hljs-selector-tag">dd</span><span class="hljs-selector-class">.c</span>:<span class="hljs-number">1307</span><br>                           └─ <span class="hljs-built_in">bus_for_each_dev</span>(pci_bus_type, __driver_attach)<br>                                └─ __driver_attach          drivers/base/<span class="hljs-selector-tag">dd</span><span class="hljs-selector-class">.c</span>:<span class="hljs-number">1232</span><br>                                     ├─ driver_match_device → pci_bus_match<br>                                     └─ driver_probe_device → really_probe<br>                                          └─ pci_device_probe → drv-&gt;probe<br></code></pre></td></tr></table></figure>
+
+<p><strong>枚举时挂上去、当时没找到驱动</strong>的那个 pci_dev，就在这里被 <code>bus_for_each_dev</code> 遍历到、匹配上、跑 <code>igb_probe</code>。整条链闭合。</p>
+<hr>
+<h2 id="五、modules-alias-里的通配从何而来">0.5. 五、modules.alias 里的通配从何而来</h2><h3 id="5-1-驱动源码的-MODULE-DEVICE-TABLE">0.5.1. 5.1 驱动源码的 MODULE_DEVICE_TABLE</h3><p>驱动源码里典型写法（<code>drivers/net/ethernet/intel/igb/igb_main.c</code>）：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-type">static</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">pci_device_id</span> <span class="hljs-title">igb_pci_tbl</span>[] =</span> &#123;<br>    &#123; PCI_VDEVICE(INTEL, E1000_DEV_ID_I350_COPPER) &#125;,<br>    &#123; PCI_VDEVICE(INTEL, E1000_DEV_ID_I210_COPPER) &#125;,<br>    ...<br>    &#123; <span class="hljs-number">0</span>, &#125;<br>&#125;;<br>MODULE_DEVICE_TABLE(pci, igb_pci_tbl);<br></code></pre></td></tr></table></figure>
+
+<p><code>PCI_VDEVICE(INTEL, x)</code> 展开为：</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs c">&#123; .vendor = <span class="hljs-number">0x8086</span>, .device = x,<br>  .subvendor = PCI_ANY_ID, .subdevice = PCI_ANY_ID,<br>  .class = <span class="hljs-number">0</span>, .class_mask = <span class="hljs-number">0</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<p><code>PCI_ANY_ID</code> 是 <code>(~0)</code>。</p>
+<h3 id="5-2-编译期展开">0.5.2. 5.2 编译期展开</h3><p><code>MODULE_DEVICE_TABLE(pci, tbl)</code> 是宏，本质是让内核构建脚本 <code>scripts/mod/file2alias.c</code> 在 modpost 阶段扫描每个 ko 的 <code>__mod_pci__*_device_table</code>（对应 <code>tbl</code>），按 PCI 的 alias 生成规则打印字符串，塞进 ko 的 <code>.modinfo</code> 段。规则就是：</p>
+<ul>
+<li><code>vendor == PCI_ANY_ID</code> → 输出 <code>v*</code>；否则 <code>v%08X</code>；</li>
+<li><code>device == PCI_ANY_ID</code> → 输出 <code>d*</code>；否则 <code>d%08X</code>；</li>
+<li><code>subvendor</code>&#x2F;<code>subdevice</code> 同理；</li>
+<li>class 按 <code>class_mask</code> 决定每个字节是数值还是 <code>*</code>。</li>
+</ul>
+<p>所以上面 <code>igb_pci_tbl</code> 里 <code>{ vendor=0x8086, device=0x1533, subvendor=ANY, subdevice=ANY, class=0, class_mask=0 }</code> 展开成：</p>
+<figure class="highlight markdown"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs markdown">alias=pci:v00008086d00001533sv<span class="hljs-emphasis">*sd*</span>bc<span class="hljs-emphasis">*sc*</span>i<span class="hljs-emphasis">*</span><br></code></pre></td></tr></table></figure>
+
+<p>写进 <code>igb.ko</code> 的 <code>.modinfo</code>。</p>
+<h3 id="5-3-depmod-汇总">0.5.3. 5.3 depmod 汇总</h3><p><code>depmod -a</code> 扫 <code>/lib/modules/$(uname -r)/kernel/**/*.ko</code>，抽出 <code>.modinfo</code> 里每条 <code>alias=...</code>，按 <code>alias &lt;pattern&gt; &lt;modname&gt;</code> 一行写进 <code>modules.alias</code>。同时生成 <code>modules.dep</code>（依赖关系）、<code>modules.symbols</code> 等。</p>
+<p>发行版打包时会预先跑 <code>depmod</code>；内核升级后 <code>postinst</code> 也会重跑。手动改了 <code>/lib/modules/xxx/extra/*.ko</code> 后必须 <code>depmod -a</code> 才能被 kmod 发现。</p>
+<hr>
+<h2 id="六、非-PCI-总线也是同一套路">0.6. 六、非 PCI 总线也是同一套路</h2><p>不同 bus 的 modalias 前缀和字段不同，但机制一致：</p>
+<table>
+<thead>
+<tr>
+<th>bus</th>
+<th><code>.uevent</code> 回调</th>
+<th>modalias 前缀</th>
+<th>关键字段</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>PCI</td>
+<td><code>pci_uevent</code></td>
+<td><code>pci:</code></td>
+<td>vendor&#x2F;device&#x2F;subsystem&#x2F;class</td>
+</tr>
+<tr>
+<td>USB</td>
+<td><code>usb_uevent</code></td>
+<td><code>usb:</code></td>
+<td>vendor&#x2F;product&#x2F;class&#x2F;interface</td>
+</tr>
+<tr>
+<td>Platform (DT)</td>
+<td><code>of_device_uevent</code></td>
+<td><code>of:</code></td>
+<td>compatible 字符串列表</td>
+</tr>
+<tr>
+<td>ACPI</td>
+<td><code>acpi_device_uevent</code></td>
+<td><code>acpi:</code></td>
+<td>HID&#x2F;CID 列表</td>
+</tr>
+<tr>
+<td>I2C</td>
+<td><code>i2c_device_uevent</code></td>
+<td><code>i2c:</code></td>
+<td>name</td>
+</tr>
+<tr>
+<td>virtio</td>
+<td><code>virtio_uevent</code></td>
+<td><code>virtio:</code></td>
+<td>device&#x2F;vendor</td>
+</tr>
+</tbody></table>
+<p>驱动源码都用同一个 <code>MODULE_DEVICE_TABLE(&lt;bustype&gt;, tbl)</code>；modpost 根据 <code>&lt;bustype&gt;</code> 走 <code>file2alias.c</code> 里对应的 handler 生成 alias 字符串。udev + kmod 无差别对待。</p>
+<hr>
+<h2 id="七、几个实用调试点">0.7. 七、几个实用调试点</h2><h3 id="7-1-手动确认-MODALIAS-是否正确">0.7.1. 7.1 手动确认 MODALIAS 是否正确</h3><figure class="highlight sh"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs sh"><span class="hljs-built_in">cat</span> /sys/bus/pci/devices/0000:03:00.0/modalias<br><span class="hljs-comment"># pci:v00008086d00001533sv00008086sd00000001bc02sc00i00</span><br></code></pre></td></tr></table></figure>
+
+<h3 id="7-2-查该-MODALIAS-会加载哪个-ko">0.7.2. 7.2 查该 MODALIAS 会加载哪个 ko</h3><figure class="highlight sh"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs sh">modprobe -R pci:v00008086d00001533sv00008086sd00000001bc02sc00i00<br><span class="hljs-comment"># igb</span><br></code></pre></td></tr></table></figure>
+
+<p><code>modprobe -R</code> 只解析、不加载，用来验证匹配结果。</p>
+<h3 id="7-3-查-ko-里都声明了哪些-alias">0.7.3. 7.3 查 ko 里都声明了哪些 alias</h3><figure class="highlight sh"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs sh">modinfo igb | grep <span class="hljs-built_in">alias</span><br><span class="hljs-comment"># alias:  pci:v00008086d00001533sv*sd*bc*sc*i*</span><br><span class="hljs-comment"># alias:  pci:v00008086d00001521sv*sd*bc*sc*i*</span><br><span class="hljs-comment"># ...</span><br></code></pre></td></tr></table></figure>
+
+<h3 id="7-4-手动重放-uevent（触发-udev-走一遍）">0.7.4. 7.4 手动重放 uevent（触发 udev 走一遍）</h3><figure class="highlight sh"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs sh"><span class="hljs-built_in">echo</span> add &gt; /sys/bus/pci/devices/0000:03:00.0/uevent<br></code></pre></td></tr></table></figure>
+
+<p>内核会重发一次 uevent，包含最新的 <code>MODALIAS</code> 字段。适合调试自定义 udev 规则。</p>
+<h3 id="7-5-屏蔽自动加载">0.7.5. 7.5 屏蔽自动加载</h3><figure class="highlight sh"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><code class="hljs sh"><span class="hljs-comment"># /etc/modprobe.d/blacklist-igb.conf</span><br>blacklist igb<br></code></pre></td></tr></table></figure>
+
+<p>或全局关掉 PCI 的 autoprobe：</p>
+<figure class="highlight sh"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs sh"><span class="hljs-built_in">echo</span> 0 &gt; /sys/bus/pci/drivers_autoprobe<br></code></pre></td></tr></table></figure>
+
+<p>前者只是让 modprobe 拒绝加载 <code>igb</code>，pci_dev 仍会枚举出来；后者则让<strong>内核侧的路径 A 完全不跑</strong>（<code>device_initial_probe</code> 里的开关，见姊妹篇），但 <code>pci_register_driver</code> 走的路径 B 仍会触发 probe——这就是 SR-IOV 场景里”先起 VF、再手动 bind driver”的常用姿势。</p>
+<hr>
+<h2 id="八、小结">0.8. 八、小结</h2><ol>
+<li>PCI 侧 MODALIAS 是内核 <code>pci_uevent</code>（<code>pci-driver.c:1587</code>）用固定 printf 模板从 pci_dev 字段拼出来的，udev 收到时就是现成字符串，<strong>不做任何转换</strong>。</li>
+<li>udev 通用规则一句 <code>RUN{builtin}+=&quot;kmod load $env{MODALIAS}&quot;</code> 把 MODALIAS 传给 kmod。</li>
+<li>kmod 用 fnmatch 在 <code>modules.alias</code>（由 <code>depmod</code> 汇总各 ko <code>.modinfo</code> 生成）里查通配匹配，找到 modname。</li>
+<li><code>modules.alias</code> 里的每条 pattern 都来源于驱动源码 <code>MODULE_DEVICE_TABLE(pci, ...)</code> 宏展开，<code>PCI_ANY_ID</code> 在 modpost 阶段被替换成 <code>*</code>。</li>
+<li><code>modprobe</code> 加载 ko；ko <code>module_init</code> 里的 <code>pci_register_driver</code> 触发<strong>路径 B</strong>（<code>bus_for_each_dev</code> → <code>__driver_attach</code> → <code>pci_bus_match</code> → <code>really_probe</code> → <code>pci_device_probe</code> → <code>drv-&gt;probe</code>），把先前就位、当时无驱动的 pci_dev 补绑上。</li>
+<li>非 PCI 总线（USB &#x2F; Platform &#x2F; ACPI &#x2F; I2C &#x2F; virtio）机制完全一致，只是 modalias 前缀和字段不同。</li>
+</ol>
+<hr>
+<h2 id="参考">0.9. 参考</h2><ul>
+<li>姊妹篇 1：<a href="/2026/07/09/2026-07-09-pci-scan-slot.ai/">Linux 内核 PCI 枚举：pci_scan_slot 及其调用链梳理</a></li>
+<li>姊妹篇 2：<a href="/2026/07/09/2026-07-09-pci-dev-bind-driver.ai/">Linux 内核 PCI：pci_dev 是如何与 driver 建立绑定的（match &#x2F; probe 双路径）</a></li>
+</ul>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/AI/" class="category-chain-item">AI</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/ai/" class="print-no-link">#ai</a>
+      
+        <a href="/tags/linux-kernel/" class="print-no-link">#linux-kernel</a>
+      
+        <a href="/tags/udev/" class="print-no-link">#udev</a>
+      
+        <a href="/tags/kmod/" class="print-no-link">#kmod</a>
+      
+        <a href="/tags/uevent/" class="print-no-link">#uevent</a>
+      
+        <a href="/tags/modalias/" class="print-no-link">#modalias</a>
+      
+        <a href="/tags/hotplug/" class="print-no-link">#hotplug</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>Linux 驱动 ko 动态加载：uevent、udev、kmod 协作机制</div>
+      <div>https://martinbj2008.github.io/2026/07/09/2026-07-09-linux-ko-dynamic-load.ai/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>July 9, 2026</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2026/07/16/2026-07-16-acpi-to-device-add.ai/" title="内核启动：从 ACPI 到 device_add 的 PCI 枚举调用链">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">内核启动：从 ACPI 到 device_add 的 PCI 枚举调用链</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2026/07/09/2026-07-09-pci-dev-bind-driver.ai/" title="Linux 内核 PCI：pci_dev 是如何与 driver 建立绑定的（match / probe 双路径）">
+                        <span class="hidden-mobile">Linux 内核 PCI：pci_dev 是如何与 driver 建立绑定的（match / probe 双路径）</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

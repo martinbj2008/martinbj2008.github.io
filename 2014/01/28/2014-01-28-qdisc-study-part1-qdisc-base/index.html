@@ -1,0 +1,835 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.0.1. Qdisc_ops is the core of  a Qdisc.All kinds of the Qdisc_ops are linked in a list by qdisc_base.The key item of different Qdisc_ops is id[IFNAMSIZ].  Note: the list is a Singly-linked list, not">
+<meta property="og:type" content="article">
+<meta property="og:title" content="qdisc study part1: qdisc_base">
+<meta property="og:url" content="https://martinbj2008.github.io/2014/01/28/2014-01-28-qdisc-study-part1-qdisc-base/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.0.1. Qdisc_ops is the core of  a Qdisc.All kinds of the Qdisc_ops are linked in a list by qdisc_base.The key item of different Qdisc_ops is id[IFNAMSIZ].  Note: the list is a Singly-linked list, not">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2014-01-28T03:30:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.750Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="netdev">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>qdisc study part1: qdisc_base - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="qdisc study part1: qdisc_base"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2014-01-28 11:30" pubdate>
+          January 28, 2014 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          5.3k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          45 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">qdisc study part1: qdisc_base</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h3 id="Qdisc-ops-is-the-core-of-a-Qdisc">0.0.1. Qdisc_ops is the core of  a Qdisc.</h3><p>All kinds of the <code>Qdisc_ops</code> are linked in a list by <code>qdisc_base</code>.<br>The <strong>key</strong> item of different <code>Qdisc_ops</code> is <code>id[IFNAMSIZ]</code>. </p>
+<p>Note: the list is a Singly-linked list, not a common list of kernel.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">158</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc_ops</span> &#123;</span><br><span class="hljs-number">159</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc_ops</span>        *<span class="hljs-title">next</span>;</span><br><span class="hljs-number">160</span>         <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc_class_ops</span>    *<span class="hljs-title">cl_ops</span>;</span><br><span class="hljs-number">161</span>         <span class="hljs-type">char</span>                    id[IFNAMSIZ];<br><span class="hljs-number">162</span>         <span class="hljs-type">int</span>                     priv_size;<br><span class="hljs-number">163</span><br><span class="hljs-number">164</span>         <span class="hljs-type">int</span>                     (*enqueue)(<span class="hljs-keyword">struct</span> sk_buff *, <span class="hljs-keyword">struct</span> Qdisc *);<br><span class="hljs-number">165</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sk_buff</span> *        (*<span class="hljs-title">dequeue</span>)(<span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc</span> *);</span><br><span class="hljs-number">166</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sk_buff</span> *        (*<span class="hljs-title">peek</span>)(<span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc</span> *);</span><br><span class="hljs-number">167</span>         <span class="hljs-type">unsigned</span> <span class="hljs-title function_">int</span>            <span class="hljs-params">(*drop)</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> Qdisc *)</span>;<br><span class="hljs-number">168</span><br><span class="hljs-number">169</span>         <span class="hljs-type">int</span>                     (*init)(<span class="hljs-keyword">struct</span> Qdisc *, <span class="hljs-keyword">struct</span> nlattr *arg);<br><span class="hljs-number">170</span>         <span class="hljs-type">void</span>                    (*reset)(<span class="hljs-keyword">struct</span> Qdisc *);<br><span class="hljs-number">171</span>         <span class="hljs-type">void</span>                    (*destroy)(<span class="hljs-keyword">struct</span> Qdisc *);<br><span class="hljs-number">172</span>         <span class="hljs-type">int</span>                     (*change)(<span class="hljs-keyword">struct</span> Qdisc *, <span class="hljs-keyword">struct</span> nlattr *arg);<br><span class="hljs-number">173</span>         <span class="hljs-type">void</span>                    (*attach)(<span class="hljs-keyword">struct</span> Qdisc *);<br><span class="hljs-number">174</span><br><span class="hljs-number">175</span>         <span class="hljs-type">int</span>                     (*dump)(<span class="hljs-keyword">struct</span> Qdisc *, <span class="hljs-keyword">struct</span> sk_buff *);<br><span class="hljs-number">176</span>         <span class="hljs-type">int</span>                     (*dump_stats)(<span class="hljs-keyword">struct</span> Qdisc *, <span class="hljs-keyword">struct</span> gnet_dump *);<br><span class="hljs-number">177</span><br><span class="hljs-number">178</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">module</span>           *<span class="hljs-title">owner</span>;</span><br><span class="hljs-number">179</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h3 id="qdisc-base">0.0.2. qdisc_base</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">134</span> <span class="hljs-comment">/* The list of all installed queueing disciplines. */</span><br><span class="hljs-number">135</span><br><span class="hljs-number">136</span> <span class="hljs-type">static</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc_ops</span> *<span class="hljs-title">qdisc_base</span>;</span><br></code></pre></td></tr></table></figure>
+<span id="more"></span>
+
+<h3 id="the-default-Qdisc-ops-is-default-qdisc-ops">0.0.3. the default Qdisc_ops is default_qdisc_ops.</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">33</span> <span class="hljs-comment">/* Qdisc to use by default */</span><br><span class="hljs-number">34</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc_ops</span> *<span class="hljs-title">default_qdisc_ops</span> =</span> &amp;pfifo_fast_ops;<br><span class="hljs-number">35</span> EXPORT_SYMBOL(default_qdisc_ops);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">526</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc_ops</span> <span class="hljs-title">pfifo_fast_ops</span> __<span class="hljs-title">read_mostly</span> =</span> &#123;<br><span class="hljs-number">527</span>         .id             =       <span class="hljs-string">&quot;pfifo_fast&quot;</span>,<br><span class="hljs-number">528</span>         .priv_size      =       <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> pfifo_fast_priv),<br><span class="hljs-number">529</span>         .enqueue        =       pfifo_fast_enqueue,<br><span class="hljs-number">530</span>         .dequeue        =       pfifo_fast_dequeue,<br><span class="hljs-number">531</span>         .peek           =       pfifo_fast_peek,<br><span class="hljs-number">532</span>         .init           =       pfifo_fast_init,<br><span class="hljs-number">533</span>         .reset          =       pfifo_fast_reset,<br><span class="hljs-number">534</span>         .dump           =       pfifo_fast_dump,<br><span class="hljs-number">535</span>         .owner          =       THIS_MODULE,<br><span class="hljs-number">536</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+
+<h3 id="register-qdisc">0.0.4. register_qdisc</h3><p>The list is not a sorted list, it would be better with sorted list,<br>but these reg&#x2F;unreg functions are rarely used.<br>do some basic check for the methods of <code>Qdisc_ops</code>,<br>and set some default values.</p>
+<p>for example, method <code>peek</code> must be empty if method <code>dequeue</code> is empty.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">138</span> <span class="hljs-comment">/* Register/uregister queueing discipline */</span><br><span class="hljs-number">139</span><br><span class="hljs-number">140</span> <span class="hljs-type">int</span> <span class="hljs-title function_">register_qdisc</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> Qdisc_ops *qops)</span><br>141 &#123;<br><span class="hljs-number">142</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc_ops</span> *<span class="hljs-title">q</span>, **<span class="hljs-title">qp</span>;</span><br><span class="hljs-number">143</span>         <span class="hljs-type">int</span> rc = -EEXIST;<br><span class="hljs-number">144</span><br><span class="hljs-number">145</span>         write_lock(&amp;qdisc_mod_lock);<br><span class="hljs-number">146</span>         <span class="hljs-keyword">for</span> (qp = &amp;qdisc_base; (q = *qp) != <span class="hljs-literal">NULL</span>; qp = &amp;q-&gt;next)<br><span class="hljs-number">147</span>                 <span class="hljs-keyword">if</span> (!<span class="hljs-built_in">strcmp</span>(qops-&gt;id, q-&gt;id))<br><span class="hljs-number">148</span>                         <span class="hljs-keyword">goto</span> out;<br><span class="hljs-number">149</span><br><span class="hljs-number">150</span>         <span class="hljs-keyword">if</span> (qops-&gt;enqueue == <span class="hljs-literal">NULL</span>)<br><span class="hljs-number">151</span>                 qops-&gt;enqueue = noop_qdisc_ops.enqueue;<br><span class="hljs-number">152</span>         <span class="hljs-keyword">if</span> (qops-&gt;peek == <span class="hljs-literal">NULL</span>) &#123;<br><span class="hljs-number">153</span>                 <span class="hljs-keyword">if</span> (qops-&gt;dequeue == <span class="hljs-literal">NULL</span>)<br><span class="hljs-number">154</span>                         qops-&gt;peek = noop_qdisc_ops.peek;<br><span class="hljs-number">155</span>                 <span class="hljs-keyword">else</span><br><span class="hljs-number">156</span>                         <span class="hljs-keyword">goto</span> out_einval;<br><span class="hljs-number">157</span>         &#125;<br><span class="hljs-number">158</span>         <span class="hljs-keyword">if</span> (qops-&gt;dequeue == <span class="hljs-literal">NULL</span>)<br><span class="hljs-number">159</span>                 qops-&gt;dequeue = noop_qdisc_ops.dequeue;<br><span class="hljs-number">160</span><br><span class="hljs-number">161</span>         <span class="hljs-keyword">if</span> (qops-&gt;cl_ops) &#123;<br><span class="hljs-number">162</span>                 <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc_class_ops</span> *<span class="hljs-title">cops</span> =</span> qops-&gt;cl_ops;<br><span class="hljs-number">163</span><br><span class="hljs-number">164</span>                 <span class="hljs-keyword">if</span> (!(cops-&gt;get &amp;&amp; cops-&gt;put &amp;&amp; cops-&gt;walk &amp;&amp; cops-&gt;leaf))<br><span class="hljs-number">165</span>                         <span class="hljs-keyword">goto</span> out_einval;<br><span class="hljs-number">166</span><br><span class="hljs-number">167</span>                 <span class="hljs-keyword">if</span> (cops-&gt;tcf_chain &amp;&amp; !(cops-&gt;bind_tcf &amp;&amp; cops-&gt;unbind_tcf))<br><span class="hljs-number">168</span>                         <span class="hljs-keyword">goto</span> out_einval;<br><span class="hljs-number">169</span>         &#125;<br><span class="hljs-number">170</span><br><span class="hljs-number">171</span>         qops-&gt;next = <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">172</span>         *qp = qops;<br><span class="hljs-number">173</span>         rc = <span class="hljs-number">0</span>;<br><span class="hljs-number">174</span> out:<br><span class="hljs-number">175</span>         write_unlock(&amp;qdisc_mod_lock);<br><span class="hljs-number">176</span>         <span class="hljs-keyword">return</span> rc;<br><span class="hljs-number">177</span><br><span class="hljs-number">178</span> out_einval:<br><span class="hljs-number">179</span>         rc = -EINVAL;<br><span class="hljs-number">180</span>         <span class="hljs-keyword">goto</span> out;<br><span class="hljs-number">181</span> &#125;<br><span class="hljs-number">182</span> EXPORT_SYMBOL(register_qdisc);<br></code></pre></td></tr></table></figure>
+
+<h3 id="unregister-qdisc">0.0.5. unregister_qdisc</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">184</span> <span class="hljs-type">int</span> <span class="hljs-title function_">unregister_qdisc</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> Qdisc_ops *qops)</span><br>185 &#123;<br><span class="hljs-number">186</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">Qdisc_ops</span> *<span class="hljs-title">q</span>, **<span class="hljs-title">qp</span>;</span><br><span class="hljs-number">187</span>         <span class="hljs-type">int</span> err = -ENOENT;<br><span class="hljs-number">188</span><br><span class="hljs-number">189</span>         write_lock(&amp;qdisc_mod_lock);<br><span class="hljs-number">190</span>         <span class="hljs-keyword">for</span> (qp = &amp;qdisc_base; (q = *qp) != <span class="hljs-literal">NULL</span>; qp = &amp;q-&gt;next)<br><span class="hljs-number">191</span>                 <span class="hljs-keyword">if</span> (q == qops)<br><span class="hljs-number">192</span>                         <span class="hljs-keyword">break</span>;<br><span class="hljs-number">193</span>         <span class="hljs-keyword">if</span> (q) &#123;<br><span class="hljs-number">194</span>                 *qp = q-&gt;next;<br><span class="hljs-number">195</span>                 q-&gt;next = <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">196</span>                 err = <span class="hljs-number">0</span>;<br><span class="hljs-number">197</span>         &#125;<br><span class="hljs-number">198</span>         write_unlock(&amp;qdisc_mod_lock);<br><span class="hljs-number">199</span>         <span class="hljs-keyword">return</span> err;<br><span class="hljs-number">200</span> &#125;<br><span class="hljs-number">201</span> EXPORT_SYMBOL(unregister_qdisc);<br></code></pre></td></tr></table></figure>
+
+<h3 id="all-Qdisc-ops">0.0.6. all Qdisc_ops</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><code class="hljs c">junwei@localhost:~/git/linux$ grep register_qdisc net/ -Rw<br>net/sched/sch_sfb.c:    <span class="hljs-keyword">return</span> register_qdisc(&amp;sfb_qdisc_ops);<br>net/sched/sch_fq.c:     ret = register_qdisc(&amp;fq_qdisc_ops);<br>net/sched/sch_choke.c:  <span class="hljs-keyword">return</span> register_qdisc(&amp;choke_qdisc_ops);<br>net/sched/sch_codel.c:  <span class="hljs-keyword">return</span> register_qdisc(&amp;codel_qdisc_ops);<br>net/sched/sch_qfq.c:    <span class="hljs-keyword">return</span> register_qdisc(&amp;qfq_qdisc_ops);<br>net/sched/sch_atm.c:    <span class="hljs-keyword">return</span> register_qdisc(&amp;atm_qdisc_ops);<br>net/sched/sch_multiq.c: <span class="hljs-keyword">return</span> register_qdisc(&amp;multiq_qdisc_ops);<br>net/sched/sch_cbq.c:    <span class="hljs-keyword">return</span> register_qdisc(&amp;cbq_qdisc_ops);<br>net/sched/sch_fq_codel.c:       <span class="hljs-keyword">return</span> register_qdisc(&amp;fq_codel_qdisc_ops);<br>net/sched/sch_dsmark.c: <span class="hljs-keyword">return</span> register_qdisc(&amp;dsmark_qdisc_ops);<br>net/sched/sch_hfsc.c:   <span class="hljs-keyword">return</span> register_qdisc(&amp;hfsc_qdisc_ops);<br>net/sched/sch_htb.c:    <span class="hljs-keyword">return</span> register_qdisc(&amp;htb_qdisc_ops);<br>net/sched/sch_api.c:<span class="hljs-type">int</span> <span class="hljs-title function_">register_qdisc</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> Qdisc_ops *qops)</span><br>net/sched/sch_api.c:<span class="hljs-title function_">EXPORT_SYMBOL</span><span class="hljs-params">(register_qdisc)</span>;<br>net/sched/sch_api.c:    register_qdisc(&amp;pfifo_fast_ops);<br>net/sched/sch_api.c:    register_qdisc(&amp;pfifo_qdisc_ops);<br>net/sched/sch_api.c:    register_qdisc(&amp;bfifo_qdisc_ops);<br>net/sched/sch_api.c:    register_qdisc(&amp;pfifo_head_drop_qdisc_ops);<br>net/sched/sch_api.c:    register_qdisc(&amp;mq_qdisc_ops);<br>net/sched/sch_blackhole.c:      <span class="hljs-keyword">return</span> register_qdisc(&amp;blackhole_qdisc_ops);<br>net/sched/sch_drr.c:    <span class="hljs-keyword">return</span> register_qdisc(&amp;drr_qdisc_ops);<br>net/sched/sch_netem.c:  <span class="hljs-keyword">return</span> register_qdisc(&amp;netem_qdisc_ops);<br>net/sched/sch_prio.c:   <span class="hljs-keyword">return</span> register_qdisc(&amp;prio_qdisc_ops);<br>net/sched/sch_gred.c:   <span class="hljs-keyword">return</span> register_qdisc(&amp;gred_qdisc_ops);<br>net/sched/sch_ingress.c:        <span class="hljs-keyword">return</span> register_qdisc(&amp;ingress_qdisc_ops);<br>net/sched/sch_mqprio.c: <span class="hljs-keyword">return</span> register_qdisc(&amp;mqprio_qdisc_ops);<br>net/sched/sch_sfq.c:    <span class="hljs-keyword">return</span> register_qdisc(&amp;sfq_qdisc_ops);<br>net/sched/sch_tbf.c:    <span class="hljs-keyword">return</span> register_qdisc(&amp;tbf_qdisc_ops);<br>net/sched/sch_red.c:    <span class="hljs-keyword">return</span> register_qdisc(&amp;red_qdisc_ops);<br>net/sched/sch_plug.c:   <span class="hljs-keyword">return</span> register_qdisc(&amp;plug_qdisc_ops);<br>net/sched/sch_teql.c:           err = register_qdisc(&amp;master-&gt;qops);<br>junwei@localhost:~/git/linux$<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Netdev/" class="category-chain-item">Netdev</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/netdev/" class="print-no-link">#netdev</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>qdisc study part1: qdisc_base</div>
+      <div>https://martinbj2008.github.io/2014/01/28/2014-01-28-qdisc-study-part1-qdisc-base/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>January 28, 2014</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2014/01/28/2014-01-28-how-to-create-dev-qdisc/" title="how to create dev qdisc">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">how to create dev qdisc</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2014/01/27/2014-01-27-how-to-remember-ip-slash-tcp-slash-udp-header/" title="how to remember ip/tcp/udp header">
+                        <span class="hidden-mobile">how to remember ip/tcp/udp header</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

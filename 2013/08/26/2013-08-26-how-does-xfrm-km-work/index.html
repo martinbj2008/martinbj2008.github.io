@@ -1,0 +1,855 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.0.1. summaryThere is a list xfrm_km_list in kernel.Each node of the list is struct xfrm_mgr,which has several methods to notify usersapce by netlink message.Different methods has corresponding metho">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How does xfrm km work">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/08/26/2013-08-26-how-does-xfrm-km-work/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.0.1. summaryThere is a list xfrm_km_list in kernel.Each node of the list is struct xfrm_mgr,which has several methods to notify usersapce by netlink message.Different methods has corresponding metho">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2013-08-26T07:19:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.749Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="XFRM">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>How does xfrm km work - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="How does xfrm km work"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2013-08-26 15:19" pubdate>
+          August 26, 2013 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          9k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          75 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">How does xfrm km work</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h3 id="summary">0.0.1. summary</h3><p>There is a list <code>xfrm_km_list</code> in kernel.<br>Each node of the list is <code>struct xfrm_mgr</code>,<br>which has several methods to notify usersapce by netlink message.<br>Different methods has corresponding method,<br>and it broadcast the netlink message with different xfrm groups.</p>
+<p><code>struct xfrm_mgr</code> has many methods, for example:<br>	1. notify:  notify the sa change, ex: add, delete, expire ..<br>	2. acquire: notify when sp is match, while no SA is got.<br>	3. compile_policy:<br>	4. new_mapping:<br>	5: notify_policy: notify sp change. add, delete, expire.<br>	6. report:<br>	7. mirgrate:</p>
+<span id="more"></span>
+
+<h4 id="struct-xfrm-mgr-and-xfrm-km-list">0.0.1.1. struct xfrm_mgr and xfrm_km_list</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1630</span> <span class="hljs-type">static</span> <span class="hljs-title function_">LIST_HEAD</span><span class="hljs-params">(xfrm_km_list)</span>;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">579</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">xfrm_mgr</span> &#123;</span><br><span class="hljs-number">580</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">list</span>;</span><br><span class="hljs-number">581</span>         <span class="hljs-type">char</span>                    *id;<br><span class="hljs-number">582</span>         <span class="hljs-type">int</span>                     (*notify)(<span class="hljs-keyword">struct</span> xfrm_state *x, <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> km_event *c);<br><span class="hljs-number">583</span>         <span class="hljs-type">int</span>                     (*acquire)(<span class="hljs-keyword">struct</span> xfrm_state *x, <span class="hljs-keyword">struct</span> xfrm_tmpl *, <span class="hljs-keyword">struct</span> xfrm_policy *xp);<br><span class="hljs-number">584</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">xfrm_policy</span>      *(*<span class="hljs-title">compile_policy</span>)(<span class="hljs-keyword">struct</span> <span class="hljs-title">sock</span> *<span class="hljs-title">sk</span>, <span class="hljs-title">int</span> <span class="hljs-title">opt</span>, <span class="hljs-title">u8</span> *<span class="hljs-title">data</span>, <span class="hljs-title">int</span> <span class="hljs-title">len</span>, <span class="hljs-title">int</span> *<span class="hljs-title">dir</span>);</span><br><span class="hljs-number">585</span>         <span class="hljs-type">int</span>                     (*new_mapping)(<span class="hljs-keyword">struct</span> xfrm_state *x, <span class="hljs-type">xfrm_address_t</span> *ipaddr, __be16 sport);<br><span class="hljs-number">586</span>         <span class="hljs-type">int</span>                     (*notify_policy)(<span class="hljs-keyword">struct</span> xfrm_policy *x, <span class="hljs-type">int</span> dir, <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> km_event *c);<br><span class="hljs-number">587</span>         <span class="hljs-type">int</span>                     (*report)(<span class="hljs-keyword">struct</span> net *net, u8 proto, <span class="hljs-keyword">struct</span> xfrm_selector *sel, <span class="hljs-type">xfrm_address_t</span> *addr);<br><span class="hljs-number">588</span>         <span class="hljs-type">int</span>                     (*migrate)(<span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> xfrm_selector *sel,<br><span class="hljs-number">589</span>                                            u8 dir, u8 type,<br><span class="hljs-number">590</span>                                            <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> xfrm_migrate *m,<br><span class="hljs-number">591</span>                                            <span class="hljs-type">int</span> num_bundles,<br><span class="hljs-number">592</span>                                            <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> xfrm_kmaddress *k);<br><span class="hljs-number">593</span> &#125;;<br></code></pre></td></tr></table></figure>
+<h4 id="xfrm-register-km-vs-xfrm-unregister-km">0.0.1.2. xfrm_register_km vs xfrm_unregister_km</h4><p>Register or unregister a <code>xfrm_mgr</code> to <code>xfrm_km_list</code>.</p>
+<p>NOTE:  here we <code>use spin_lock_bh</code>,<br>because the <code>km_notify</code> method maybe used in irq bottom half.<br>ex: the first packet which trigger the dynamic sa<br>negotiation, which is processed in softirq(rx).</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1807</span> <span class="hljs-type">int</span> <span class="hljs-title function_">xfrm_register_km</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> xfrm_mgr *km)</span><br>1808 &#123;<br><span class="hljs-number">1809</span>         spin_lock_bh(&amp;xfrm_km_lock);<br><span class="hljs-number">1810</span>         list_add_tail_rcu(&amp;km-&gt;<span class="hljs-built_in">list</span>, &amp;xfrm_km_list);<br><span class="hljs-number">1811</span>         spin_unlock_bh(&amp;xfrm_km_lock);<br><span class="hljs-number">1812</span>         <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">1813</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1816</span> <span class="hljs-type">int</span> <span class="hljs-title function_">xfrm_unregister_km</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> xfrm_mgr *km)</span><br>1817 &#123;<br><span class="hljs-number">1818</span>         spin_lock_bh(&amp;xfrm_km_lock);<br><span class="hljs-number">1819</span>         list_del_rcu(&amp;km-&gt;<span class="hljs-built_in">list</span>);<br><span class="hljs-number">1820</span>         spin_unlock_bh(&amp;xfrm_km_lock);<br><span class="hljs-number">1821</span>         synchronize_rcu();<br><span class="hljs-number">1822</span>         <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">1823</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h4 id="register-with-netlink-mgr">0.0.1.3. register with netlink_mgr</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">3031</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> __init <span class="hljs-title function_">xfrm_user_init</span><span class="hljs-params">(<span class="hljs-type">void</span>)</span><br>...<br>3040         rv = xfrm_register_km(&amp;netlink_mgr);<br>...<br></code></pre></td></tr></table></figure>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2989</span> <span class="hljs-type">static</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">xfrm_mgr</span> <span class="hljs-title">netlink_mgr</span> =</span> &#123;<br><span class="hljs-number">2990</span>         .id             = <span class="hljs-string">&quot;netlink&quot;</span>,<br><span class="hljs-number">2991</span>         .notify         = xfrm_send_state_notify,<br><span class="hljs-number">2992</span>         .acquire        = xfrm_send_acquire,<br><span class="hljs-number">2993</span>         .compile_policy = xfrm_compile_policy,<br><span class="hljs-number">2994</span>         .notify_policy  = xfrm_send_policy_notify,<br><span class="hljs-number">2995</span>         .report         = xfrm_send_report,<br><span class="hljs-number">2996</span>         .migrate        = xfrm_send_migrate,<br><span class="hljs-number">2997</span>         .new_mapping    = xfrm_send_mapping,<br><span class="hljs-number">2998</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h4 id="km-state-expired">0.0.1.4. km_state_expired</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1643</span> <span class="hljs-type">void</span> <span class="hljs-title function_">km_state_notify</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> xfrm_state *x, <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> km_event *c)</span><br>1644 &#123;<br><span class="hljs-number">1645</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">xfrm_mgr</span> *<span class="hljs-title">km</span>;</span><br><span class="hljs-number">1646</span>         rcu_read_lock();<br><span class="hljs-number">1647</span>         list_for_each_entry_rcu(km, &amp;xfrm_km_list, <span class="hljs-built_in">list</span>)<br><span class="hljs-number">1648</span>                 <span class="hljs-keyword">if</span> (km-&gt;notify)<br><span class="hljs-number">1649</span>                         km-&gt;notify(x, c);<br><span class="hljs-number">1650</span>         rcu_read_unlock();<br><span class="hljs-number">1651</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1656</span> <span class="hljs-type">void</span> <span class="hljs-title function_">km_state_expired</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> xfrm_state *x, <span class="hljs-type">int</span> hard, u32 portid)</span><br>1657 &#123;<br><span class="hljs-number">1658</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net</span> *<span class="hljs-title">net</span> =</span> xs_net(x);<br><span class="hljs-number">1659</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">km_event</span> <span class="hljs-title">c</span>;</span><br><span class="hljs-number">1660</span><br><span class="hljs-number">1661</span>         c.data.hard = hard;<br><span class="hljs-number">1662</span>         c.portid = portid;<br><span class="hljs-number">1663</span>         c.event = XFRM_MSG_EXPIRE;<br><span class="hljs-number">1664</span>         km_state_notify(x, &amp;c);<br><span class="hljs-number">1665</span><br><span class="hljs-number">1666</span>         <span class="hljs-keyword">if</span> (hard)<br><span class="hljs-number">1667</span>                 wake_up(&amp;net-&gt;xfrm.km_waitq);<br><span class="hljs-number">1668</span> &#125;<br><span class="hljs-number">1669</span><br><span class="hljs-number">1670</span> EXPORT_SYMBOL(km_state_expired);<br></code></pre></td></tr></table></figure>
+
+<h4 id="km-policy-expired-vs-km-policy-notify">0.0.1.5. km_policy_expired vs km_policy_notify</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1632</span> <span class="hljs-type">void</span> <span class="hljs-title function_">km_policy_notify</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> xfrm_policy *xp, <span class="hljs-type">int</span> dir, <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> km_event *c)</span><br>1633 &#123;<br><span class="hljs-number">1634</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">xfrm_mgr</span> *<span class="hljs-title">km</span>;</span><br><span class="hljs-number">1635</span><br><span class="hljs-number">1636</span>         rcu_read_lock();<br><span class="hljs-number">1637</span>         list_for_each_entry_rcu(km, &amp;xfrm_km_list, <span class="hljs-built_in">list</span>)<br><span class="hljs-number">1638</span>                 <span class="hljs-keyword">if</span> (km-&gt;notify_policy)<br><span class="hljs-number">1639</span>                         km-&gt;notify_policy(xp, dir, c);<br><span class="hljs-number">1640</span>         rcu_read_unlock();<br><span class="hljs-number">1641</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1708</span> <span class="hljs-type">void</span> <span class="hljs-title function_">km_policy_expired</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> xfrm_policy *pol, <span class="hljs-type">int</span> dir, <span class="hljs-type">int</span> hard, u32 portid)</span><br>1709 &#123;<br><span class="hljs-number">1710</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net</span> *<span class="hljs-title">net</span> =</span> xp_net(pol);<br><span class="hljs-number">1711</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">km_event</span> <span class="hljs-title">c</span>;</span><br><span class="hljs-number">1712</span><br><span class="hljs-number">1713</span>         c.data.hard = hard;<br><span class="hljs-number">1714</span>         c.portid = portid;<br><span class="hljs-number">1715</span>         c.event = XFRM_MSG_POLEXPIRE;<br><span class="hljs-number">1716</span>         km_policy_notify(pol, dir, &amp;c);<br><span class="hljs-number">1717</span><br><span class="hljs-number">1718</span>         <span class="hljs-keyword">if</span> (hard)<br><span class="hljs-number">1719</span>                 wake_up(&amp;net-&gt;xfrm.km_waitq);<br><span class="hljs-number">1720</span> &#125;<br><span class="hljs-number">1721</span> EXPORT_SYMBOL(km_policy_expired);<br></code></pre></td></tr></table></figure>
+
+<h4 id="xfrm-send-state-notify">0.0.1.6. xfrm_send_state_notify</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2577</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">xfrm_send_state_notify</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> xfrm_state *x, <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> km_event *c)</span><br>2578 &#123;<br><span class="hljs-number">2579</span><br><span class="hljs-number">2580</span>         <span class="hljs-keyword">switch</span> (c-&gt;event) &#123;<br><span class="hljs-number">2581</span>         <span class="hljs-keyword">case</span> XFRM_MSG_EXPIRE:<br><span class="hljs-number">2582</span>                 <span class="hljs-keyword">return</span> xfrm_exp_state_notify(x, c);<br><span class="hljs-number">2583</span>         <span class="hljs-keyword">case</span> XFRM_MSG_NEWAE:<br><span class="hljs-number">2584</span>                 <span class="hljs-keyword">return</span> xfrm_aevent_state_notify(x, c);<br><span class="hljs-number">2585</span>         <span class="hljs-keyword">case</span> XFRM_MSG_DELSA:<br><span class="hljs-number">2586</span>         <span class="hljs-keyword">case</span> XFRM_MSG_UPDSA:<br><span class="hljs-number">2587</span>         <span class="hljs-keyword">case</span> XFRM_MSG_NEWSA:<br><span class="hljs-number">2588</span>                 <span class="hljs-keyword">return</span> xfrm_notify_sa(x, c);<br><span class="hljs-number">2589</span>         <span class="hljs-keyword">case</span> XFRM_MSG_FLUSHSA:<br><span class="hljs-number">2590</span>                 <span class="hljs-keyword">return</span> xfrm_notify_sa_flush(c);<br><span class="hljs-number">2591</span>         <span class="hljs-keyword">default</span>:<br><span class="hljs-number">2592</span>                 printk(KERN_NOTICE <span class="hljs-string">&quot;xfrm_user: Unknown SA event %d\n&quot;</span>,<br><span class="hljs-number">2593</span>                        c-&gt;event);<br><span class="hljs-number">2594</span>                 <span class="hljs-keyword">break</span>;<br><span class="hljs-number">2595</span>         &#125;<br><span class="hljs-number">2596</span><br><span class="hljs-number">2597</span>         <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">2598</span><br><span class="hljs-number">2599</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2428</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">xfrm_exp_state_notify</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> xfrm_state *x, <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> km_event *c)</span><br>2429 &#123;<br><span class="hljs-number">2430</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net</span> *<span class="hljs-title">net</span> =</span> xs_net(x);<br><span class="hljs-number">2431</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sk_buff</span> *<span class="hljs-title">skb</span>;</span><br><span class="hljs-number">2432</span><br><span class="hljs-number">2433</span>         skb = nlmsg_new(xfrm_expire_msgsize(), GFP_ATOMIC);<br><span class="hljs-number">2434</span>         <span class="hljs-keyword">if</span> (skb == <span class="hljs-literal">NULL</span>)<br><span class="hljs-number">2435</span>                 <span class="hljs-keyword">return</span> -ENOMEM;<br><span class="hljs-number">2436</span><br><span class="hljs-number">2437</span>         <span class="hljs-keyword">if</span> (build_expire(skb, x, c) &lt; <span class="hljs-number">0</span>) &#123;<br><span class="hljs-number">2438</span>                 kfree_skb(skb);<br><span class="hljs-number">2439</span>                 <span class="hljs-keyword">return</span> -EMSGSIZE;<br><span class="hljs-number">2440</span>         &#125;<br><span class="hljs-number">2441</span><br><span class="hljs-number">2442</span>         <span class="hljs-keyword">return</span> nlmsg_multicast(net-&gt;xfrm.nlsk, skb, <span class="hljs-number">0</span>, XFRMNLGRP_EXPIRE, GFP_ATOMIC);<br><span class="hljs-number">2443</span> &#125;<br></code></pre></td></tr></table></figure>
+<h4 id="xfrm-send-acquire">0.0.1.7. xfrm_send_acquire</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2648</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">xfrm_send_acquire</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> xfrm_state *x, <span class="hljs-keyword">struct</span> xfrm_tmpl *xt,</span><br><span class="hljs-params"><span class="hljs-number">2649</span>                              <span class="hljs-keyword">struct</span> xfrm_policy *xp)</span><br>2650 &#123;<br><span class="hljs-number">2651</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net</span> *<span class="hljs-title">net</span> =</span> xs_net(x);<br><span class="hljs-number">2652</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sk_buff</span> *<span class="hljs-title">skb</span>;</span><br><span class="hljs-number">2653</span><br><span class="hljs-number">2654</span>         skb = nlmsg_new(xfrm_acquire_msgsize(x, xp), GFP_ATOMIC);<br><span class="hljs-number">2655</span>         <span class="hljs-keyword">if</span> (skb == <span class="hljs-literal">NULL</span>)<br><span class="hljs-number">2656</span>                 <span class="hljs-keyword">return</span> -ENOMEM;<br><span class="hljs-number">2657</span><br><span class="hljs-number">2658</span>         <span class="hljs-keyword">if</span> (build_acquire(skb, x, xt, xp) &lt; <span class="hljs-number">0</span>)<br><span class="hljs-number">2659</span>                 BUG();<br><span class="hljs-number">2660</span><br><span class="hljs-number">2661</span>         <span class="hljs-keyword">return</span> nlmsg_multicast(net-&gt;xfrm.nlsk, skb, <span class="hljs-number">0</span>, XFRMNLGRP_ACQUIRE, GFP_ATOMIC);<br><span class="hljs-number">2662</span> &#125;<br></code></pre></td></tr></table></figure>
+<h4 id="how-to-notify-strongswan-negotiate-a-new-sa">0.0.1.8. how to notify strongswan negotiate a new sa.</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs c">&gt; xfrm_stat_find<br>&gt; &gt;  km_query<br>&gt; &gt; &gt;  km-&gt;acquire<br>equal:<br>&gt; &gt; &gt;  xfrm_send_acquire<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1671</span> <span class="hljs-comment">/*</span><br><span class="hljs-comment">1672  * We send to all registered managers regardless of failure</span><br><span class="hljs-comment">1673  * We are happy with one success</span><br><span class="hljs-comment">1674 */</span><br><span class="hljs-number">1675</span> <span class="hljs-type">int</span> <span class="hljs-title function_">km_query</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> xfrm_state *x, <span class="hljs-keyword">struct</span> xfrm_tmpl *t, <span class="hljs-keyword">struct</span> xfrm_policy *pol)</span><br>1676 &#123;<br><span class="hljs-number">1677</span>         <span class="hljs-type">int</span> err = -EINVAL, acqret;<br><span class="hljs-number">1678</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">xfrm_mgr</span> *<span class="hljs-title">km</span>;</span><br><span class="hljs-number">1679</span><br><span class="hljs-number">1680</span>         rcu_read_lock();<br><span class="hljs-number">1681</span>         list_for_each_entry_rcu(km, &amp;xfrm_km_list, <span class="hljs-built_in">list</span>) &#123;<br><span class="hljs-number">1682</span>                 acqret = km-&gt;acquire(x, t, pol);<br><span class="hljs-number">1683</span>                 <span class="hljs-keyword">if</span> (!acqret)<br><span class="hljs-number">1684</span>                         err = acqret;<br><span class="hljs-number">1685</span>         &#125;<br><span class="hljs-number">1686</span>         rcu_read_unlock();<br><span class="hljs-number">1687</span>         <span class="hljs-keyword">return</span> err;<br><span class="hljs-number">1688</span> &#125;<br><span class="hljs-number">1689</span> EXPORT_SYMBOL(km_query);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">788</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">xfrm_state</span> *</span><br><span class="hljs-class"> 789 <span class="hljs-title">xfrm_state_find</span>(<span class="hljs-title">const</span> <span class="hljs-title">xfrm_address_t</span> *<span class="hljs-title">daddr</span>, <span class="hljs-title">const</span> <span class="hljs-title">xfrm_address_t</span> *<span class="hljs-title">saddr</span>,</span><br><span class="hljs-class"> 790                 <span class="hljs-title">const</span> <span class="hljs-keyword">struct</span> <span class="hljs-title">flowi</span> *<span class="hljs-title">fl</span>, <span class="hljs-keyword">struct</span> <span class="hljs-title">xfrm_tmpl</span> *<span class="hljs-title">tmpl</span>,</span><br><span class="hljs-class"> 791                 <span class="hljs-keyword">struct</span> <span class="hljs-title">xfrm_policy</span> *<span class="hljs-title">pol</span>, <span class="hljs-title">int</span> *<span class="hljs-title">err</span>,</span><br><span class="hljs-class"> 792                 <span class="hljs-title">unsigned</span> <span class="hljs-title">short</span> <span class="hljs-title">family</span>)</span><br><span class="hljs-class"> 793 &#123;</span><br>...<br> <span class="hljs-number">838</span>         x = best;<br> <span class="hljs-number">839</span>         <span class="hljs-keyword">if</span> (!x &amp;&amp; !error &amp;&amp; !acquire_in_progress) &#123;<br> <span class="hljs-number">840</span>                 <span class="hljs-keyword">if</span> (tmpl-&gt;id.spi &amp;&amp;<br> <span class="hljs-number">841</span>                     (x0 = __xfrm_state_lookup(net, mark, daddr, tmpl-&gt;id.spi,<br> <span class="hljs-number">842</span>                                               tmpl-&gt;id.proto, encap_family)) != <span class="hljs-literal">NULL</span>) &#123;<br> <span class="hljs-number">843</span>                         to_put = x0;<br> <span class="hljs-number">844</span>                         error = -EEXIST;<br> <span class="hljs-number">845</span>                         <span class="hljs-keyword">goto</span> out;<br> <span class="hljs-number">846</span>                 &#125;<br> <span class="hljs-number">847</span>                 x = xfrm_state_alloc(net);<br> <span class="hljs-number">848</span>                 <span class="hljs-keyword">if</span> (x == <span class="hljs-literal">NULL</span>) &#123;<br> <span class="hljs-number">849</span>                         error = -ENOMEM;<br> <span class="hljs-number">850</span>                         <span class="hljs-keyword">goto</span> out;<br> <span class="hljs-number">851</span>                 &#125;<br> <span class="hljs-number">852</span>                 <span class="hljs-comment">/* Initialize temporary state matching only</span><br><span class="hljs-comment"> 853                  * to current session. */</span><br> <span class="hljs-number">854</span>                 xfrm_init_tempstate(x, fl, tmpl, daddr, saddr, family);<br> <span class="hljs-number">855</span>                 <span class="hljs-built_in">memcpy</span>(&amp;x-&gt;mark, &amp;pol-&gt;mark, <span class="hljs-keyword">sizeof</span>(x-&gt;mark));<br> <span class="hljs-number">856</span><br> <span class="hljs-number">857</span>                 error = security_xfrm_state_alloc_acquire(x, pol-&gt;security, fl-&gt;flowi_secid);<br> <span class="hljs-number">858</span>                 <span class="hljs-keyword">if</span> (error) &#123;<br> <span class="hljs-number">859</span>                         x-&gt;km.state = XFRM_STATE_DEAD;<br> <span class="hljs-number">860</span>                         to_put = x;<br> <span class="hljs-number">861</span>                         x = <span class="hljs-literal">NULL</span>;<br> <span class="hljs-number">862</span>                         <span class="hljs-keyword">goto</span> out;<br> <span class="hljs-number">863</span>                 &#125;<br> <span class="hljs-number">864</span><br> <span class="hljs-number">865</span>                 <span class="hljs-keyword">if</span> (km_query(x, tmpl, pol) == <span class="hljs-number">0</span>) &#123;<br> <span class="hljs-number">866</span>                         x-&gt;km.state = XFRM_STATE_ACQ;<br> <span class="hljs-number">867</span>                         list_add(&amp;x-&gt;km.all, &amp;net-&gt;xfrm.state_all);<br> <span class="hljs-number">868</span>                         hlist_add_head(&amp;x-&gt;bydst, net-&gt;xfrm.state_bydst+h);<br></code></pre></td></tr></table></figure>
+
+<h4 id="pernet-net-xfrm-nlsk">0.0.1.9. pernet net-&gt;xfrm.nlsk</h4><p>It is a basic of xfrm netlink.<br>All the message sent to&#x2F;from kernel will use it.<br>See detail with blog about netlink.</p>
+<p><a href="http://martinbj2008.github.io/blog/2013/02/16/netlink-in-kernel">http://martinbj2008.github.io/blog/2013/02/16/netlink-in-kernel</a><br><a href="http://martinbj2008.github.io/blog/2013/03/15/netlink-in-kernel">http://martinbj2008.github.io/blog/2013/03/15/netlink-in-kernel</a></p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">3000</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> __net_init <span class="hljs-title function_">xfrm_user_net_init</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net *net)</span><br>3001 &#123;<br><span class="hljs-number">3002</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sock</span> *<span class="hljs-title">nlsk</span>;</span><br><span class="hljs-number">3003</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">netlink_kernel_cfg</span> <span class="hljs-title">cfg</span> =</span> &#123;<br><span class="hljs-number">3004</span>                 .groups = XFRMNLGRP_MAX,<br><span class="hljs-number">3005</span>                 .input  = xfrm_netlink_rcv,<br><span class="hljs-number">3006</span>         &#125;;<br><span class="hljs-number">3007</span><br><span class="hljs-number">3008</span>         nlsk = netlink_kernel_create(net, NETLINK_XFRM, &amp;cfg);<br><span class="hljs-number">3009</span>         <span class="hljs-keyword">if</span> (nlsk == <span class="hljs-literal">NULL</span>)<br><span class="hljs-number">3010</span>                 <span class="hljs-keyword">return</span> -ENOMEM;<br><span class="hljs-number">3011</span>         net-&gt;xfrm.nlsk_stash = nlsk; <span class="hljs-comment">/* Don&#x27;t set to NULL */</span><br><span class="hljs-number">3012</span>         rcu_assign_pointer(net-&gt;xfrm.nlsk, nlsk);<br><span class="hljs-number">3013</span>         <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">3014</span> &#125;<br></code></pre></td></tr></table></figure>
+<h4 id="net-xfrm-km-waitq">0.0.1.10. net-&gt;xfrm.km_waitq</h4><p>It is used to wait SA negotiation complete,<br>and is not related with km.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2121</span>         <span class="hljs-keyword">if</span> (route == <span class="hljs-literal">NULL</span> &amp;&amp; num_xfrms &gt; <span class="hljs-number">0</span>) &#123;<br><span class="hljs-number">2122</span>                 <span class="hljs-comment">/* The only case when xfrm_bundle_lookup() returns a</span><br><span class="hljs-comment">2123                  * bundle with null route, is when the template could</span><br><span class="hljs-comment">2124                  * not be resolved. It means policies are there, but</span><br><span class="hljs-comment">2125                  * bundle could not be created, since we don&#x27;t yet</span><br><span class="hljs-comment">2126                  * have the xfrm_state&#x27;s. We need to wait for KM to</span><br><span class="hljs-comment">2127                  * negotiate new SA&#x27;s or bail out with error.*/</span><br><span class="hljs-number">2128</span>                 <span class="hljs-keyword">if</span> (net-&gt;xfrm.sysctl_larval_drop) &#123;<br><span class="hljs-number">2129</span>                         <span class="hljs-comment">/* EREMOTE tells the caller to generate</span><br><span class="hljs-comment">2130                          * a one-shot blackhole route. */</span><br><span class="hljs-number">2131</span>                         dst_release(dst);<br><span class="hljs-number">2132</span>                         xfrm_pols_put(pols, drop_pols);<br><span class="hljs-number">2133</span>                         XFRM_INC_STATS(net, LINUX_MIB_XFRMOUTNOSTATES);<br><span class="hljs-number">2134</span><br><span class="hljs-number">2135</span>                         <span class="hljs-keyword">return</span> make_blackhole(net, family, dst_orig);<br><span class="hljs-number">2136</span>                 &#125;<br><span class="hljs-number">2137</span>                 <span class="hljs-keyword">if</span> (fl-&gt;flowi_flags &amp; FLOWI_FLAG_CAN_SLEEP) &#123;<br><span class="hljs-number">2138</span>                         DECLARE_WAITQUEUE(wait, current);<br><span class="hljs-number">2139</span><br><span class="hljs-number">2140</span>                         add_wait_queue(&amp;net-&gt;xfrm.km_waitq, &amp;wait);<br><span class="hljs-number">2141</span>                         set_current_state(TASK_INTERRUPTIBLE);<br><span class="hljs-number">2142</span>                         schedule();<br><span class="hljs-number">2143</span>                         set_current_state(TASK_RUNNING);<br><span class="hljs-number">2144</span>                         remove_wait_queue(&amp;net-&gt;xfrm.km_waitq, &amp;wait);<br><span class="hljs-number">2145</span><br><span class="hljs-number">2146</span>                         <span class="hljs-keyword">if</span> (!signal_pending(current)) &#123;<br><span class="hljs-number">2147</span>                                 dst_release(dst);<br><span class="hljs-number">2148</span>                                 <span class="hljs-keyword">goto</span> restart;<br><span class="hljs-number">2149</span>                         &#125;<br><span class="hljs-number">2150</span><br><span class="hljs-number">2151</span>                         err = -ERESTART;<br><span class="hljs-number">2152</span>                 &#125; <span class="hljs-keyword">else</span><br><span class="hljs-number">2153</span>                         err = -EAGAIN;<br><span class="hljs-number">2154</span><br><span class="hljs-number">2155</span>                 XFRM_INC_STATS(net, LINUX_MIB_XFRMOUTNOSTATES);<br><span class="hljs-number">2156</span>                 <span class="hljs-keyword">goto</span> error;<br><span class="hljs-number">2157</span>         &#125;<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/XFRM/" class="category-chain-item">XFRM</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/XFRM/" class="print-no-link">#XFRM</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>How does xfrm km work</div>
+      <div>https://martinbj2008.github.io/2013/08/26/2013-08-26-how-does-xfrm-km-work/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>August 26, 2013</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2013/09/06/2013-09-06-pfn-to-page-and-page-to-pfn/" title="pfn_to_page and page_to_pfn">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">pfn_to_page and page_to_pfn</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2013/08/26/2013-08-26-ipv4-route-study-basic-fun/" title="IPv4 route study part 1: basic fun">
+                        <span class="hidden-mobile">IPv4 route study part 1: basic fun</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

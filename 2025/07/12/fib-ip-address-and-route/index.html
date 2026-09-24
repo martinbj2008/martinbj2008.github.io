@@ -1,0 +1,933 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.0.1. 问题背景Q1：ping 本机eth1口的ip地址时，对应的ICMP报文会被发送到eth1口上吗？ 0.0.1.1. 实验： ping本机网口地址 通过tcpdump抓包命令，我们发现报文被发送到lo上，而不是对应的物理口 eth1。虽然ip 地址被配在本机的物理口上，但是报文并没有被发送到物理口。为了理解这个问题，我们需要先看下下面这个问题。 Q2： 当一个IP地址被添加到一个网口后">
+<meta property="og:type" content="article">
+<meta property="og:title" content="ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文">
+<meta property="og:url" content="https://martinbj2008.github.io/2025/07/12/fib-ip-address-and-route/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.0.1. 问题背景Q1：ping 本机eth1口的ip地址时，对应的ICMP报文会被发送到eth1口上吗？ 0.0.1.1. 实验： ping本机网口地址 通过tcpdump抓包命令，我们发现报文被发送到lo上，而不是对应的物理口 eth1。虽然ip 地址被配在本机的物理口上，但是报文并没有被发送到物理口。为了理解这个问题，我们需要先看下下面这个问题。 Q2： 当一个IP地址被添加到一个网口后">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/fib_ip_route/ping_local_lo.png">
+<meta property="og:image" content="https://martinbj2008.github.io/images/fib_ip_route/route_table_diff.png">
+<meta property="article:published_time" content="2025-07-12T09:23:04.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.753Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="fib">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/fib_ip_route/ping_local_lo.png">
+  
+  
+  
+  <title>ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2025-07-12 17:23" pubdate>
+          July 12, 2025 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          7.8k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          66 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h3 id="问题背景">0.0.1. 问题背景</h3><p>Q1：ping 本机eth1口的ip地址时，对应的ICMP报文会被发送到eth1口上吗？</p>
+<h4 id="实验：-ping本机网口地址">0.0.1.1. 实验： ping本机网口地址</h4><p><img src="/images/fib_ip_route/ping_local_lo.png" srcset="/img/loading.gif" lazyload alt="ping本机网口地址实验"></p>
+<p>通过tcpdump抓包命令，我们发现报文被发送到lo上，而不是对应的物理口 eth1。<br>虽然ip 地址被配在本机的物理口上，但是报文并没有被发送到物理口。为了理解这个问题，我们需要先看下下面这个问题。</p>
+<p>Q2： 当一个IP地址被添加到一个网口后，会引起哪些路由变化呢？<br>为一个网口增加一个 IP 地址是个很常见的网络操作。<br>具体添加方式有多种，包括命令行手动添加、通过配置文件在系统启动时候添加，还是通过dhcp自动获取并添加等。<br>无论哪种场景，添加完IP地址后，系统路由有什么变化。<br>场景：在本机物理口 eth1上配置192.168.8.8&#x2F;24，网口状态正常(UP).</p>
+<span id="more"></span>
+
+<h4 id="增加一个IP地址，内核增加3条路由">0.0.1.2. 增加一个IP地址，内核增加3条路由</h4><p>下面是路由表在增加 IP 地址前后的对比：<br><img src="/images/fib_ip_route/route_table_diff.png" srcset="/img/loading.gif" lazyload alt="路由表变化对比"></p>
+<p>通过对比系统路由表的变化，发现路由表里增加了三条路由。</p>
+<h5 id="网段路由：">0.0.1.2.1. 网段路由：</h5><figure class="highlight accesslog"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs accesslog"><span class="hljs-number">192.168.8.0</span>/<span class="hljs-number">24</span> dev eth1 proto kernel scope link src <span class="hljs-number">192</span>.<span class="hljs-number">168</span>.<span class="hljs-number">8</span>.<span class="hljs-number">8</span><br></code></pre></td></tr></table></figure>
+
+<p>在<code>main</code>表里增加一条到本网段前缀的网段路由，<br>这个路由对应的路由网段，</p>
+<ul>
+<li>网段入口：IP地址和掩码产生的网络前缀。</li>
+<li>路由出口：配置 IP 的网口</li>
+<li>推荐源 IP：被配置的IP地址</li>
+</ul>
+<p>这条路由是如何被使用的？<br>比如 <code>ping 192.168.8.1</code>时，</p>
+<ul>
+<li>内核会通过查找路由表 main，查找到这条匹配的路由，</li>
+<li>之后把源 IP 当做 eth&#x2F;ipv4&#x2F;icmp 报文里的ipv&#x2F;src_addr,</li>
+<li>最后通过网口 eth1 发送出去（eth头里src&#x2F;mac是对应网口的mac 地址）。<br>总结：&#96;IP地址和掩码产生的网段路由， 出口对应网口，推荐IP是报文的源IP。<br>这条路由是增加到路由表 main 里。</li>
+</ul>
+<h5 id="主机路由：">0.0.1.2.2. 主机路由：</h5><figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs sql"><span class="hljs-keyword">local</span> <span class="hljs-number">192.168</span><span class="hljs-number">.8</span><span class="hljs-number">.8</span> dev eth1 <span class="hljs-keyword">table</span> <span class="hljs-keyword">local</span> proto kernel <span class="hljs-keyword">scope</span> host src <span class="hljs-number">192.168</span><span class="hljs-number">.8</span><span class="hljs-number">.8</span><br></code></pre></td></tr></table></figure>
+
+<p>在<code>local</code>表里增加一条到本机的<code>32</code> 位主机路由，</p>
+<ul>
+<li>网段入口：IP地址&#x2F;32。</li>
+<li>路由出口：loopback口<br>比如 <code>ping 192.168.8.8</code>时，</li>
+<li>内核会通过查找路由表 main，查找到这条匹配的路由，</li>
+<li>之后把源 IP 当做 eth&#x2F;ipv4&#x2F;icmp 报文里的ipv&#x2F;src_addr,</li>
+<li>最后把报文发送给lo口，并重新进入协议栈。<br>在 lo 口上tcpdump抓包验证，可以看到报文的mac地址是0.</li>
+</ul>
+<h5 id="广播路由：">0.0.1.2.3. 广播路由：</h5><figure class="highlight nginx"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs nginx"><span class="hljs-attribute">broadcast</span> <span class="hljs-number">192.168.8.255</span> dev eth1 table local proto kernel scope link src <span class="hljs-number">192.168.8.8</span><br></code></pre></td></tr></table></figure>
+
+<p>TODO：这部分没有深入分析。</p>
+<h5 id="路由表：local-vs-main-的对比">0.0.1.2.4. 路由表：local vs main 的对比</h5><ol>
+<li>local路由的目的地是本地，因此一定会往发往本地，并且使用的网口一定是lo口。<br>不论报文的目的IP是谁，<br>不管这个 IP 是被配置到什么类型网口上。</li>
+<li>main路由表的目的地是网关或者同网段的其他设备。出口是路由条目里指定的网口。</li>
+</ol>
+<h4 id="内核：策略路由与多路由表">0.0.1.3. 内核：策略路由与多路由表</h4><p>我们注意到前面的三条路由并不在一个路由表里，而是分散在 local&#x2F;main两个单独的路由表里。为什么放到多个路由表里，而不放到一张表里？<br>单独从路由查找来看，因为路由入口并不冲突，完全可以放到一张路由表里。其实内核也可以支持放到一张路由表。<br>但为了支持策略路由，内核里需要多路由表(<code>IP_MULTIPLE_TABLES</code>)这个特性。<br>其中有三个默认存在的路由表， 分别叫做<code>local</code>,<code>main</code>,<code>default</code>。<br>我们经常用到的是前两个表，如他们名字一样， 分别用于存放 local 和网段路由类型的路由。</p>
+<h5 id="策略路由">0.0.1.3.1. 策略路由</h5><p>策略路由是一个按优先级排列的规则链表。路由查找时，按优先级顺序遍历链表。<br>每个链表节点是一个规则。每个节点（规则）其实是个 match+action 的工作模式。</p>
+<ul>
+<li>match：可以支持多种匹配条件及组合，如原 IP、IPv6、源端口、目的端口等。 如果满足规则匹配条件就执行规则指定的动作。</li>
+<li>action：action 也有多种， 后续文章给你展开讨论。我们这里只讨论”查找指定 table”这一种action。就是在指定的路由表(ID 或者名字)里，查找路由。<br>策略路由这里不展开介绍， 后续文章在详细说明功能和对应的场景。<br><a href="/2018/10/09/fib-how-ipv4-lookup-route-with-rule-route/">linux内核多路由表与策略路由的实现</a></li>
+</ul>
+<h5 id="内核自动添加的三条策略路由">0.0.1.3.2. 内核自动添加的三条策略路由</h5><p>系统初始化时候，会自动创建三条策略路由。</p>
+<figure class="highlight sql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs sql">root<span class="hljs-variable">@VM</span><span class="hljs-number">-3</span><span class="hljs-number">-3</span><span class="hljs-operator">-</span>ubuntu:<span class="hljs-operator">/</span>home<span class="hljs-operator">/</span>ubuntu# ip rule <span class="hljs-keyword">show</span><br><span class="hljs-number">0</span>:      <span class="hljs-keyword">from</span> <span class="hljs-keyword">all</span> lookup <span class="hljs-keyword">local</span><br><span class="hljs-number">32766</span>:  <span class="hljs-keyword">from</span> <span class="hljs-keyword">all</span> lookup main<br><span class="hljs-number">32767</span>:  <span class="hljs-keyword">from</span> <span class="hljs-keyword">all</span> lookup <span class="hljs-keyword">default</span><br>root<span class="hljs-variable">@VM</span><span class="hljs-number">-3</span><span class="hljs-number">-3</span><span class="hljs-operator">-</span>ubuntu:<span class="hljs-operator">/</span>home<span class="hljs-operator">/</span>ubuntu#<br></code></pre></td></tr></table></figure>
+
+<p>默认三条策略路由规则，是任意匹配条件。 规则的动作也是查找指定的路由表。<br>即：遍历策略路由链表，依次在 local&#x2F;main&#x2F;default三张路由表里查询路由。</p>
+<ol>
+<li>如果有匹配路由，路由查找成功，停止遍历策略路由链表，并返回对应路由。</li>
+<li>没有找到路由，下一张表（即下一个路由策略里指定的表）。</li>
+<li>如果最终没有找到（没有缺省路由），返回路由查找失败。</li>
+</ol>
+<h4 id="小结">0.0.1.4. 小结</h4><p>在 eth1 口添加一个IP地址192.168.8.8&#x2F;24后，内核默认生成三条路由：</p>
+<ul>
+<li>主机路由：192.168.8.8&#x2F;32.<ul>
+<li>本机产生的目的地192.168.8.8的报文， 查路由，走lo口， 经过 lo口重新发回本机协议栈。</li>
+<li>物理口接收到，目的地是192.168.8.8的报文，差路由，经ip_local_deliver，给本机协议栈上层（ICMP&#x2F;tcp&#x2F;udp）处理。</li>
+</ul>
+</li>
+<li>网段路由： 192.168.8.0&#x2F;24. 放往这网段的报文，会通过 eth1 口发给网关处理。<ul>
+<li>因为 local路由表先于 maiin 路由表查找，所以发往 192.168.8.8会被路由到本机，同网段下的其他 IP 被路由到 eth1口。</li>
+<li>本机产生的或者本机其他网口收到的，目的地是192.168.8.0&#x2F;24网段的报文，查路由被转发到 eth1 口。</li>
+</ul>
+</li>
+<li>组播路由：TODO。</li>
+</ul>
+<h3 id="内核代码的实现">0.0.2. 内核代码的实现</h3><h4 id="ip地址与路由回调">0.0.2.1. ip地址与路由回调</h4><p>内核的路由模块通过一个回调函数，感知IP地址变化，并更新对应的路由表项。<br>ip 地址管理模块会提供一个回调注册函数。<br>给需要感知 ip 地址变化的模块。如 fib 路由模块，会调用这个函数注册自己的处理函数。当 ip 地址有变化时候，ip 地址模块就会调用这些被注册的回调函数，通知对应模块，及具体的ip 地址变化信息。</p>
+<h4 id="注册路由回调函数-：register-inetaddr-notifier">0.0.2.2. 注册路由回调函数 ：register_inetaddr_notifier</h4><p>fib模块在初始化时，调用<code>register_inetaddr_notifier</code>注册一个 callback 函数<code>fib_inetaddr_event</code>，用来处理ip地址变化的消息。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1702</span> <span class="hljs-type">void</span> __init <span class="hljs-title function_">ip_fib_init</span><span class="hljs-params">(<span class="hljs-type">void</span>)</span><br>1703 &#123;<br>...<br><span class="hljs-number">1709</span>         register_inetaddr_notifier(&amp;fib_inetaddr_notifier);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1551</span> <span class="hljs-type">static</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">notifier_block</span> <span class="hljs-title">fib_inetaddr_notifier</span> =</span> &#123;<br><span class="hljs-number">1552</span>         .notifier_call = fib_inetaddr_event,<br><span class="hljs-number">1553</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h4 id="消息触发：-IP地址更新">0.0.2.3. 消息触发： IP地址更新</h4><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs c">blocking_notifier_call_chain(&amp;inetaddr_chain, NETDEV_UP, ifa);<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs c">blocking_notifier_call_chain(&amp;inetaddr_chain, NETDEV_DOWN, ifa1);<br></code></pre></td></tr></table></figure>
+
+<h4 id="fib模块回调函数：fib-inetaddr-event">0.0.2.4. fib模块回调函数：fib_inetaddr_event</h4><p>回调函数fib_inetaddr_event处理地址变化消息，根据事件类型</p>
+<ul>
+<li>NETDEV_UP: 对应增加 IP 地址场景。调用fib_add_ifaddr</li>
+<li>NETDEV_DOWN: 对应删除 IP 地址场景。调用fib_del_ifaddr</li>
+</ul>
+<figure class="highlight coq"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs coq">==&gt; fib_inetaddr_event<br>==&gt; ==&gt; <span class="hljs-built_in">case</span> NETDEV_UP<br>==&gt; ==&gt; ==&gt; fib_add_ifaddr(ifa);<br>==&gt; ==&gt; ==&gt; ==&gt; fib_magic(RTM_NEWROUTE, RTN_LOCAL, addr, <span class="hljs-number">32</span>, prim, <span class="hljs-number">0</span>);<br>==&gt; ==&gt; ==&gt; ==&gt; fib_magic(RTM_NEWROUTE, dev-&gt;flags &amp; IFF_LOOPBACK ? RTN_LOCAL : RTN_UNICAST,<br>                           prefix, ifa-&gt;ifa_prefixlen, prim, ifa-&gt;ifa_rt_priority);<br>==&gt; ==&gt; ==&gt; ==&gt; fib_magic(RTM_NEWROUTE, RTN_BROADCAST, ifa-&gt;ifa_broadcast, <span class="hljs-number">32</span>, prim, <span class="hljs-number">0</span>);<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; fib_table_insert(RTM_NEWROUTE, ....)<br>==&gt; ==&gt; ==&gt; fib_del_ifaddr<br>==&gt; ==&gt; ==&gt; ==&gt; fib_magic(RTM_DELROUTE, dev-&gt;flags &amp; IFF_LOOPBACK ? RTN_LOCAL : RTN_UNICAST, ...)<br>==&gt; ==&gt; ==&gt; ==&gt; ==&gt; fib_table_insert(RTM_DELROUTE, ....)<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1461</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">fib_inetaddr_event</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> notifier_block *this, <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> event, <span class="hljs-type">void</span> *ptr)</span><br>1462 &#123;<br><span class="hljs-number">1463</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">in_ifaddr</span> *<span class="hljs-title">ifa</span> =</span> ptr;<br><span class="hljs-number">1464</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net_device</span> *<span class="hljs-title">dev</span> =</span> ifa-&gt;ifa_dev-&gt;dev;<br><span class="hljs-number">1465</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net</span> *<span class="hljs-title">net</span> =</span> dev_net(dev);<br><span class="hljs-number">1466</span><br><span class="hljs-number">1467</span>         <span class="hljs-keyword">switch</span> (event) &#123;<br><span class="hljs-number">1468</span>         <span class="hljs-keyword">case</span> NETDEV_UP:<br><span class="hljs-number">1469</span>                 fib_add_ifaddr(ifa);<br><span class="hljs-number">1470</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_IP_ROUTE_MULTIPATH</span><br><span class="hljs-number">1471</span>                 fib_sync_up(dev, RTNH_F_DEAD);<br><span class="hljs-number">1472</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">1473</span>                 atomic_inc(&amp;net-&gt;ipv4.dev_addr_genid);<br><span class="hljs-number">1474</span>                 rt_cache_flush(net);<br><span class="hljs-number">1475</span>                 <span class="hljs-keyword">break</span>;<br><span class="hljs-number">1476</span>         <span class="hljs-keyword">case</span> NETDEV_DOWN:<br><span class="hljs-number">1477</span>                 fib_del_ifaddr(ifa, <span class="hljs-literal">NULL</span>);<br><span class="hljs-number">1478</span>                 atomic_inc(&amp;net-&gt;ipv4.dev_addr_genid);<br><span class="hljs-number">1479</span>                 <span class="hljs-keyword">if</span> (!ifa-&gt;ifa_dev-&gt;ifa_list) &#123;<br><span class="hljs-number">1480</span>                         <span class="hljs-comment">/* Last address was deleted from this interface.</span><br><span class="hljs-comment">1481                          * Disable IP.</span><br><span class="hljs-comment">1482                          */</span><br><span class="hljs-number">1483</span>                         fib_disable_ip(dev, event, <span class="hljs-literal">true</span>);<br><span class="hljs-number">1484</span>                 &#125; <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-number">1485</span>                         rt_cache_flush(net);<br><span class="hljs-number">1486</span>                 &#125;<br><span class="hljs-number">1487</span>                 <span class="hljs-keyword">break</span>;<br><span class="hljs-number">1488</span>         &#125;<br><span class="hljs-number">1489</span>         <span class="hljs-keyword">return</span> NOTIFY_DONE;<br><span class="hljs-number">1490</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1138</span> <span class="hljs-type">void</span> <span class="hljs-title function_">fib_add_ifaddr</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> in_ifaddr *ifa)</span><br>1139 &#123;<br><span class="hljs-number">1140</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">in_device</span> *<span class="hljs-title">in_dev</span> =</span> ifa-&gt;ifa_dev;<br><span class="hljs-number">1141</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net_device</span> *<span class="hljs-title">dev</span> =</span> in_dev-&gt;dev;<br><span class="hljs-number">1142</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">in_ifaddr</span> *<span class="hljs-title">prim</span> =</span> ifa;<br><span class="hljs-number">1143</span>         __be32 mask = ifa-&gt;ifa_mask;<br><span class="hljs-number">1144</span>         __be32 addr = ifa-&gt;ifa_local;<br><span class="hljs-number">1145</span>         __be32 prefix = ifa-&gt;ifa_address &amp; mask;<br><span class="hljs-number">1146</span><br><span class="hljs-number">1147</span>         <span class="hljs-keyword">if</span> (ifa-&gt;ifa_flags &amp; IFA_F_SECONDARY) &#123;<br><span class="hljs-number">1148</span>                 prim = inet_ifa_byprefix(in_dev, prefix, mask);<br><span class="hljs-number">1149</span>                 <span class="hljs-keyword">if</span> (!prim) &#123;<br><span class="hljs-number">1150</span>                         pr_warn(<span class="hljs-string">&quot;%s: bug: prim == NULL\n&quot;</span>, __func__);<br><span class="hljs-number">1151</span>                         <span class="hljs-keyword">return</span>;<br><span class="hljs-number">1152</span>                 &#125;<br><span class="hljs-number">1153</span>         &#125;<br><span class="hljs-number">1154</span><br><span class="hljs-number">1155</span>         fib_magic(RTM_NEWROUTE, RTN_LOCAL, addr, <span class="hljs-number">32</span>, prim, <span class="hljs-number">0</span>);<br><span class="hljs-number">1156</span><br><span class="hljs-number">1157</span>         <span class="hljs-keyword">if</span> (!(dev-&gt;flags &amp; IFF_UP))<br><span class="hljs-number">1158</span>                 <span class="hljs-keyword">return</span>;<br><span class="hljs-number">1159</span><br><span class="hljs-number">1160</span>         <span class="hljs-comment">/* Add broadcast address, if it is explicitly assigned. */</span><br><span class="hljs-number">1161</span>         <span class="hljs-keyword">if</span> (ifa-&gt;ifa_broadcast &amp;&amp; ifa-&gt;ifa_broadcast != htonl(<span class="hljs-number">0xFFFFFFFF</span>)) &#123;<br><span class="hljs-number">1162</span>                 fib_magic(RTM_NEWROUTE, RTN_BROADCAST, ifa-&gt;ifa_broadcast, <span class="hljs-number">32</span>,<br><span class="hljs-number">1163</span>                           prim, <span class="hljs-number">0</span>);<br><span class="hljs-number">1164</span>                 arp_invalidate(dev, ifa-&gt;ifa_broadcast, <span class="hljs-literal">false</span>);<br><span class="hljs-number">1165</span>         &#125;<br><span class="hljs-number">1166</span><br><span class="hljs-number">1167</span>         <span class="hljs-keyword">if</span> (!ipv4_is_zeronet(prefix) &amp;&amp; !(ifa-&gt;ifa_flags &amp; IFA_F_SECONDARY) &amp;&amp;<br><span class="hljs-number">1168</span>             (prefix != addr || ifa-&gt;ifa_prefixlen &lt; <span class="hljs-number">32</span>)) &#123;<br><span class="hljs-number">1169</span>                 <span class="hljs-keyword">if</span> (!(ifa-&gt;ifa_flags &amp; IFA_F_NOPREFIXROUTE))<br><span class="hljs-number">1170</span>                         fib_magic(RTM_NEWROUTE,<br><span class="hljs-number">1171</span>                                   dev-&gt;flags &amp; IFF_LOOPBACK ? RTN_LOCAL : RTN_UNICAST,<br><span class="hljs-number">1172</span>                                   prefix, ifa-&gt;ifa_prefixlen, prim,<br><span class="hljs-number">1173</span>                                   ifa-&gt;ifa_rt_priority);<br><span class="hljs-number">1174</span><br><span class="hljs-number">1175</span>                 <span class="hljs-comment">/* Add the network broadcast address, when it makes sense */</span><br><span class="hljs-number">1176</span>                 <span class="hljs-keyword">if</span> (ifa-&gt;ifa_prefixlen &lt; <span class="hljs-number">31</span>) &#123;<br><span class="hljs-number">1177</span>                         fib_magic(RTM_NEWROUTE, RTN_BROADCAST, prefix | ~mask,<br><span class="hljs-number">1178</span>                                   <span class="hljs-number">32</span>, prim, <span class="hljs-number">0</span>);<br><span class="hljs-number">1179</span>                         arp_invalidate(dev, prefix | ~mask, <span class="hljs-literal">false</span>);<br><span class="hljs-number">1180</span>                 &#125;<br><span class="hljs-number">1181</span>         &#125;<br><span class="hljs-number">1182</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h4 id="路由增加-删除">0.0.2.5. 路由增加&#x2F;删除</h4><p>路由增删有两类入口：</p>
+<ol>
+<li>通过 netlink 配置的路由：如 iproute 命令。<ul>
+<li>根据 netlink 消息里指定的 table ID，找到对应的 fib table</li>
+<li>根据 netlink消息里的<code>msgtype</code>命令类型，对 fib table 执行路由增删。<br>增加路由：<code>inet_rtm_newroute</code>&#x2F;<code>fib_table_insert</code>。<br>删除路由：<code>inet_rtm_delroute</code>&#x2F;<code>fib_table_delete</code>。<br>这部分单独解释，不展开讨论。</li>
+</ul>
+</li>
+<li>内核自动生成的：如网口上的增加&#x2F;删除一个 IP 地址。<br>入口函数<code>fib_magic</code>, 根据命令分别执行<code>fib_table_insert</code>和<code>fib_table_delete</code>，</li>
+</ol>
+<h4 id="特殊的-lo口">0.0.2.6. 特殊的 lo口</h4><p>loopback口是个特殊场景，详见 <a href="/2025/07/06/fib-lo-and-local-route-table/">lo口与local路由表</a>。</p>
+<h4 id="路由查找">0.0.2.7. 路由查找</h4><p>路由查找入口函数<code>fib_lookup</code>, 启用CONFIG_IP_MULTIPLE_TABLES，<br>会先检查用户自定义的策略路由，这部分放到策略路由里单独解释。<br>如果没有用户自定义的策略路由，</p>
+<ul>
+<li>先查找 main 表，</li>
+<li>再查找 defualt 表。</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">374</span> <span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> <span class="hljs-type">int</span> <span class="hljs-title function_">fib_lookup</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> net *net, <span class="hljs-keyword">struct</span> flowi4 *flp,</span><br><span class="hljs-params"><span class="hljs-number">375</span>                              <span class="hljs-keyword">struct</span> fib_result *res, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> flags)</span><br>376 &#123;<br>...<br><span class="hljs-number">381</span>         <span class="hljs-keyword">if</span> (net-&gt;ipv4.fib_has_custom_rules)<br><span class="hljs-number">382</span>                 <span class="hljs-keyword">return</span> __fib_lookup(net, flp, res, flags);<br>...<br><span class="hljs-number">388</span>         tb = rcu_dereference_rtnl(net-&gt;ipv4.fib_main);<br><span class="hljs-number">389</span>         <span class="hljs-keyword">if</span> (tb)<br><span class="hljs-number">390</span>                 err = fib_table_lookup(tb, flp, res, flags);<br>...<br><span class="hljs-number">395</span>         tb = rcu_dereference_rtnl(net-&gt;ipv4.fib_default);<br><span class="hljs-number">396</span>         <span class="hljs-keyword">if</span> (tb)<br><span class="hljs-number">397</span>                 err = fib_table_lookup(tb, flp, res, flags);<br></code></pre></td></tr></table></figure>
+
+<p>注意：</p>
+<ul>
+<li><p><code>fib_lookup</code>没有查找 local 表：<br>fib路由模块默认创建了三个 table 表，local&#x2F;main&#x2F;default，但是在<code>fib_lookup</code>函数中，我们看到代码里只查找了后面两个表，为啥没有查找 local表。在初始化创建 local表时，设置local表的别名为main，因此 local 路由都被加入到 main 表里了。当用户添加自定义策略路由规则后，<code>fib_unmerge</code> 会把 local 路由从 main 表里切割出来，详见 <a href="/2025/07/08/fib-unmerge-local-from-main/">fib_unmerge：把local路由从main表里切割出来</a>。</p>
+</li>
+<li><p>ip route show: 为什么 show 命令默认只 show main， 单纯指定 table ID不会有效果，过滤路由类型了？<br>ip route命令默认指定的tb id 是 main 表，见代码</p>
+</li>
+</ul>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs c">filter.tb = RT_TABLE_MAIN;<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/FIB/" class="category-chain-item">FIB</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/fib/" class="print-no-link">#fib</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>ping本机网口的IP地址，tcpdump在lo口才能抓到对应报文</div>
+      <div>https://martinbj2008.github.io/2025/07/12/fib-ip-address-and-route/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>July 12, 2025</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2025/10/02/2025-10-02-kernel-local-route-table-management/" title="内核如何管理 local(主机)路由表">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">内核如何管理 local(主机)路由表</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2025/07/12/fib-unmerge-local-from-main/" title="fib_unmerge：把local路由从main表里切割出来">
+                        <span class="hidden-mobile">fib_unmerge：把local路由从main表里切割出来</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

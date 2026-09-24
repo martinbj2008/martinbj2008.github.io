@@ -1,0 +1,834 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.0.1. Data struct.12345123 &#x2F;* The inetsw table contains everything that inet_create needs to124  * build a new socket.125  *&#x2F;126 static struct list_head inetsw[SOCK_MAX];127 static DEFINE_SPINLOCK(in">
+<meta property="og:type" content="article">
+<meta property="og:title" content="inetsw table">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/11/22/2013-11-22-inetsw-table/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.0.1. Data struct.12345123 &#x2F;* The inetsw table contains everything that inet_create needs to124  * build a new socket.125  *&#x2F;126 static struct list_head inetsw[SOCK_MAX];127 static DEFINE_SPINLOCK(in">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2013-11-22T03:34:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.750Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IPv4">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>inetsw table - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="inetsw table"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2013-11-22 11:34" pubdate>
+          November 22, 2013 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          12k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          103 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">inetsw table</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h3 id="Data-struct">0.0.1. Data struct.</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">123</span> <span class="hljs-comment">/* The inetsw table contains everything that inet_create needs to</span><br><span class="hljs-comment">124  * build a new socket.</span><br><span class="hljs-comment">125  */</span><br><span class="hljs-number">126</span> <span class="hljs-type">static</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span> <span class="hljs-title">inetsw</span>[<span class="hljs-title">SOCK_MAX</span>];</span><br><span class="hljs-number">127</span> <span class="hljs-type">static</span> <span class="hljs-title function_">DEFINE_SPINLOCK</span><span class="hljs-params">(inetsw_lock)</span>;<br></code></pre></td></tr></table></figure>
+<span id="more"></span>
+
+<p>Just like the <code>net_families</code>, spinlock is used for mutex of multi-writer<br>and rcu lock is used for reader&#x2F;writer.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">73</span> <span class="hljs-comment">/* This is used to register socket interfaces for IP protocols.  */</span><br><span class="hljs-number">74</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">inet_protosw</span> &#123;</span><br><span class="hljs-number">75</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span> <span class="hljs-title">list</span>;</span><br><span class="hljs-number">76</span> <br><span class="hljs-number">77</span>         <span class="hljs-comment">/* These two fields form the lookup key.  */</span><br><span class="hljs-number">78</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">short</span>   type;     <span class="hljs-comment">/* This is the 2nd argument to socket(2). */</span><br><span class="hljs-number">79</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">short</span>   protocol; <span class="hljs-comment">/* This is the L4 protocol number.  */</span><br><span class="hljs-number">80</span> <br><span class="hljs-number">81</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">proto</span>     *<span class="hljs-title">prot</span>;</span><br><span class="hljs-number">82</span>         <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">proto_ops</span> *<span class="hljs-title">ops</span>;</span><br><span class="hljs-number">83</span> <br><span class="hljs-number">84</span>         <span class="hljs-type">char</span>             no_check;   <span class="hljs-comment">/* checksum on rcv/xmit/none? */</span><br><span class="hljs-number">85</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">char</span>    flags;      <span class="hljs-comment">/* See INET_PROTOSW_* below.  */</span><br><span class="hljs-number">86</span> &#125;;<br><span class="hljs-number">87</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> INET_PROTOSW_REUSE 0x01      <span class="hljs-comment">/* Are ports automatically reusable? */</span></span><br><span class="hljs-number">88</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> INET_PROTOSW_PERMANENT 0x02  <span class="hljs-comment">/* Permanent protocols are unremovable. */</span></span><br><span class="hljs-number">89</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> INET_PROTOSW_ICSK      0x04  <span class="hljs-comment">/* Is this an inet_connection_sock? */</span></span><br></code></pre></td></tr></table></figure>
+
+<h3 id="inet-register-protosw-and-inet-unregister-protosw">0.0.2. inet_register_protosw and inet_unregister_protosw</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1068</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> INETSW_ARRAY_LEN ARRAY_SIZE(inetsw_array)</span><br><span class="hljs-number">1069</span> <br><span class="hljs-number">1070</span> <span class="hljs-type">void</span> <span class="hljs-title function_">inet_register_protosw</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> inet_protosw *p)</span><br>1071 &#123;<br><span class="hljs-number">1072</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span> *<span class="hljs-title">lh</span>;</span><br><span class="hljs-number">1073</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">inet_protosw</span> *<span class="hljs-title">answer</span>;</span><br><span class="hljs-number">1074</span>         <span class="hljs-type">int</span> protocol = p-&gt;protocol;<br><span class="hljs-number">1075</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span> *<span class="hljs-title">last_perm</span>;</span><br><span class="hljs-number">1076</span> <br><span class="hljs-number">1077</span>         spin_lock_bh(&amp;inetsw_lock);<br><span class="hljs-number">1078</span> <br><span class="hljs-number">1079</span>         <span class="hljs-keyword">if</span> (p-&gt;type &gt;= SOCK_MAX)<br><span class="hljs-number">1080</span>                 <span class="hljs-keyword">goto</span> out_illegal;<br><span class="hljs-number">1081</span> <br><span class="hljs-number">1082</span>         <span class="hljs-comment">/* If we are trying to override a permanent protocol, bail. */</span><br><span class="hljs-number">1083</span>         answer = <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">1084</span>         last_perm = &amp;inetsw[p-&gt;type];<br><span class="hljs-number">1085</span>         list_for_each(lh, &amp;inetsw[p-&gt;type]) &#123;<br><span class="hljs-number">1086</span>                 answer = list_entry(lh, <span class="hljs-keyword">struct</span> inet_protosw, <span class="hljs-built_in">list</span>);<br><span class="hljs-number">1087</span> <br><span class="hljs-number">1088</span>                 <span class="hljs-comment">/* Check only the non-wild match. */</span><br><span class="hljs-number">1089</span>                 <span class="hljs-keyword">if</span> (INET_PROTOSW_PERMANENT &amp; answer-&gt;flags) &#123;<br><span class="hljs-number">1090</span>                         <span class="hljs-keyword">if</span> (protocol == answer-&gt;protocol)<br><span class="hljs-number">1091</span>                                 <span class="hljs-keyword">break</span>;<br><span class="hljs-number">1092</span>                         last_perm = lh;<br><span class="hljs-number">1093</span>                 &#125;<br><span class="hljs-number">1094</span> <br><span class="hljs-number">1095</span>                 answer = <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">1096</span>         &#125;<br><span class="hljs-number">1097</span>         <span class="hljs-keyword">if</span> (answer)<br><span class="hljs-number">1098</span>                 <span class="hljs-keyword">goto</span> out_permanent;<br><span class="hljs-number">1099</span> <br><span class="hljs-number">1100</span>         <span class="hljs-comment">/* Add the new entry after the last permanent entry if any, so that</span><br><span class="hljs-comment">1101          * the new entry does not override a permanent entry when matched with</span><br><span class="hljs-comment">1102          * a wild-card protocol. But it is allowed to override any existing</span><br><span class="hljs-comment">1103          * non-permanent entry.  This means that when we remove this entry, the</span><br><span class="hljs-comment">1104          * system automatically returns to the old behavior.</span><br><span class="hljs-comment">1105          */</span><br><span class="hljs-number">1106</span>         list_add_rcu(&amp;p-&gt;<span class="hljs-built_in">list</span>, last_perm);<br><span class="hljs-number">1107</span> out:<br><span class="hljs-number">1108</span>         spin_unlock_bh(&amp;inetsw_lock);<br><span class="hljs-number">1109</span> <br><span class="hljs-number">1110</span>         <span class="hljs-keyword">return</span>;<br><span class="hljs-number">1111</span> <br><span class="hljs-number">1112</span> out_permanent:<br><span class="hljs-number">1113</span>         pr_err(<span class="hljs-string">&quot;Attempt to override permanent protocol %d\n&quot;</span>, protocol);<br><span class="hljs-number">1114</span>         <span class="hljs-keyword">goto</span> out;<br><span class="hljs-number">1115</span> <br><span class="hljs-number">1116</span> out_illegal:<br><span class="hljs-number">1117</span>         pr_err(<span class="hljs-string">&quot;Ignoring attempt to register invalid socket type %d\n&quot;</span>,<br><span class="hljs-number">1118</span>                p-&gt;type);<br><span class="hljs-number">1119</span>         <span class="hljs-keyword">goto</span> out;<br><span class="hljs-number">1120</span> &#125;<br><span class="hljs-number">1121</span> EXPORT_SYMBOL(inet_register_protosw);<br><span class="hljs-number">1122</span> <br><span class="hljs-number">1123</span> <span class="hljs-type">void</span> <span class="hljs-title function_">inet_unregister_protosw</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> inet_protosw *p)</span><br>1124 &#123;<br><span class="hljs-number">1125</span>         <span class="hljs-keyword">if</span> (INET_PROTOSW_PERMANENT &amp; p-&gt;flags) &#123;<br><span class="hljs-number">1126</span>                 pr_err(<span class="hljs-string">&quot;Attempt to unregister permanent protocol %d\n&quot;</span>,<br><span class="hljs-number">1127</span>                        p-&gt;protocol);<br><span class="hljs-number">1128</span>         &#125; <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-number">1129</span>                 spin_lock_bh(&amp;inetsw_lock);<br><span class="hljs-number">1130</span>                 list_del_rcu(&amp;p-&gt;<span class="hljs-built_in">list</span>);<br><span class="hljs-number">1131</span>                 spin_unlock_bh(&amp;inetsw_lock);<br><span class="hljs-number">1132</span> <br><span class="hljs-number">1133</span>                 synchronize_net();<br><span class="hljs-number">1134</span>         &#125;<br><span class="hljs-number">1135</span> &#125;<br><span class="hljs-number">1136</span> EXPORT_SYMBOL(inet_unregister_protosw);<br></code></pre></td></tr></table></figure>
+
+<h3 id="Register-4-kinds-of-inet-socket">0.0.3. Register 4 kinds of inet socket.</h3><p>There are 4 kinds of inet socket: <code>tcp</code>, <code>udp</code>, <code>icmp</code>, <code>raw</code>.</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1025</span> <span class="hljs-comment">/* Upon startup we insert all the elements in inetsw_array[] into</span><br><span class="hljs-comment">1026  * the linked list inetsw.</span><br><span class="hljs-comment">1027  */</span><br><span class="hljs-number">1028</span> <span class="hljs-type">static</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">inet_protosw</span> <span class="hljs-title">inetsw_array</span>[] =</span><br><span class="hljs-number">1029</span> &#123;<br><span class="hljs-number">1030</span>         &#123;<br><span class="hljs-number">1031</span>                 .type =       SOCK_STREAM,<br><span class="hljs-number">1032</span>                 .protocol =   IPPROTO_TCP,<br><span class="hljs-number">1033</span>                 .prot =       &amp;tcp_prot,<br><span class="hljs-number">1034</span>                 .ops =        &amp;inet_stream_ops,<br><span class="hljs-number">1035</span>                 .no_check =   <span class="hljs-number">0</span>,<br><span class="hljs-number">1036</span>                 .flags =      INET_PROTOSW_PERMANENT |<br><span class="hljs-number">1037</span>                               INET_PROTOSW_ICSK,<br><span class="hljs-number">1038</span>         &#125;,<br><span class="hljs-number">1039</span> <br><span class="hljs-number">1040</span>         &#123;<br><span class="hljs-number">1041</span>                 .type =       SOCK_DGRAM,<br><span class="hljs-number">1042</span>                 .protocol =   IPPROTO_UDP,<br><span class="hljs-number">1043</span>                 .prot =       &amp;udp_prot,<br><span class="hljs-number">1044</span>                 .ops =        &amp;inet_dgram_ops,<br><span class="hljs-number">1045</span>                 .no_check =   UDP_CSUM_DEFAULT,<br><span class="hljs-number">1046</span>                 .flags =      INET_PROTOSW_PERMANENT,<br><span class="hljs-number">1047</span>        &#125;,<br><span class="hljs-number">1048</span> <br><span class="hljs-number">1049</span>        &#123;<br><span class="hljs-number">1050</span>                 .type =       SOCK_DGRAM,<br><span class="hljs-number">1051</span>                 .protocol =   IPPROTO_ICMP,<br><span class="hljs-number">1052</span>                 .prot =       &amp;ping_prot,<br><span class="hljs-number">1053</span>                 .ops =        &amp;inet_dgram_ops,<br><span class="hljs-number">1054</span>                 .no_check =   UDP_CSUM_DEFAULT,<br><span class="hljs-number">1055</span>                 .flags =      INET_PROTOSW_REUSE,<br><span class="hljs-number">1056</span>        &#125;,<br><span class="hljs-number">1057</span> <br><span class="hljs-number">1058</span>        &#123;<br><span class="hljs-number">1059</span>                .type =       SOCK_RAW,<br><span class="hljs-number">1060</span>                .protocol =   IPPROTO_IP,        <span class="hljs-comment">/* wild card */</span><br><span class="hljs-number">1061</span>                .prot =       &amp;raw_prot,<br><span class="hljs-number">1062</span>                .ops =        &amp;inet_sockraw_ops,<br><span class="hljs-number">1063</span>                .no_check =   UDP_CSUM_DEFAULT,<br><span class="hljs-number">1064</span>                .flags =      INET_PROTOSW_REUSE,<br><span class="hljs-number">1065</span>        &#125;<br><span class="hljs-number">1066</span> &#125;;<br></code></pre></td></tr></table></figure>
+<h3 id="where-is-it-used">0.0.4. where is it used</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1670</span> <span class="hljs-type">static</span> <span class="hljs-type">int</span> __init <span class="hljs-title function_">inet_init</span><span class="hljs-params">(<span class="hljs-type">void</span>)</span><br>1671 &#123;<br>...<br><span class="hljs-number">1725</span>         <span class="hljs-comment">/* Register the socket-side information for inet_create. */</span><br><span class="hljs-number">1726</span>         <span class="hljs-keyword">for</span> (r = &amp;inetsw[<span class="hljs-number">0</span>]; r &lt; &amp;inetsw[SOCK_MAX]; ++r)<br><span class="hljs-number">1727</span>                 INIT_LIST_HEAD(r);<br><span class="hljs-number">1728</span> <br><span class="hljs-number">1729</span>         <span class="hljs-keyword">for</span> (q = inetsw_array; q &lt; &amp;inetsw_array[INETSW_ARRAY_LEN]; ++q)<br><span class="hljs-number">1730</span>                 inet_register_protosw(q);<br>...<br></code></pre></td></tr></table></figure>
+<h2 id="struct-proto-vs-struct-proto-ops">0.1. struct proto  vs struct proto_ops</h2><h3 id="struct-proto-and-tcp-prot">0.1.1. struct proto and tcp_prot</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">889</span> <span class="hljs-comment">/* Networking protocol blocks we attach to sockets.</span><br><span class="hljs-comment"> 890  * socket layer -&gt; transport layer interface</span><br><span class="hljs-comment"> 891  * transport -&gt; network interface is defined by struct inet_proto</span><br><span class="hljs-comment"> 892  */</span><br> <span class="hljs-number">893</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">proto</span> &#123;</span><br> <span class="hljs-number">894</span>         <span class="hljs-type">void</span>                    (*close)(<span class="hljs-keyword">struct</span> sock *sk,<br> <span class="hljs-number">895</span>                                         <span class="hljs-type">long</span> timeout);<br> <span class="hljs-number">896</span>         <span class="hljs-type">int</span>                     (*connect)(<span class="hljs-keyword">struct</span> sock *sk,<br> <span class="hljs-number">897</span>                                         <span class="hljs-keyword">struct</span> sockaddr *uaddr,<br> <span class="hljs-number">898</span>                                         <span class="hljs-type">int</span> addr_len);<br> <span class="hljs-number">899</span>         <span class="hljs-type">int</span>                     (*disconnect)(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-type">int</span> flags);<br> <span class="hljs-number">900</span> <br> <span class="hljs-number">901</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sock</span> *           (*<span class="hljs-title">accept</span>)(<span class="hljs-keyword">struct</span> <span class="hljs-title">sock</span> *<span class="hljs-title">sk</span>, <span class="hljs-title">int</span> <span class="hljs-title">flags</span>, <span class="hljs-title">int</span> *<span class="hljs-title">err</span>);</span><br> <span class="hljs-number">902</span> <br> <span class="hljs-number">903</span>         <span class="hljs-type">int</span>                     (*ioctl)(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-type">int</span> cmd,<br> <span class="hljs-number">904</span>                                          <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> arg);<br> <span class="hljs-number">905</span>         <span class="hljs-type">int</span>                     (*init)(<span class="hljs-keyword">struct</span> sock *sk);<br> <span class="hljs-number">906</span>         <span class="hljs-type">void</span>                    (*destroy)(<span class="hljs-keyword">struct</span> sock *sk);<br> <span class="hljs-number">907</span>         <span class="hljs-type">void</span>                    (*shutdown)(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-type">int</span> how);<br> <span class="hljs-number">908</span>         <span class="hljs-type">int</span>                     (*setsockopt)(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-type">int</span> level,<br> <span class="hljs-number">909</span>                                         <span class="hljs-type">int</span> optname, <span class="hljs-type">char</span> __user *optval,<br> <span class="hljs-number">910</span>                                         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> optlen);<br> <span class="hljs-number">911</span>         <span class="hljs-type">int</span>                     (*getsockopt)(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-type">int</span> level,<br> <span class="hljs-number">912</span>                                         <span class="hljs-type">int</span> optname, <span class="hljs-type">char</span> __user *optval,<br> <span class="hljs-number">913</span>                                         <span class="hljs-type">int</span> __user *option);<br> <span class="hljs-number">914</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_COMPAT</span><br> <span class="hljs-number">915</span>         <span class="hljs-type">int</span>                     (*compat_setsockopt)(<span class="hljs-keyword">struct</span> sock *sk,<br> <span class="hljs-number">916</span>                                         <span class="hljs-type">int</span> level,<br> <span class="hljs-number">917</span>                                         <span class="hljs-type">int</span> optname, <span class="hljs-type">char</span> __user *optval,<br> <span class="hljs-number">918</span>                                         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> optlen);<br> <span class="hljs-number">919</span>         <span class="hljs-type">int</span>                     (*compat_getsockopt)(<span class="hljs-keyword">struct</span> sock *sk,<br> <span class="hljs-number">920</span>                                         <span class="hljs-type">int</span> level,<br> <span class="hljs-number">921</span>                                         <span class="hljs-type">int</span> optname, <span class="hljs-type">char</span> __user *optval,<br> <span class="hljs-number">922</span>                                         <span class="hljs-type">int</span> __user *option);<br> <span class="hljs-number">923</span>         <span class="hljs-type">int</span>                     (*compat_ioctl)(<span class="hljs-keyword">struct</span> sock *sk,<br> <span class="hljs-number">924</span>                                         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> cmd, <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> arg);<br> <span class="hljs-number">925</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br> <span class="hljs-number">926</span>         <span class="hljs-type">int</span>                     (*sendmsg)(<span class="hljs-keyword">struct</span> kiocb *iocb, <span class="hljs-keyword">struct</span> sock *sk,<br> <span class="hljs-number">927</span>                                            <span class="hljs-keyword">struct</span> msghdr *msg, <span class="hljs-type">size_t</span> len);<br> <span class="hljs-number">928</span>         <span class="hljs-type">int</span>                     (*recvmsg)(<span class="hljs-keyword">struct</span> kiocb *iocb, <span class="hljs-keyword">struct</span> sock *sk,<br> <span class="hljs-number">929</span>                                            <span class="hljs-keyword">struct</span> msghdr *msg,<br> <span class="hljs-number">930</span>                                            <span class="hljs-type">size_t</span> len, <span class="hljs-type">int</span> noblock, <span class="hljs-type">int</span> flags,<br> <span class="hljs-number">931</span>                                            <span class="hljs-type">int</span> *addr_len);<br> <span class="hljs-number">932</span>         <span class="hljs-type">int</span>                     (*sendpage)(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-keyword">struct</span> page *page,<br> <span class="hljs-number">933</span>                                         <span class="hljs-type">int</span> offset, <span class="hljs-type">size_t</span> size, <span class="hljs-type">int</span> flags);<br> <span class="hljs-number">934</span>         <span class="hljs-type">int</span>                     (*bind)(<span class="hljs-keyword">struct</span> sock *sk,<br> <span class="hljs-number">935</span>                                         <span class="hljs-keyword">struct</span> sockaddr *uaddr, <span class="hljs-type">int</span> addr_len);<br> <span class="hljs-number">936</span> <br> <span class="hljs-number">937</span>         <span class="hljs-type">int</span>                     (*backlog_rcv) (<span class="hljs-keyword">struct</span> sock *sk,<br> <span class="hljs-number">938</span>                                                 <span class="hljs-keyword">struct</span> sk_buff *skb);<br> <span class="hljs-number">939</span> <br> <span class="hljs-number">940</span>         <span class="hljs-type">void</span>            (*release_cb)(<span class="hljs-keyword">struct</span> sock *sk);<br> <span class="hljs-number">941</span>         <span class="hljs-type">void</span>            (*mtu_reduced)(<span class="hljs-keyword">struct</span> sock *sk);<br> <span class="hljs-number">942</span> <br> <span class="hljs-number">943</span>         <span class="hljs-comment">/* Keeping track of sk&#x27;s, looking them up, and port selection methods. */</span><br> <span class="hljs-number">944</span>         <span class="hljs-type">void</span>                    (*hash)(<span class="hljs-keyword">struct</span> sock *sk);<br> <span class="hljs-number">945</span>         <span class="hljs-type">void</span>                    (*unhash)(<span class="hljs-keyword">struct</span> sock *sk);<br> <span class="hljs-number">946</span>         <span class="hljs-type">void</span>                    (*rehash)(<span class="hljs-keyword">struct</span> sock *sk);<br> <span class="hljs-number">947</span>         <span class="hljs-type">int</span>                     (*get_port)(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-type">unsigned</span> <span class="hljs-type">short</span> snum);<br> <span class="hljs-number">948</span>         <span class="hljs-type">void</span>                    (*clear_sk)(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-type">int</span> size);<br> <span class="hljs-number">949</span> <br> <span class="hljs-number">950</span>         <span class="hljs-comment">/* Keeping track of sockets in use */</span><br> <span class="hljs-number">951</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_PROC_FS</span><br> <span class="hljs-number">952</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span>            inuse_idx;<br> <span class="hljs-number">953</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br> <span class="hljs-number">954</span> <br> <span class="hljs-number">955</span>         <span class="hljs-type">bool</span>                    (*stream_memory_free)(<span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> sock *sk);<br> <span class="hljs-number">956</span>         <span class="hljs-comment">/* Memory pressure */</span><br> <span class="hljs-number">957</span>         <span class="hljs-type">void</span>                    (*enter_memory_pressure)(<span class="hljs-keyword">struct</span> sock *sk);<br> <span class="hljs-number">958</span>         <span class="hljs-type">atomic_long_t</span>           *memory_allocated;      <span class="hljs-comment">/* Current allocated memory. */</span><br> <span class="hljs-number">959</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">percpu_counter</span>   *<span class="hljs-title">sockets_allocated</span>;</span>     <span class="hljs-comment">/* Current number of sockets. */</span><br> <span class="hljs-number">960</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment"> 961          * Pressure flag: try to collapse.</span><br><span class="hljs-comment"> 962          * Technical note: it is used by multiple contexts non atomically.</span><br><span class="hljs-comment"> 963          * All the __sk_mem_schedule() is of this nature: accounting</span><br><span class="hljs-comment"> 964          * is strict, actions are advisory and have some latency.</span><br><span class="hljs-comment"> 965          */</span><br> <span class="hljs-number">966</span>         <span class="hljs-type">int</span>                     *memory_pressure;<br> <span class="hljs-number">967</span>         <span class="hljs-type">long</span>                    *sysctl_mem;<br> <span class="hljs-number">968</span>         <span class="hljs-type">int</span>                     *sysctl_wmem;<br> <span class="hljs-number">969</span>         <span class="hljs-type">int</span>                     *sysctl_rmem;<br> <span class="hljs-number">970</span>         <span class="hljs-type">int</span>                     max_header;<br> <span class="hljs-number">971</span>         <span class="hljs-type">bool</span>                    no_autobind;<br> <span class="hljs-number">972</span> <br> <span class="hljs-number">973</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">kmem_cache</span>       *<span class="hljs-title">slab</span>;</span><br> <span class="hljs-number">974</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span>            obj_size;<br> <span class="hljs-number">975</span>         <span class="hljs-type">int</span>                     slab_flags;<br> <span class="hljs-number">976</span> <br> <span class="hljs-number">977</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">percpu_counter</span>   *<span class="hljs-title">orphan_count</span>;</span><br> <span class="hljs-number">978</span> <br> <span class="hljs-number">979</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">request_sock_ops</span> *<span class="hljs-title">rsk_prot</span>;</span><br> <span class="hljs-number">980</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">timewait_sock_ops</span> *<span class="hljs-title">twsk_prot</span>;</span><br> <span class="hljs-number">981</span> <br> <span class="hljs-number">982</span>         <span class="hljs-class"><span class="hljs-keyword">union</span> &#123;</span><br> <span class="hljs-number">983</span>                 <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">inet_hashinfo</span>    *<span class="hljs-title">hashinfo</span>;</span><br> <span class="hljs-number">984</span>                 <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">udp_table</span>        *<span class="hljs-title">udp_table</span>;</span><br> <span class="hljs-number">985</span>                 <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">raw_hashinfo</span>     *<span class="hljs-title">raw_hash</span>;</span><br> <span class="hljs-number">986</span>         &#125; h;<br> <span class="hljs-number">987</span> <br> <span class="hljs-number">988</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">module</span>           *<span class="hljs-title">owner</span>;</span><br> <span class="hljs-number">989</span> <br> <span class="hljs-number">990</span>         <span class="hljs-type">char</span>                    name[<span class="hljs-number">32</span>];<br> <span class="hljs-number">991</span> <br> <span class="hljs-number">992</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">node</span>;</span><br> <span class="hljs-number">993</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> SOCK_REFCNT_DEBUG</span><br> <span class="hljs-number">994</span>         <span class="hljs-type">atomic_t</span>                socks;<br> <span class="hljs-number">995</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br> <span class="hljs-number">996</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_MEMCG_KMEM</span><br> <span class="hljs-number">997</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment"> 998          * cgroup specific init/deinit functions. Called once for all</span><br><span class="hljs-comment"> 999          * protocols that implement it, from cgroups populate function.</span><br><span class="hljs-comment">1000          * This function has to setup any files the protocol want to</span><br><span class="hljs-comment">1001          * appear in the kmem cgroup filesystem.</span><br><span class="hljs-comment">1002          */</span><br><span class="hljs-number">1003</span>         <span class="hljs-type">int</span>                     (*init_cgroup)(<span class="hljs-keyword">struct</span> mem_cgroup *memcg,<br><span class="hljs-number">1004</span>                                                <span class="hljs-keyword">struct</span> cgroup_subsys *ss);<br><span class="hljs-number">1005</span>         <span class="hljs-type">void</span>                    (*destroy_cgroup)(<span class="hljs-keyword">struct</span> mem_cgroup *memcg);<br><span class="hljs-number">1006</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">cg_proto</span>         *(*<span class="hljs-title">proto_cgroup</span>)(<span class="hljs-keyword">struct</span> <span class="hljs-title">mem_cgroup</span> *<span class="hljs-title">memcg</span>);</span><br><span class="hljs-number">1007</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">1008</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2781</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">proto</span> <span class="hljs-title">tcp_prot</span> =</span> &#123;<br><span class="hljs-number">2782</span>         .name                   = <span class="hljs-string">&quot;TCP&quot;</span>,<br><span class="hljs-number">2783</span>         .owner                  = THIS_MODULE,<br><span class="hljs-number">2784</span>         .close                  = tcp_close,<br><span class="hljs-number">2785</span>         .connect                = tcp_v4_connect,<br><span class="hljs-number">2786</span>         .disconnect             = tcp_disconnect,<br><span class="hljs-number">2787</span>         .accept                 = inet_csk_accept,<br><span class="hljs-number">2788</span>         .ioctl                  = tcp_ioctl,<br><span class="hljs-number">2789</span>         .init                   = tcp_v4_init_sock,<br><span class="hljs-number">2790</span>         .destroy                = tcp_v4_destroy_sock,<br><span class="hljs-number">2791</span>         .shutdown               = tcp_shutdown,<br><span class="hljs-number">2792</span>         .setsockopt             = tcp_setsockopt,<br><span class="hljs-number">2793</span>         .getsockopt             = tcp_getsockopt,<br><span class="hljs-number">2794</span>         .recvmsg                = tcp_recvmsg,<br><span class="hljs-number">2795</span>         .sendmsg                = tcp_sendmsg,<br><span class="hljs-number">2796</span>         .sendpage               = tcp_sendpage,<br><span class="hljs-number">2797</span>         .backlog_rcv            = tcp_v4_do_rcv,<br><span class="hljs-number">2798</span>         .release_cb             = tcp_release_cb,<br><span class="hljs-number">2799</span>         .mtu_reduced            = tcp_v4_mtu_reduced,<br><span class="hljs-number">2800</span>         .hash                   = inet_hash,<br><span class="hljs-number">2801</span>         .unhash                 = inet_unhash,<br><span class="hljs-number">2802</span>         .get_port               = inet_csk_get_port,<br><span class="hljs-number">2803</span>         .enter_memory_pressure  = tcp_enter_memory_pressure,<br><span class="hljs-number">2804</span>         .stream_memory_free     = tcp_stream_memory_free,<br><span class="hljs-number">2805</span>         .sockets_allocated      = &amp;tcp_sockets_allocated,<br><span class="hljs-number">2806</span>         .orphan_count           = &amp;tcp_orphan_count,<br><span class="hljs-number">2807</span>         .memory_allocated       = &amp;tcp_memory_allocated,<br><span class="hljs-number">2808</span>         .memory_pressure        = &amp;tcp_memory_pressure,<br><span class="hljs-number">2809</span>         .sysctl_wmem            = sysctl_tcp_wmem,<br><span class="hljs-number">2810</span>         .sysctl_rmem            = sysctl_tcp_rmem,<br><span class="hljs-number">2811</span>         .max_header             = MAX_TCP_HEADER,<br><span class="hljs-number">2812</span>         .obj_size               = <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> tcp_sock),<br><span class="hljs-number">2813</span>         .slab_flags             = SLAB_DESTROY_BY_RCU,<br><span class="hljs-number">2814</span>         .twsk_prot              = &amp;tcp_timewait_sock_ops,<br><span class="hljs-number">2815</span>         .rsk_prot               = &amp;tcp_request_sock_ops,<br><span class="hljs-number">2816</span>         .h.hashinfo             = &amp;tcp_hashinfo,<br><span class="hljs-number">2817</span>         .no_autobind            = <span class="hljs-literal">true</span>,<br><span class="hljs-number">2818</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_COMPAT</span><br><span class="hljs-number">2819</span>         .compat_setsockopt      = compat_tcp_setsockopt,<br><span class="hljs-number">2820</span>         .compat_getsockopt      = compat_tcp_getsockopt,<br><span class="hljs-number">2821</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">2822</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_MEMCG_KMEM</span><br><span class="hljs-number">2823</span>         .init_cgroup            = tcp_init_cgroup,<br><span class="hljs-number">2824</span>         .destroy_cgroup         = tcp_destroy_cgroup,<br><span class="hljs-number">2825</span>         .proto_cgroup           = tcp_proto_cgroup,<br><span class="hljs-number">2826</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">2827</span> &#125;;<br><span class="hljs-number">2828</span> EXPORT_SYMBOL(tcp_prot);<br></code></pre></td></tr></table></figure>
+
+<h3 id="struct-proto-ops-and-inet-stream-ops">0.1.2. struct proto_ops and inet_stream_ops</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">127</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">proto_ops</span> &#123;</span><br><span class="hljs-number">128</span>         <span class="hljs-type">int</span>             family;<br><span class="hljs-number">129</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">module</span>   *<span class="hljs-title">owner</span>;</span><br><span class="hljs-number">130</span>         <span class="hljs-type">int</span>             (*release)   (<span class="hljs-keyword">struct</span> socket *sock);<br><span class="hljs-number">131</span>         <span class="hljs-type">int</span>             (*bind)      (<span class="hljs-keyword">struct</span> socket *sock,<br><span class="hljs-number">132</span>                                       <span class="hljs-keyword">struct</span> sockaddr *myaddr,<br><span class="hljs-number">133</span>                                       <span class="hljs-type">int</span> sockaddr_len);<br><span class="hljs-number">134</span>         <span class="hljs-type">int</span>             (*connect)   (<span class="hljs-keyword">struct</span> socket *sock,<br><span class="hljs-number">135</span>                                       <span class="hljs-keyword">struct</span> sockaddr *vaddr,<br><span class="hljs-number">136</span>                                       <span class="hljs-type">int</span> sockaddr_len, <span class="hljs-type">int</span> flags);<br><span class="hljs-number">137</span>         <span class="hljs-type">int</span>             (*socketpair)(<span class="hljs-keyword">struct</span> socket *sock1,<br><span class="hljs-number">138</span>                                       <span class="hljs-keyword">struct</span> socket *sock2);<br><span class="hljs-number">139</span>         <span class="hljs-type">int</span>             (*accept)    (<span class="hljs-keyword">struct</span> socket *sock,<br><span class="hljs-number">140</span>                                       <span class="hljs-keyword">struct</span> socket *newsock, <span class="hljs-type">int</span> flags);<br><span class="hljs-number">141</span>         <span class="hljs-type">int</span>             (*getname)   (<span class="hljs-keyword">struct</span> socket *sock,<br><span class="hljs-number">142</span>                                       <span class="hljs-keyword">struct</span> sockaddr *addr,<br><span class="hljs-number">143</span>                                       <span class="hljs-type">int</span> *sockaddr_len, <span class="hljs-type">int</span> peer);<br><span class="hljs-number">144</span>         <span class="hljs-type">unsigned</span> <span class="hljs-title function_">int</span>    <span class="hljs-params">(*poll)</span>      <span class="hljs-params">(<span class="hljs-keyword">struct</span> file *file, <span class="hljs-keyword">struct</span> socket *sock,</span><br><span class="hljs-params"><span class="hljs-number">145</span>                                       <span class="hljs-keyword">struct</span> poll_table_struct *wait)</span>;<br><span class="hljs-number">146</span>         <span class="hljs-type">int</span>             (*ioctl)     (<span class="hljs-keyword">struct</span> socket *sock, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> cmd,<br><span class="hljs-number">147</span>                                       <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> arg);<br><span class="hljs-number">148</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_COMPAT</span><br><span class="hljs-number">149</span>         <span class="hljs-type">int</span>             (*compat_ioctl) (<span class="hljs-keyword">struct</span> socket *sock, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> cmd,<br><span class="hljs-number">150</span>                                       <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> arg);<br><span class="hljs-number">151</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">152</span>         <span class="hljs-type">int</span>             (*listen)    (<span class="hljs-keyword">struct</span> socket *sock, <span class="hljs-type">int</span> len);<br><span class="hljs-number">153</span>         <span class="hljs-type">int</span>             (*shutdown)  (<span class="hljs-keyword">struct</span> socket *sock, <span class="hljs-type">int</span> flags);<br><span class="hljs-number">154</span>         <span class="hljs-type">int</span>             (*setsockopt)(<span class="hljs-keyword">struct</span> socket *sock, <span class="hljs-type">int</span> level,<br><span class="hljs-number">155</span>                                       <span class="hljs-type">int</span> optname, <span class="hljs-type">char</span> __user *optval, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> optlen);<br><span class="hljs-number">156</span>         <span class="hljs-type">int</span>             (*getsockopt)(<span class="hljs-keyword">struct</span> socket *sock, <span class="hljs-type">int</span> level,<br><span class="hljs-number">157</span>                                       <span class="hljs-type">int</span> optname, <span class="hljs-type">char</span> __user *optval, <span class="hljs-type">int</span> __user *optlen);<br><span class="hljs-number">158</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_COMPAT</span><br><span class="hljs-number">159</span>         <span class="hljs-type">int</span>             (*compat_setsockopt)(<span class="hljs-keyword">struct</span> socket *sock, <span class="hljs-type">int</span> level,<br><span class="hljs-number">160</span>                                       <span class="hljs-type">int</span> optname, <span class="hljs-type">char</span> __user *optval, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> optlen);<br><span class="hljs-number">161</span>         <span class="hljs-type">int</span>             (*compat_getsockopt)(<span class="hljs-keyword">struct</span> socket *sock, <span class="hljs-type">int</span> level,<br><span class="hljs-number">162</span>                                       <span class="hljs-type">int</span> optname, <span class="hljs-type">char</span> __user *optval, <span class="hljs-type">int</span> __user *optlen);<br><span class="hljs-number">163</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">164</span>         <span class="hljs-type">int</span>             (*sendmsg)   (<span class="hljs-keyword">struct</span> kiocb *iocb, <span class="hljs-keyword">struct</span> socket *sock,<br><span class="hljs-number">165</span>                                       <span class="hljs-keyword">struct</span> msghdr *m, <span class="hljs-type">size_t</span> total_len);<br><span class="hljs-number">166</span>         <span class="hljs-type">int</span>             (*recvmsg)   (<span class="hljs-keyword">struct</span> kiocb *iocb, <span class="hljs-keyword">struct</span> socket *sock,<br><span class="hljs-number">167</span>                                       <span class="hljs-keyword">struct</span> msghdr *m, <span class="hljs-type">size_t</span> total_len,<br><span class="hljs-number">168</span>                                       <span class="hljs-type">int</span> flags);<br><span class="hljs-number">169</span>         <span class="hljs-type">int</span>             (*mmap)      (<span class="hljs-keyword">struct</span> file *file, <span class="hljs-keyword">struct</span> socket *sock,<br><span class="hljs-number">170</span>                                       <span class="hljs-keyword">struct</span> vm_area_struct * vma);<br><span class="hljs-number">171</span>         <span class="hljs-type">ssize_t</span>         (*sendpage)  (<span class="hljs-keyword">struct</span> socket *sock, <span class="hljs-keyword">struct</span> page *page,<br><span class="hljs-number">172</span>                                       <span class="hljs-type">int</span> offset, <span class="hljs-type">size_t</span> size, <span class="hljs-type">int</span> flags);<br><span class="hljs-number">173</span>         <span class="hljs-type">ssize_t</span>         (*splice_read)(<span class="hljs-keyword">struct</span> socket *sock,  <span class="hljs-type">loff_t</span> *ppos,<br><span class="hljs-number">174</span>                                        <span class="hljs-keyword">struct</span> pipe_inode_info *pipe, <span class="hljs-type">size_t</span> len, <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> flags);<br><span class="hljs-number">175</span>         <span class="hljs-type">void</span>            (*set_peek_off)(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-type">int</span> val);<br><span class="hljs-number">176</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">934</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">proto_ops</span> <span class="hljs-title">inet_stream_ops</span> =</span> &#123;<br><span class="hljs-number">935</span>         .family            = PF_INET,<br><span class="hljs-number">936</span>         .owner             = THIS_MODULE,<br><span class="hljs-number">937</span>         .release           = inet_release,<br><span class="hljs-number">938</span>         .bind              = inet_bind,<br><span class="hljs-number">939</span>         .connect           = inet_stream_connect,<br><span class="hljs-number">940</span>         .socketpair        = sock_no_socketpair,<br><span class="hljs-number">941</span>         .accept            = inet_accept,<br><span class="hljs-number">942</span>         .getname           = inet_getname,<br><span class="hljs-number">943</span>         .poll              = tcp_poll,<br><span class="hljs-number">944</span>         .ioctl             = inet_ioctl,<br><span class="hljs-number">945</span>         .listen            = inet_listen,<br><span class="hljs-number">946</span>         .shutdown          = inet_shutdown, <br><span class="hljs-number">947</span>         .setsockopt        = sock_common_setsockopt,<br><span class="hljs-number">948</span>         .getsockopt        = sock_common_getsockopt,<br><span class="hljs-number">949</span>         .sendmsg           = inet_sendmsg,<br><span class="hljs-number">950</span>         .recvmsg           = inet_recvmsg,<br><span class="hljs-number">951</span>         .mmap              = sock_no_mmap,<br><span class="hljs-number">952</span>         .sendpage          = inet_sendpage,<br><span class="hljs-number">953</span>         .splice_read       = tcp_splice_read,<br><span class="hljs-number">954</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_COMPAT                  </span><br><span class="hljs-number">955</span>         .compat_setsockopt = compat_sock_common_setsockopt, <br><span class="hljs-number">956</span>         .compat_getsockopt = compat_sock_common_getsockopt,<br><span class="hljs-number">957</span>         .compat_ioctl      = inet_compat_ioctl,<br><span class="hljs-number">958</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">959</span> &#125;;<br><span class="hljs-number">960</span> EXPORT_SYMBOL(inet_stream_ops);<br></code></pre></td></tr></table></figure>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Socket/" class="category-chain-item">Socket</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/IPv4/" class="print-no-link">#IPv4</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>inetsw table</div>
+      <div>https://martinbj2008.github.io/2013/11/22/2013-11-22-inetsw-table/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>November 22, 2013</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2013/11/22/2013-11-22-the-inheriting-of-linux-sock-type/" title="the inheriting of linux sock type">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">the inheriting of linux sock type</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2013/11/22/2013-11-22-how-to-create-a-inet-socket/" title="how to create a inet socket">
+                        <span class="hidden-mobile">how to create a inet socket</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

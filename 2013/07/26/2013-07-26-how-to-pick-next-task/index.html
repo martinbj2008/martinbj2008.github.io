@@ -1,0 +1,842 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.1. summaryThere are four sched_class,stop_sched_class --&gt; rt_sched_class --&gt; fair_sched_class --&gt; idle_sched_class They are linked one by one staticly by struct sched_class-&gt;next by thei">
+<meta property="og:type" content="article">
+<meta property="og:title" content="draft: how to pick next task">
+<meta property="og:url" content="https://martinbj2008.github.io/2013/07/26/2013-07-26-how-to-pick-next-task/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.1. summaryThere are four sched_class,stop_sched_class --&gt; rt_sched_class --&gt; fair_sched_class --&gt; idle_sched_class They are linked one by one staticly by struct sched_class-&gt;next by thei">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2013-07-26T00:23:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.748Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="sched">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>draft: how to pick next task - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="draft: how to pick next task"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2013-07-26 08:23" pubdate>
+          July 26, 2013 am
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          6.9k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          58 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">draft: how to pick next task</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h2 id="summary">0.1. summary</h2><p>There are four <code>sched_class</code>,<br><code>stop_sched_class --&gt; rt_sched_class --&gt; fair_sched_class --&gt; idle_sched_class</code></p>
+<p>They are linked one by one staticly by <code>struct sched_class-&gt;next</code> by their defination.</p>
+<p>Each <code>sched_class</code> has method <code>pick_next_task</code>, which is used to select<br>a perfect process to run from each <code>sched_class</code>‘s runqueue.</p>
+<p>When we need schedule, the four <code>pick_next_task</code> will be called one by one.</p>
+<p>As a optimization, most time there is no rt task in running state,<br>in this case we can directly call <code>fair_sched_class</code>.</p>
+<span id="more"></span>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2322</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment">2323          * Optimization: we know that if all tasks are in</span><br><span class="hljs-comment">2324          * the fair class we can call that function directly:</span><br><span class="hljs-comment">2325          */</span><br><span class="hljs-number">2326</span>         <span class="hljs-keyword">if</span> (likely(rq-&gt;nr_running == rq-&gt;cfs.h_nr_running)) &#123;<br><span class="hljs-number">2327</span>                 p = fair_sched_class.pick_next_task(rq);<br></code></pre></td></tr></table></figure>
+
+<p>question:</p>
+<ol>
+<li>how <code>stop_class</code> and <code>idle_class</code>, they has no task? idle_task?</li>
+</ol>
+<h2 id="data-structure">0.2. data structure</h2><h3 id="sched-class">0.2.1. sched_class</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1009</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> sched_class_highest (&amp;stop_sched_class)</span><br><span class="hljs-number">1010</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> for_each_class(class) \</span><br><span class="hljs-meta">1011    for (class = sched_class_highest; class; class = class-&gt;next)</span><br><span class="hljs-number">1012</span> <br><span class="hljs-number">1013</span> <span class="hljs-keyword">extern</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sched_class</span> <span class="hljs-title">stop_sched_class</span>;</span><br><span class="hljs-number">1014</span> <span class="hljs-keyword">extern</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sched_class</span> <span class="hljs-title">rt_sched_class</span>;</span><br><span class="hljs-number">1015</span> <span class="hljs-keyword">extern</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sched_class</span> <span class="hljs-title">fair_sched_class</span>;</span><br><span class="hljs-number">1016</span> <span class="hljs-keyword">extern</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sched_class</span> <span class="hljs-title">idle_sched_class</span>;</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">963</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sched_class</span> &#123;</span> <br> <span class="hljs-number">964</span>         <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sched_class</span> *<span class="hljs-title">next</span>;</span><br> <span class="hljs-number">965</span>         <br> <span class="hljs-number">966</span>         <span class="hljs-type">void</span> (*enqueue_task) (<span class="hljs-keyword">struct</span> rq *rq, <span class="hljs-keyword">struct</span> task_struct *p, <span class="hljs-type">int</span> flags);<br> <span class="hljs-number">967</span>         <span class="hljs-type">void</span> (*dequeue_task) (<span class="hljs-keyword">struct</span> rq *rq, <span class="hljs-keyword">struct</span> task_struct *p, <span class="hljs-type">int</span> flags);<br> <span class="hljs-number">968</span>         <span class="hljs-type">void</span> (*yield_task) (<span class="hljs-keyword">struct</span> rq *rq);<br> <span class="hljs-number">969</span>         <span class="hljs-type">bool</span> (*yield_to_task) (<span class="hljs-keyword">struct</span> rq *rq, <span class="hljs-keyword">struct</span> task_struct *p, <span class="hljs-type">bool</span> preempt);<br> <span class="hljs-number">970</span> <br> <span class="hljs-number">971</span>         <span class="hljs-type">void</span> (*check_preempt_curr) (<span class="hljs-keyword">struct</span> rq *rq, <span class="hljs-keyword">struct</span> task_struct *p, <span class="hljs-type">int</span> flags);<br> <span class="hljs-number">972</span>         <br> <span class="hljs-number">973</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">task_struct</span> * (*<span class="hljs-title">pick_next_task</span>) (<span class="hljs-keyword">struct</span> <span class="hljs-title">rq</span> *<span class="hljs-title">rq</span>);</span><br> <span class="hljs-number">974</span>         <span class="hljs-type">void</span> (*put_prev_task) (<span class="hljs-keyword">struct</span> rq *rq, <span class="hljs-keyword">struct</span> task_struct *p);<br> <span class="hljs-number">975</span>         <br> <span class="hljs-number">976</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_SMP</span><br> <span class="hljs-number">977</span>         <span class="hljs-type">int</span>  (*select_task_rq)(<span class="hljs-keyword">struct</span> task_struct *p, <span class="hljs-type">int</span> sd_flag, <span class="hljs-type">int</span> flags);<br> <span class="hljs-number">978</span>         <span class="hljs-type">void</span> (*migrate_task_rq)(<span class="hljs-keyword">struct</span> task_struct *p, <span class="hljs-type">int</span> next_cpu);<br> <span class="hljs-number">979</span> <br> <span class="hljs-number">980</span>         <span class="hljs-type">void</span> (*pre_schedule) (<span class="hljs-keyword">struct</span> rq *this_rq, <span class="hljs-keyword">struct</span> task_struct *task);<br> <span class="hljs-number">981</span>         <span class="hljs-type">void</span> (*post_schedule) (<span class="hljs-keyword">struct</span> rq *this_rq);<br> <span class="hljs-number">982</span>         <span class="hljs-type">void</span> (*task_waking) (<span class="hljs-keyword">struct</span> task_struct *task);<br> <span class="hljs-number">983</span>         <span class="hljs-type">void</span> (*task_woken) (<span class="hljs-keyword">struct</span> rq *this_rq, <span class="hljs-keyword">struct</span> task_struct *task);<br> <span class="hljs-number">984</span> <br> <span class="hljs-number">985</span>         <span class="hljs-type">void</span> (*set_cpus_allowed)(<span class="hljs-keyword">struct</span> task_struct *p,<br> <span class="hljs-number">986</span>                                  <span class="hljs-type">const</span> <span class="hljs-keyword">struct</span> cpumask *newmask);<br> <span class="hljs-number">987</span> <br> <span class="hljs-number">988</span>         <span class="hljs-type">void</span> (*rq_online)(<span class="hljs-keyword">struct</span> rq *rq);<br> <span class="hljs-number">989</span>         <span class="hljs-type">void</span> (*rq_offline)(<span class="hljs-keyword">struct</span> rq *rq);<br> <span class="hljs-number">990</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br> <span class="hljs-number">991</span> <br> <span class="hljs-number">992</span>         <span class="hljs-type">void</span> (*set_curr_task) (<span class="hljs-keyword">struct</span> rq *rq);<br> <span class="hljs-number">993</span>         <span class="hljs-type">void</span> (*task_tick) (<span class="hljs-keyword">struct</span> rq *rq, <span class="hljs-keyword">struct</span> task_struct *p, <span class="hljs-type">int</span> queued);<br> <span class="hljs-number">994</span>         <span class="hljs-type">void</span> (*task_fork) (<span class="hljs-keyword">struct</span> task_struct *p);<br> <span class="hljs-number">995</span> <br> <span class="hljs-number">996</span>         <span class="hljs-type">void</span> (*switched_from) (<span class="hljs-keyword">struct</span> rq *this_rq, <span class="hljs-keyword">struct</span> task_struct *task);<br> <span class="hljs-number">997</span>         <span class="hljs-type">void</span> (*switched_to) (<span class="hljs-keyword">struct</span> rq *this_rq, <span class="hljs-keyword">struct</span> task_struct *task);<br> <span class="hljs-number">998</span>         <span class="hljs-type">void</span> (*prio_changed) (<span class="hljs-keyword">struct</span> rq *this_rq, <span class="hljs-keyword">struct</span> task_struct *task,<br> <span class="hljs-number">999</span>                              <span class="hljs-type">int</span> oldprio);<br><span class="hljs-number">1000</span> <br><span class="hljs-number">1001</span>         <span class="hljs-type">unsigned</span> <span class="hljs-title function_">int</span> <span class="hljs-params">(*get_rr_interval)</span> <span class="hljs-params">(<span class="hljs-keyword">struct</span> rq *rq,</span><br><span class="hljs-params"><span class="hljs-number">1002</span>                                          <span class="hljs-keyword">struct</span> task_struct *task)</span>;<br><span class="hljs-number">1003</span> <br><span class="hljs-number">1004</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_FAIR_GROUP_SCHED</span><br><span class="hljs-number">1005</span>         <span class="hljs-type">void</span> (*task_move_group) (<span class="hljs-keyword">struct</span> task_struct *p, <span class="hljs-type">int</span> on_rq);<br><span class="hljs-number">1006</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">1007</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h3 id="stop-sched-class">0.2.2. stop_sched_class</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">102</span> <span class="hljs-comment">/*</span><br><span class="hljs-comment">103  * Simple, special scheduling class for the per-CPU stop tasks:</span><br><span class="hljs-comment">104  */</span><br><span class="hljs-number">105</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sched_class</span> <span class="hljs-title">stop_sched_class</span> =</span> &#123;<br><span class="hljs-number">106</span>         .next                   = &amp;rt_sched_class,<br><span class="hljs-number">107</span> <br><span class="hljs-number">108</span>         .enqueue_task           = enqueue_task_stop,<br><span class="hljs-number">109</span>         .dequeue_task           = dequeue_task_stop,<br><span class="hljs-number">110</span>         .yield_task             = yield_task_stop,<br><span class="hljs-number">111</span> <br><span class="hljs-number">112</span>         .check_preempt_curr     = check_preempt_curr_stop,<br><span class="hljs-number">113</span> <br><span class="hljs-number">114</span>         .pick_next_task         = pick_next_task_stop,<br><span class="hljs-number">115</span>         .put_prev_task          = put_prev_task_stop,<br><span class="hljs-number">116</span> <br><span class="hljs-number">117</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_SMP</span><br><span class="hljs-number">118</span>         .select_task_rq         = select_task_rq_stop,<br><span class="hljs-number">119</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">120</span> <br><span class="hljs-number">121</span>         .set_curr_task          = set_curr_task_stop,<br><span class="hljs-number">122</span>         .task_tick              = task_tick_stop,<br><span class="hljs-number">123</span> <br><span class="hljs-number">124</span>         .get_rr_interval        = get_rr_interval_stop,<br><span class="hljs-number">125</span> <br><span class="hljs-number">126</span>         .prio_changed           = prio_changed_stop,<br><span class="hljs-number">127</span>         .switched_to            = switched_to_stop,<br><span class="hljs-number">128</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h3 id="rt-sched-class">0.2.3. rt_sched_class</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1967</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sched_class</span> <span class="hljs-title">rt_sched_class</span> =</span> &#123;<br><span class="hljs-number">1968</span>         .next                   = &amp;fair_sched_class,<br><span class="hljs-number">1969</span>         .enqueue_task           = enqueue_task_rt,<br><span class="hljs-number">1970</span>         .dequeue_task           = dequeue_task_rt,<br><span class="hljs-number">1971</span>         .yield_task             = yield_task_rt,<br><span class="hljs-number">1972</span> <br><span class="hljs-number">1973</span>         .check_preempt_curr     = check_preempt_curr_rt,<br><span class="hljs-number">1974</span> <br><span class="hljs-number">1975</span>         .pick_next_task         = pick_next_task_rt,<br><span class="hljs-number">1976</span>         .put_prev_task          = put_prev_task_rt,<br><span class="hljs-number">1977</span> <br><span class="hljs-number">1978</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_SMP</span><br><span class="hljs-number">1979</span>         .select_task_rq         = select_task_rq_rt,<br><span class="hljs-number">1980</span>        <br><span class="hljs-number">1981</span>         .set_cpus_allowed       = set_cpus_allowed_rt,<br><span class="hljs-number">1982</span>         .rq_online              = rq_online_rt,<br><span class="hljs-number">1983</span>         .rq_offline             = rq_offline_rt,<br><span class="hljs-number">1984</span>         .pre_schedule           = pre_schedule_rt,<br><span class="hljs-number">1985</span>         .post_schedule          = post_schedule_rt,<br><span class="hljs-number">1986</span>         .task_woken             = task_woken_rt,<br><span class="hljs-number">1987</span>         .switched_from          = switched_from_rt,<br><span class="hljs-number">1988</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span> </span><br><span class="hljs-number">1989</span>        <br><span class="hljs-number">1990</span>         .set_curr_task          = set_curr_task_rt,<br><span class="hljs-number">1991</span>         .task_tick              = task_tick_rt,<br><span class="hljs-number">1992</span>        <br><span class="hljs-number">1993</span>         .get_rr_interval        = get_rr_interval_rt,<br><span class="hljs-number">1994</span> <br><span class="hljs-number">1995</span>         .prio_changed           = prio_changed_rt,<br><span class="hljs-number">1996</span>         .switched_to            = switched_to_rt,<br><span class="hljs-number">1997</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h3 id="fair-sched-class">0.2.4. fair_sched_class</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">6170</span> <span class="hljs-comment">/*      </span><br><span class="hljs-comment">6171  * All the scheduling class methods:</span><br><span class="hljs-comment">6172  */</span>     <br><span class="hljs-number">6173</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sched_class</span> <span class="hljs-title">fair_sched_class</span> =</span> &#123;<br><span class="hljs-number">6174</span>         .next                   = &amp;idle_sched_class,<br><span class="hljs-number">6175</span>         .enqueue_task           = enqueue_task_fair,<br><span class="hljs-number">6176</span>         .dequeue_task           = dequeue_task_fair,<br><span class="hljs-number">6177</span>         .yield_task             = yield_task_fair,<br><span class="hljs-number">6178</span>         .yield_to_task          = yield_to_task_fair,<br><span class="hljs-number">6179</span>        <br><span class="hljs-number">6180</span>         .check_preempt_curr     = check_preempt_wakeup,<br><span class="hljs-number">6181</span>         <br><span class="hljs-number">6182</span>         .pick_next_task         = pick_next_task_fair,<br><span class="hljs-number">6183</span>         .put_prev_task          = put_prev_task_fair,<br><span class="hljs-number">6184</span> <br><span class="hljs-number">6185</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_SMP</span><br><span class="hljs-number">6186</span>         .select_task_rq         = select_task_rq_fair,<br><span class="hljs-number">6187</span>         .migrate_task_rq        = migrate_task_rq_fair,<br><span class="hljs-number">6188</span>        <br><span class="hljs-number">6189</span>         .rq_online              = rq_online_fair,<br><span class="hljs-number">6190</span>         .rq_offline             = rq_offline_fair,<br><span class="hljs-number">6191</span>        <br><span class="hljs-number">6192</span>         .task_waking            = task_waking_fair,<br><span class="hljs-number">6193</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">6194</span>         <br><span class="hljs-number">6195</span>         .set_curr_task          = set_curr_task_fair,<br><span class="hljs-number">6196</span>         .task_tick              = task_tick_fair,<br><span class="hljs-number">6197</span>         .task_fork              = task_fork_fair,<br><span class="hljs-number">6198</span> <br><span class="hljs-number">6199</span>         .prio_changed           = prio_changed_fair, <br><span class="hljs-number">6200</span>         .switched_from          = switched_from_fair,<br><span class="hljs-number">6201</span>         .switched_to            = switched_to_fair,<br><span class="hljs-number">6202</span> <br><span class="hljs-number">6203</span>         .get_rr_interval        = get_rr_interval_fair,<br><span class="hljs-number">6204</span> <br><span class="hljs-number">6205</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_FAIR_GROUP_SCHED</span><br><span class="hljs-number">6206</span>         .task_move_group        = task_move_group_fair,<br><span class="hljs-number">6207</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">6208</span> &#125;;<br><span class="hljs-number">6209</span> <br></code></pre></td></tr></table></figure>
+
+<h3 id="idle-sched-class">0.2.5. idle_sched_class</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">87</span> <span class="hljs-comment">/*       </span><br><span class="hljs-comment"> 88  * Simple, special scheduling class for the per-CPU idle tasks:</span><br><span class="hljs-comment"> 89  */</span><br> <span class="hljs-number">90</span> <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sched_class</span> <span class="hljs-title">idle_sched_class</span> =</span> &#123;<br> <span class="hljs-number">91</span>         <span class="hljs-comment">/* .next is NULL */</span><br> <span class="hljs-number">92</span>         <span class="hljs-comment">/* no enqueue/yield_task for idle tasks */</span><br> <span class="hljs-number">93</span> <br> <span class="hljs-number">94</span>         <span class="hljs-comment">/* dequeue is not valid, we print a debug message there: */</span><br> <span class="hljs-number">95</span>         .dequeue_task           = dequeue_task_idle,<br> <span class="hljs-number">96</span> <br> <span class="hljs-number">97</span>         .check_preempt_curr     = check_preempt_curr_idle,<br> <span class="hljs-number">98</span> <br> <span class="hljs-number">99</span>         .pick_next_task         = pick_next_task_idle,<br><span class="hljs-number">100</span>         .put_prev_task          = put_prev_task_idle,<br><span class="hljs-number">101</span> <br><span class="hljs-number">102</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_SMP</span><br><span class="hljs-number">103</span>         .select_task_rq         = select_task_rq_idle,<br><span class="hljs-number">104</span>         .pre_schedule           = pre_schedule_idle,<br><span class="hljs-number">105</span>         .post_schedule          = post_schedule_idle,<br><span class="hljs-number">106</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span>   </span><br><span class="hljs-number">107</span> <br><span class="hljs-number">108</span>         .set_curr_task          = set_curr_task_idle,<br><span class="hljs-number">109</span>         .task_tick              = task_tick_idle,<br><span class="hljs-number">110</span> <br><span class="hljs-number">111</span>         .get_rr_interval        = get_rr_interval_idle,<br><span class="hljs-number">112</span> <br><span class="hljs-number">113</span>         .prio_changed           = prio_changed_idle,<br><span class="hljs-number">114</span>         .switched_to            = switched_to_idle,<br><span class="hljs-number">115</span> &#125;;<br></code></pre></td></tr></table></figure>
+<h3 id="pick-next-task">0.2.6. pick_next_task</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">2313</span> <span class="hljs-comment">/*</span><br><span class="hljs-comment">2314  * Pick up the highest-prio task:</span><br><span class="hljs-comment">2315  */</span><br><span class="hljs-number">2316</span> <span class="hljs-type">static</span> <span class="hljs-keyword">inline</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">task_struct</span> *</span><br><span class="hljs-class">2317 <span class="hljs-title">pick_next_task</span>(<span class="hljs-keyword">struct</span> <span class="hljs-title">rq</span> *<span class="hljs-title">rq</span>)</span><br><span class="hljs-class">2318 &#123;</span> <br><span class="hljs-number">2319</span>         <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sched_class</span> *<span class="hljs-keyword">class</span>;</span><br><span class="hljs-number">2320</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">task_struct</span> *<span class="hljs-title">p</span>;</span><br><span class="hljs-number">2321</span>   <br><span class="hljs-number">2322</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment">2323          * Optimization: we know that if all tasks are in</span><br><span class="hljs-comment">2324          * the fair class we can call that function directly:</span><br><span class="hljs-comment">2325          */</span><br><span class="hljs-number">2326</span>         <span class="hljs-keyword">if</span> (likely(rq-&gt;nr_running == rq-&gt;cfs.h_nr_running)) &#123;<br><span class="hljs-number">2327</span>                 p = fair_sched_class.pick_next_task(rq); <br><span class="hljs-number">2328</span>                 <span class="hljs-keyword">if</span> (likely(p))     <br><span class="hljs-number">2329</span>                         <span class="hljs-keyword">return</span> p;  <br><span class="hljs-number">2330</span>         &#125;<br><span class="hljs-number">2331</span>   <br><span class="hljs-number">2332</span>         for_each_class(class) &#123;    <br><span class="hljs-number">2333</span>                 p = class-&gt;pick_next_task(rq);<br><span class="hljs-number">2334</span>                 <span class="hljs-keyword">if</span> (p)             <br><span class="hljs-number">2335</span>                         <span class="hljs-keyword">return</span> p;  <br><span class="hljs-number">2336</span>         &#125;<br><span class="hljs-number">2337</span>   <br><span class="hljs-number">2338</span>         BUG(); <span class="hljs-comment">/* the idle class will always have a runnable task */</span><br><span class="hljs-number">2339</span> &#125; <br></code></pre></td></tr></table></figure>
+
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Sched/" class="category-chain-item">Sched</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/sched/" class="print-no-link">#sched</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>draft: how to pick next task</div>
+      <div>https://martinbj2008.github.io/2013/07/26/2013-07-26-how-to-pick-next-task/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>July 26, 2013</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2013/07/26/2013-07-26-draft-how-to-select-a-realtime-task-when-schedule/" title="draft: how to select a realtime task when schedule">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">draft: how to select a realtime task when schedule</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2013/07/26/2013-07-26-schedule-study/" title="draft: struct rq">
+                        <span class="hidden-mobile">draft: struct rq</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

@@ -1,0 +1,853 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="tcpdump通过libpcap库以及内核的af_packet对数据包问题进行抓取。关于这两部分的如何协作抓包，之前blog里已经写过。这里主要记录分析，在ebpf之前的内核(以v3.0)如何处理tcpdump里的filter的。 1. filter编译后，如何加载到内核里的：在filter被翻译为一系列的指令后，这个指令buff被libpcap，通过sockopt里的SO_ATTACH_FILT">
+<meta property="og:type" content="article">
+<meta property="og:title" content="how tcpdump work with cbpf">
+<meta property="og:url" content="https://martinbj2008.github.io/2019/09/25/how-tcpdump-work-with-cbpf/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="tcpdump通过libpcap库以及内核的af_packet对数据包问题进行抓取。关于这两部分的如何协作抓包，之前blog里已经写过。这里主要记录分析，在ebpf之前的内核(以v3.0)如何处理tcpdump里的filter的。 1. filter编译后，如何加载到内核里的：在filter被翻译为一系列的指令后，这个指令buff被libpcap，通过sockopt里的SO_ATTACH_FILT">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2019-09-25T11:51:23.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.754Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="Tcpdump">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>how tcpdump work with cbpf - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="how tcpdump work with cbpf"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2019-09-25 19:51" pubdate>
+          September 25, 2019 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          4.7k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          40 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">how tcpdump work with cbpf</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <p>tcpdump通过libpcap库以及内核的<code>af_packet</code>对数据包问题进行抓取。<br>关于这两部分的如何协作抓包，之前blog里已经写过。<br>这里主要记录分析，在ebpf之前的内核(以v3.0)如何处理tcpdump里的filter的。</p>
+<h1 id="filter编译后，如何加载到内核里的：">1. filter编译后，如何加载到内核里的：</h1><p>在filter被翻译为一系列的指令后，这个指令buff被libpcap，<br>通过sockopt里的<code>SO_ATTACH_FILTE</code>选项，<br>最终挂载到AF_PACKET socket下的<code>sk_filter</code>上。<br> <span id="more"></span></p>
+<h2 id="函数调用栈：">1.1. 函数调用栈：</h2><figure class="highlight sml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs sml">--&gt; pcap_setfilter<br>--&gt; --&gt; p-&gt;setfilter_op 相当于pcap_setfilter_linux<br>--&gt; --&gt; --&gt; pcap_setfilter_linux<br>--&gt; --&gt; --&gt; --&gt; set_kernel_filter<br>--&gt; --&gt; --&gt; --&gt; --&gt; setsockopt(<span class="hljs-keyword">handle</span>-&gt;fd, <span class="hljs-type">SOL_SOCKET</span>, <span class="hljs-type">SO_ATTACH_FILTER</span>,<br>——————————————————kernel——————————————————<br>--&gt; --&gt; --&gt; --&gt; --&gt; --&gt; sock_setsockopt<br>--&gt; --&gt; --&gt; --&gt; --&gt; --&gt; --&gt; sk_attach_filter<br>--&gt; --&gt; --&gt; --&gt; --&gt; --&gt; --&gt; --&gt; rcu_assign_pointer(sk-&gt;sk_filter, fp);<br></code></pre></td></tr></table></figure>
+
+<h1 id="cbpf程序是如何被运行的：">2. cbpf程序是如何被运行的：</h1><p>当skb报文到达<code>packet_rcv</code>时候， 通过调用<code>sk_run_filter</code>函数，运行<code>sk_filter</code>对应的prog。</p>
+<figure class="highlight livescript"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs livescript">--&gt; packet_rcv<br>--&gt; --&gt; run_filter<br>--&gt; --&gt; --&gt; SK_RUN_FILTER<br>--&gt; --&gt; --&gt; --&gt; <span class="hljs-function"><span class="hljs-params">(*FILTER-&gt;bpf_func)</span></span><br><span class="hljs-function">--&gt;</span> --&gt; --&gt; --&gt; 相当于sk_run_filter， bpf_func在sk_attach_filter时候被赋值为sk_run_filter<br>--&gt; --&gt; --&gt; --&gt; --&gt; 相当于SK_RUN_FILTER<br></code></pre></td></tr></table></figure>
+
+<h2 id="关键数据结构struct-sk-filter">2.1. 关键数据结构struct sk_filter</h2><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">138 </span>struct sk_filter<br><span class="hljs-symbol">139 </span>&#123;<br><span class="hljs-symbol">140 </span>        atomic_t                refcnt;<br><span class="hljs-symbol">141 </span>        unsigned <span class="hljs-keyword">int</span>            <span class="hljs-keyword">len</span>;    /* Number of filter blocks */<br><span class="hljs-symbol">142 </span>        unsigned <span class="hljs-keyword">int</span>            (*bpf_func)(const struct sk_buff *skb,<br><span class="hljs-symbol">143 </span>                                            const struct sock_filter *filter);<br><span class="hljs-symbol">144 </span>        struct rcu_head         rcu;<br><span class="hljs-symbol">145 </span>        struct sock_filter      insns[<span class="hljs-number">0</span>];<br><span class="hljs-symbol">146 </span>&#125;;<br></code></pre></td></tr></table></figure>
+
+<p>用来存放cbpf对应的prog程序，其中insns和len用来指定程序指令和总长度。<br>而<code>bpf_func</code>在isk_attach_filter 中被为<code>sk_run_filter</code></p>
+<h2 id="函数摘录">2.2. 函数摘录</h2><h3 id="libpcap函数">2.2.1. libpcap函数</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">3723 </span><span class="hljs-keyword">int</span><br><span class="hljs-symbol">3724 </span>pcap_setfilter(pcap_t *p, struct bpf_program *fp)<br><span class="hljs-symbol">3725 </span>&#123;<br><span class="hljs-symbol">3726 </span>        <span class="hljs-keyword">return</span> (p-&gt;setfilter_op(p, fp));<br><span class="hljs-symbol">3727 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<figure class="highlight sml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs sml"> <span class="hljs-number">992</span> static <span class="hljs-built_in">int</span><br> <span class="hljs-number">993</span> pcap_activate_linux(pcap_t *<span class="hljs-keyword">handle</span>)<br> <span class="hljs-number">994</span> &#123;<br>...<br><span class="hljs-number">1119</span>         <span class="hljs-keyword">handle</span>-&gt;setfilter_op = pcap_setfilter_linux;<br><span class="hljs-number">1120</span>         <span class="hljs-keyword">handle</span>-&gt;setdirection_op = pcap_setdirection_linux;<br><span class="hljs-number">1121</span>         <span class="hljs-keyword">handle</span>-&gt;set_datalink_op = pcap_set_datalink_linux;<br></code></pre></td></tr></table></figure>
+
+<p><code>setfilter_op</code>被赋值为<code>pcap_setfilter_linux</code>，所以<code>pcap_setfilter</code>相当于调用<code>pcap_setfilter_linux</code>.<br>而<code>pcap_setfilter</code>借助<code>set_kernel_filter</code>，通过系统调用<code>setsockopt</code>的<code>SO_ATTACH_FILTER</code>选项，把prog程序加载到内核里。</p>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">4315</span> static int<br><span class="hljs-number">4316</span> pcap_setfilter_linux<span class="hljs-punctuation">(</span>pcap_t *handle, struct bpf_program *filter<span class="hljs-punctuation">)</span><br><span class="hljs-number">4317</span> &#123;<br>...<br><span class="hljs-number">4429</span>         if <span class="hljs-punctuation">(</span>can_filter_in_kernel<span class="hljs-punctuation">)</span> &#123;<br><span class="hljs-number">4430</span>                 if <span class="hljs-punctuation">(</span><span class="hljs-punctuation">(</span>err = set_kernel_filter<span class="hljs-punctuation">(</span>handle, &amp;fcode<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> == <span class="hljs-number">0</span><span class="hljs-punctuation">)</span><br></code></pre></td></tr></table></figure>
+
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">5414</span> static int<br><span class="hljs-number">5415</span> set_kernel_filter<span class="hljs-punctuation">(</span>pcap_t *handle, struct sock_fprog *fcode<span class="hljs-punctuation">)</span><br><span class="hljs-number">5416</span> &#123;<br>…<br><span class="hljs-number">5453</span>         if <span class="hljs-punctuation">(</span>setsockopt<span class="hljs-punctuation">(</span>handle-&gt;fd, SOL_SOCKET, SO_ATTACH_FILTER,<br><span class="hljs-number">5454</span>                        &amp;total_fcode, sizeof<span class="hljs-punctuation">(</span>total_fcode<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> == <span class="hljs-number">0</span><span class="hljs-punctuation">)</span> &#123;<br></code></pre></td></tr></table></figure>
+<h3 id="内核态处理函数。">2.2.2. 内核态处理函数。</h3><p>内核态系统入口函数，最终会调用<code>sock_setsockopt</code>，并走到<code>case SO_ATTACH_FILTER</code>这个分支。<br>在<code>sk_attach_filter</code>把用户下发的prog程序挂载到tcpdump进程创建的<code>AF_PACK</code>socket对应的<code>sk_filter</code>,<br>同时还会把<code>bpf_func</code>初始为<code>sk_run_filter</code>， 而<code>sk_run_filter</code>这个函数在收包处理时候，用来运行filter对应的prog，<br>这个在下面一节里详细说明。</p>
+<figure class="highlight csharp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs csharp"><span class="hljs-number">480</span> <span class="hljs-function"><span class="hljs-built_in">int</span> <span class="hljs-title">sock_setsockopt</span>(<span class="hljs-params"><span class="hljs-keyword">struct</span> socket *sock, <span class="hljs-built_in">int</span> level, <span class="hljs-built_in">int</span> optname,</span></span><br><span class="hljs-params"><span class="hljs-function"><span class="hljs-number">482</span> &#123;</span></span><br><span class="hljs-params"><span class="hljs-function">...</span></span><br><span class="hljs-params"><span class="hljs-function"> <span class="hljs-number">705</span>         <span class="hljs-keyword">case</span> SO_ATTACH_FILTER:</span></span><br><span class="hljs-params"><span class="hljs-function">...</span></span><br><span class="hljs-params"><span class="hljs-function"> <span class="hljs-number">714</span>                         ret = sk_attach_filter(&amp;fprog, sk</span>)</span>;<br></code></pre></td></tr></table></figure>
+
+
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">600</span> int sk_attach_filter<span class="hljs-punctuation">(</span>struct sock_fprog *fprog, struct sock *sk<span class="hljs-punctuation">)</span><br><span class="hljs-number">601</span> &#123;<br><span class="hljs-number">602</span>         struct sk_filter *fp, *old_fp<span class="hljs-comment">;</span><br>...<br><span class="hljs-number">610</span>         fp = sock_kmalloc<span class="hljs-punctuation">(</span>sk, fsize+sizeof<span class="hljs-punctuation">(</span>*fp<span class="hljs-punctuation">)</span>, GFP_KERNEL<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">613</span>         if <span class="hljs-punctuation">(</span>copy_from_user<span class="hljs-punctuation">(</span>fp-&gt;insns, fprog-&gt;filter, fsize<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> &#123;<br>...<br><span class="hljs-number">619</span>         fp-&gt;len = fprog-&gt;len<span class="hljs-comment">;</span><br><span class="hljs-number">620</span>         fp-&gt;bpf_func = sk_run_filter<span class="hljs-comment">;</span><br>...<br><span class="hljs-number">628</span>         bpf_jit_compile<span class="hljs-punctuation">(</span>fp<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">629</span><br><span class="hljs-number">630</span>         old_fp = rcu_dereference_protected<span class="hljs-punctuation">(</span>sk-&gt;sk_filter,<br><span class="hljs-number">631</span>                                            sock_owned_by_user<span class="hljs-punctuation">(</span>sk<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">632</span>         rcu_assign_pointer<span class="hljs-punctuation">(</span>sk-&gt;sk_filter, fp<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>...<br><span class="hljs-number">637</span> &#125;<br><span class="hljs-number">638</span> EXPORT_SYMBOL_GPL<span class="hljs-punctuation">(</span>sk_attach_filter<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+
+<h3 id="内核运行时的函数摘录">2.2.3. 内核运行时的函数摘录</h3><p>到报文到达cbpf内核的核心入口函数，packet_rc，根据上一节提到的，<br>对应sk下面保存的<code>sk_run_filter</code>和<code>sk_filter</code>，找到对应的运行函数和prog程序，并运行。<br><code>sk_run_filter</code>就是跟逻辑无关的一个cbpf指令运行函数，并返回是否匹配，依次让packet协议<br>决定是否把报文通过<code>AF_PACKET</code> socket 上送给应用层的libpcap处理。</p>
+<p>在新版内核里这里的sk_run_filter被bpf里的更通用函数bfp——run代替，最新内核代码的分析在下一篇里介绍。</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs cpp"><span class="hljs-number">2121</span> <span class="hljs-function"><span class="hljs-type">static</span> <span class="hljs-type">int</span> <span class="hljs-title">packet_rcv</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sk_buff *skb, <span class="hljs-keyword">struct</span> net_device *dev,</span></span><br><span class="hljs-params"><span class="hljs-function"><span class="hljs-number">2122</span>                       <span class="hljs-keyword">struct</span> packet_type *pt, <span class="hljs-keyword">struct</span> net_device *orig_dev)</span></span><br><span class="hljs-function">2123 </span>&#123;<br>...<br><span class="hljs-number">2161</span>         res = <span class="hljs-built_in">run_filter</span>(skb, sk, snaplen);<br></code></pre></td></tr></table></figure>
+
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">163 </span>#define SK_RUN_FILTER(FILTER, SKB) (*FILTER-&gt;bpf_func)(SKB, FILTER-&gt;insns)<br></code></pre></td></tr></table></figure>
+
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">532 </span>static inline unsigned <span class="hljs-keyword">int</span> run_filter(const struct sk_buff *skb,<br><span class="hljs-symbol">533 </span>                                      const struct sock *sk,<br><span class="hljs-symbol">534 </span>                                      unsigned <span class="hljs-keyword">int</span> res)<br><span class="hljs-symbol">535 </span>&#123;<br><span class="hljs-symbol">536 </span>        struct sk_filter *filter;<br><span class="hljs-number">537</span><br><span class="hljs-symbol">538 </span>        rcu_read_lock();<br><span class="hljs-symbol">539 </span>        filter = rcu_dereference(sk-&gt;sk_filter);<br><span class="hljs-symbol">540 </span>        <span class="hljs-keyword">if</span> (filter != NULL)<br><span class="hljs-symbol">541 </span>                res = SK_RUN_FILTER(filter, skb);<br><span class="hljs-symbol">542 </span>        rcu_read_unlock();<br><span class="hljs-number">543</span><br><span class="hljs-symbol">544 </span>        <span class="hljs-keyword">return</span> res;<br><span class="hljs-symbol">545 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">100 </span>/**<br><span class="hljs-symbol">101 </span> *      sk_run_filter - <span class="hljs-keyword">run</span> a filter <span class="hljs-keyword">on</span> a socket<br><span class="hljs-symbol">102 </span> *      @skb: buffer <span class="hljs-keyword">to</span> <span class="hljs-keyword">run</span> the filter <span class="hljs-keyword">on</span><br><span class="hljs-symbol">103 </span> *      @fentry: filter <span class="hljs-keyword">to</span> apply<br><span class="hljs-symbol">104 </span> *<br><span class="hljs-symbol">105 </span> * Decode <span class="hljs-keyword">and</span> apply filter instructions <span class="hljs-keyword">to</span> the skb-&gt;<span class="hljs-keyword">data</span>.<br><span class="hljs-symbol">106 </span> * <span class="hljs-keyword">Return</span> length <span class="hljs-keyword">to</span> keep, <span class="hljs-number">0</span> <span class="hljs-keyword">for</span> none. @skb is the <span class="hljs-keyword">data</span> we are<br><span class="hljs-symbol">107 </span> * filtering, @filter is the array of filter instructions.<br><span class="hljs-symbol">108 </span> * Because all jumps are guaranteed <span class="hljs-keyword">to</span> be before last instruction,<br><span class="hljs-symbol">109 </span> * <span class="hljs-keyword">and</span> last instruction guaranteed <span class="hljs-keyword">to</span> be a RET, we dont need <span class="hljs-keyword">to</span> check<br><span class="hljs-symbol">110 </span> * flen. (We used <span class="hljs-keyword">to</span> pass <span class="hljs-keyword">to</span> this function the length of filter)<br><span class="hljs-symbol">111 </span> */<br><span class="hljs-symbol">112 </span>unsigned <span class="hljs-keyword">int</span> sk_run_filter(const struct sk_buff *skb,<br><span class="hljs-symbol">113 </span>                           const struct sock_filter *fentry)<br><span class="hljs-symbol">114 </span>&#123;<br><span class="hljs-symbol">115 </span>        void *ptr;<br><span class="hljs-symbol">116 </span>        u32 A = <span class="hljs-number">0</span>;                      /* Accumulator */<br><span class="hljs-symbol">117 </span>        u32 X = <span class="hljs-number">0</span>;                      /* Index Register */<br><span class="hljs-symbol">118 </span>        u32 mem[BPF_MEMWORDS];          /* Scratch Memory Store */<br><span class="hljs-symbol">119 </span>        u32 tmp;<br><span class="hljs-symbol">120 </span>        <span class="hljs-keyword">int</span> k;<br></code></pre></td></tr></table></figure>
+<p>update 2023</p>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/Tcpdump/" class="category-chain-item">Tcpdump</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/Tcpdump/" class="print-no-link">#Tcpdump</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>how tcpdump work with cbpf</div>
+      <div>https://martinbj2008.github.io/2019/09/25/how-tcpdump-work-with-cbpf/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>September 25, 2019</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2019/10/08/tcpdump-and-ebpf/" title="tcpdump and ebpf">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">tcpdump and ebpf</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2019/07/15/how-tcpdump-run-with-snaplen/" title="tcpdump如何实现参数-报文抓取长度">
+                        <span class="hidden-mobile">tcpdump如何实现参数-报文抓取长度</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

@@ -1,0 +1,843 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="0.0.0.1. summaryTwo packets will be proessed by tcp server side:  SYN pakcet: For the first packet(syn) of handshake, it first lookup the listen socket,and create a req socket as temporary. Send SYN+A">
+<meta property="og:type" content="article">
+<meta property="og:title" content="how does tcp server accept a new connection request">
+<meta property="og:url" content="https://martinbj2008.github.io/2014/01/14/2014-01-14-how-tcp-server-accept-a-new-connection-request/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="0.0.0.1. summaryTwo packets will be proessed by tcp server side:  SYN pakcet: For the first packet(syn) of handshake, it first lookup the listen socket,and create a req socket as temporary. Send SYN+A">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2014-01-14T08:01:00.000Z">
+<meta property="article:modified_time" content="2026-09-23T04:14:04.750Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="IPv4">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>how does tcp server accept a new connection request - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="how does tcp server accept a new connection request"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2014-01-14 16:01" pubdate>
+          January 14, 2014 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          11k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          89 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">how does tcp server accept a new connection request</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h4 id="summary">0.0.0.1. summary</h4><p>Two packets will be proessed by tcp server side:</p>
+<ol>
+<li>SYN pakcet: For the first packet(syn) of handshake, it first lookup the listen socket,<br>and create a req socket as temporary. Send SYN+ACK packet to client.</li>
+<li>ACK packet: For the third packet(ack) of handshake, it will lookup the req socket created<br>in previous steps.</li>
+</ol>
+<h4 id="SYN-报文calltrace">0.0.0.2. SYN 报文calltrace</h4><p>内核版本 v6.14</p>
+<h4 id>0.0.0.3. </h4><figure class="highlight excel"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br></pre></td><td class="code"><pre><code class="hljs excel">=&gt; tcp_v4_rcv(struct sk_buff *skb)<br>=&gt; =&gt; sk = __inet_lookup_skb(&amp;tcp_hashinfo, skb, th-&gt;source, th-&gt;dest);<br>=&gt; =&gt; tcp_v4_do_rcv(sk, skb);<br>=&gt; =&gt; =&gt; struct sock *nsk = tcp_v4_hnd_req(sk, skb)<br>=&gt; =&gt; =&gt; tcp_rcv_state_process<br>=&gt; =&gt; =&gt; =&gt; <span class="hljs-built_in">if</span> (icsk-&gt;icsk_af_ops-&gt;conn_request(sk, skb) &lt; <span class="hljs-number">0</span>) 相当 tcp_v4_conn_request<br>=&gt; =&gt; =&gt; =&gt; tcp_v4_conn_request(&amp;tcp_request_sock_ops, &amp;tcp_request_sock_ipv4_ops, sk, skb);<br>=&gt; =&gt; =&gt; =&gt; =&gt; inet_reqsk_alloc<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; struct request_sock *req = reqsk_alloc(ops, sk_listener, attach_listener);<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; ireq-&gt;ireq_state = TCP_NEW_SYN_RECV; //#define ireq_state req.__req_common.skc_state<br>=&gt; =&gt; =&gt; =&gt; =&gt; tcp_openreq_init(req, &amp;tmp_opt, skb);<br>=&gt; =&gt; =&gt; =&gt; =&gt; inet_csk_reqsk_queue_hash_add<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; reqsk_queue_hash_req<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; inet_ehash_insert  //将 req sock放到 establish hash链表里<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; inet_csk_reqsk_queue_added<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; reqsk_queue_added(&amp;inet_csk(sk)-&gt;icsk_accept_queue); //半链接队列，真实名字叫 accept。 功能也只有计数能力了，没有队列了。<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; atomic_inc(&amp;queue-&gt;young);<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; =&gt; atomic_inc(&amp;queue-&gt;qlen);<br>=&gt; =&gt; =&gt; =&gt; =&gt; af_ops-&gt;send_synack  //发送synack报文<br>=&gt; =&gt; =&gt; =&gt; return // tcp_v4_conn_request<br>=&gt; =&gt; =&gt; return; // tcp_rcv_state_process<br></code></pre></td></tr></table></figure>
+
+<h5 id="注意">0.0.0.3.1. 注意</h5><ul>
+<li><code>tcp_request_sock_ops</code>： 是一个结构体的名字，同时又是一个变量的名字。</li>
+<li><code>icsk_accept_queue</code>: 在结构体<code>struct inet_connection_sock</code>里的这个队列并不在保存半链接队列的 req socket，而是计数。</li>
+</ul>
+<span id="more"></span>
+
+<h4 id="ACK-报文calltrace">0.0.0.4. ACK 报文calltrace</h4><h5 id="内核调用栈">0.0.0.4.1. 内核调用栈</h5><p>&#x2F;* patch 079096f103fac 之后内核引入新的 state 状态，流程处理也不一样了。*&#x2F;</p>
+<figure class="highlight excel"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br></pre></td><td class="code"><pre><code class="hljs excel">=&gt; tcp_v4_rcv(struct sk_buff *skb)<br>=&gt; =&gt; sk = __inet_lookup_skb(&amp;tcp_hashinfo, skb, th-&gt;source, th-&gt;dest);<br>=&gt; =&gt; nsk = tcp_check_req(sk, skb, req, <span class="hljs-built_in">false</span>, &amp;req_stolen);  // 入口条件sk-&gt;sk_state == TCP_NEW_SYN_RECV) 并且 tcp_filter 通过<br><br>=&gt; =&gt; =&gt; child = inet_csk(sk)-&gt;icsk_af_ops-&gt;syn_recv_sock(sk, skb, req, NULL); //对 tcpv4来说，调用函数tcp_v4_syn_recv_sock<br>=&gt; =&gt; =&gt; =&gt; sk_acceptq_is_full // sk-&gt;sk_ack_backlog &gt; sk-&gt;sk_max_ack_backlog ;检查accept队列长度，如果满了，则丢弃。<br>=&gt; =&gt; =&gt; =&gt; tcp_create_openreq_child<br>=&gt; =&gt; =&gt; =&gt; =&gt; newsk = inet_csk_clone_lock(sk, req, GFP_ATOMIC);<br>=&gt; =&gt; =&gt; =&gt; inet_ehash_nolisten(newsk, req_to_sk(req_unhash), &amp;found_dup_sk);<br>=&gt; =&gt; =&gt; =&gt; =&gt; inet_ehash_insert(sk, osk, found_dup_sk); //在ehash表里，插入新的child socket， 并删去原有req sock<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; isk_nulls_del_node_init_rcu(osk);  // 将 req 从 ehash 链里摘除<br>=&gt; =&gt; =&gt; =&gt; =&gt; =&gt; __sk_nulls_add_node_rcu(sk, list); // 将 child socket 插入到 ehash 链里<br><br>=&gt; =&gt; =&gt; inet_csk_complete_hashdance<br>=&gt; =&gt; =&gt; =&gt; inet_csk_reqsk_queue_drop	//更新accept队列的长度，与SYN报文处理对应<br>=&gt; =&gt; =&gt; =&gt; reqsk_queue_removed(&amp;inet_csk(req-&gt;rsk_listener)-&gt;icsk_accept_queue, req);<br>=&gt; =&gt; =&gt; =&gt; inet_csk_reqsk_queue_add(sk, req, child)   //将 req socket挂载到 accept 队列里， 通过req 下的指针，记录 child。<br>=&gt; =&gt;     &#125;<br>=&gt; =&gt; &#125;<br><br>=&gt; =&gt; tcp_child_process(sk, nsk, skb)<br>=&gt; =&gt; =&gt; tcp_rcv_state_process(child, skb, tcp_hdr(skb),<br>=&gt; =&gt; =&gt; =&gt; tcp_ack<br>=&gt; =&gt; =&gt; =&gt; tcp_data_queue(sk, skb);  //唤醒accept等待进程<br>=&gt; =&gt; =&gt; parent-&gt;sk_data_ready(parent);<br></code></pre></td></tr></table></figure>
+
+<h5 id="老内核3-10以前">0.0.0.4.2. 老内核3.10以前</h5><figure class="highlight excel"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br></pre></td><td class="code"><pre><code class="hljs excel">=&gt; tcp_v4_rcv(struct sk_buff *skb)<br>=&gt; =&gt;  sk = __inet_lookup_skb(&amp;tcp_hashinfo, skb, th-&gt;source, th-&gt;dest);<br>=&gt; =&gt; tcp_v4_do_rcv(sk, skb);<br>=&gt; =&gt; =&gt; nsk = tcp_v4_hnd_req(sk, skb)<br>=&gt; =&gt; =&gt; =&gt; inet_csk_search_req<br>=&gt; =&gt; =&gt; =&gt; tcp_check_req<br>=&gt; =&gt; =&gt; =&gt; =&gt; child = inet_csk(sk)-&gt;icsk_af_ops-&gt;syn_recv_sock(sk, skb, req, NULL);<br>=&gt; =&gt; =&gt; =&gt; =&gt; inet_csk_reqsk_queue_unlink(sk, req, prev);<br>=&gt; =&gt; =&gt; =&gt; =&gt; inet_csk_reqsk_queue_removed(sk, req);<br>=&gt; =&gt; =&gt; =&gt; =&gt; inet_csk_reqsk_queue_add(sk, req, child);<br>=&gt; =&gt; =&gt; tcp_child_process(sk, nsk, skb)<br>=&gt; =&gt; =&gt; =&gt;  tcp_rcv_state_process(child, skb, tcp_hdr(skb),...i<br>=&gt; =&gt; =&gt; =&gt; TCP_SYN_RE<span class="hljs-symbol">CV:</span> tcp_rcv_synsent_state_process<br></code></pre></td></tr></table></figure>
+
+
+<h5 id="注意-1">0.0.0.4.3. 注意</h5><p><code>tcp_rcv_state_process</code> uses a child socket, not the listen socket.<br>The new socket state is <code>TCP_SYN_RECV</code></p>
+<h3 id="tcp-v4-rcv">0.0.1. tcp_v4_rcv</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br><span class="line">74</span><br><span class="line">75</span><br><span class="line">76</span><br><span class="line">77</span><br><span class="line">78</span><br><span class="line">79</span><br><span class="line">80</span><br><span class="line">81</span><br><span class="line">82</span><br><span class="line">83</span><br><span class="line">84</span><br><span class="line">85</span><br><span class="line">86</span><br><span class="line">87</span><br><span class="line">88</span><br><span class="line">89</span><br><span class="line">90</span><br><span class="line">91</span><br><span class="line">92</span><br><span class="line">93</span><br><span class="line">94</span><br><span class="line">95</span><br><span class="line">96</span><br><span class="line">97</span><br><span class="line">98</span><br><span class="line">99</span><br><span class="line">100</span><br><span class="line">101</span><br><span class="line">102</span><br><span class="line">103</span><br><span class="line">104</span><br><span class="line">105</span><br><span class="line">106</span><br><span class="line">107</span><br><span class="line">108</span><br><span class="line">109</span><br><span class="line">110</span><br><span class="line">111</span><br><span class="line">112</span><br><span class="line">113</span><br><span class="line">114</span><br><span class="line">115</span><br><span class="line">116</span><br><span class="line">117</span><br><span class="line">118</span><br><span class="line">119</span><br><span class="line">120</span><br><span class="line">121</span><br><span class="line">122</span><br><span class="line">123</span><br><span class="line">124</span><br><span class="line">125</span><br><span class="line">126</span><br><span class="line">127</span><br><span class="line">128</span><br><span class="line">129</span><br><span class="line">130</span><br><span class="line">131</span><br><span class="line">132</span><br><span class="line">133</span><br><span class="line">134</span><br><span class="line">135</span><br><span class="line">136</span><br><span class="line">137</span><br><span class="line">138</span><br><span class="line">139</span><br><span class="line">140</span><br><span class="line">141</span><br><span class="line">142</span><br><span class="line">143</span><br><span class="line">144</span><br><span class="line">145</span><br><span class="line">146</span><br><span class="line">147</span><br><span class="line">148</span><br><span class="line">149</span><br><span class="line">150</span><br><span class="line">151</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1936</span> <span class="hljs-type">int</span> <span class="hljs-title function_">tcp_v4_rcv</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sk_buff *skb)</span><br>1937 &#123;<br><span class="hljs-number">1938</span>         <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">iphdr</span> *<span class="hljs-title">iph</span>;</span><br><span class="hljs-number">1939</span>         <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">tcphdr</span> *<span class="hljs-title">th</span>;</span><br><span class="hljs-number">1940</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sock</span> *<span class="hljs-title">sk</span>;</span><br><span class="hljs-number">1941</span>         <span class="hljs-type">int</span> ret;<br><span class="hljs-number">1942</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net</span> *<span class="hljs-title">net</span> =</span> dev_net(skb-&gt;dev);<br><span class="hljs-number">1943</span><br><span class="hljs-number">1944</span>         <span class="hljs-keyword">if</span> (skb-&gt;pkt_type != PACKET_HOST)<br><span class="hljs-number">1945</span>                 <span class="hljs-keyword">goto</span> discard_it;<br><span class="hljs-number">1946</span><br><span class="hljs-number">1947</span>         <span class="hljs-comment">/* Count it even if it&#x27;s bad */</span><br><span class="hljs-number">1948</span>         TCP_INC_STATS_BH(net, TCP_MIB_INSEGS);<br><span class="hljs-number">1949</span><br><span class="hljs-number">1950</span>         <span class="hljs-keyword">if</span> (!pskb_may_pull(skb, <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> tcphdr)))<br><span class="hljs-number">1951</span>                 <span class="hljs-keyword">goto</span> discard_it;<br><span class="hljs-number">1952</span><br><span class="hljs-number">1953</span>         th = tcp_hdr(skb);<br><span class="hljs-number">1954</span><br><span class="hljs-number">1955</span>         <span class="hljs-keyword">if</span> (th-&gt;doff &lt; <span class="hljs-keyword">sizeof</span>(<span class="hljs-keyword">struct</span> tcphdr) / <span class="hljs-number">4</span>)<br><span class="hljs-number">1956</span>                 <span class="hljs-keyword">goto</span> bad_packet;<br><span class="hljs-number">1957</span>         <span class="hljs-keyword">if</span> (!pskb_may_pull(skb, th-&gt;doff * <span class="hljs-number">4</span>))<br><span class="hljs-number">1958</span>                 <span class="hljs-keyword">goto</span> discard_it;<br><span class="hljs-number">1959</span><br><span class="hljs-number">1960</span>         <span class="hljs-comment">/* An explanation is required here, I think.</span><br><span class="hljs-comment">1961          * Packet length and doff are validated by header prediction,</span><br><span class="hljs-comment">1962          * provided case of th-&gt;doff==0 is eliminated.</span><br><span class="hljs-comment">1963          * So, we defer the checks. */</span><br><span class="hljs-number">1964</span>         <span class="hljs-keyword">if</span> (!skb_csum_unnecessary(skb) &amp;&amp; tcp_v4_checksum_init(skb))<br><span class="hljs-number">1965</span>                 <span class="hljs-keyword">goto</span> csum_error;<br><span class="hljs-number">1966</span><br><span class="hljs-number">1967</span>         th = tcp_hdr(skb);<br><span class="hljs-number">1968</span>         iph = ip_hdr(skb);<br><span class="hljs-number">1969</span>         TCP_SKB_CB(skb)-&gt;seq = ntohl(th-&gt;seq);<br><span class="hljs-number">1970</span>         TCP_SKB_CB(skb)-&gt;end_seq = (TCP_SKB_CB(skb)-&gt;seq + th-&gt;syn + th-&gt;fin +<br><span class="hljs-number">1971</span>                                     skb-&gt;len - th-&gt;doff * <span class="hljs-number">4</span>);<br><span class="hljs-number">1972</span>         TCP_SKB_CB(skb)-&gt;ack_seq = ntohl(th-&gt;ack_seq);<br><span class="hljs-number">1973</span>         TCP_SKB_CB(skb)-&gt;when    = <span class="hljs-number">0</span>;<br><span class="hljs-number">1974</span>         TCP_SKB_CB(skb)-&gt;ip_dsfield = ipv4_get_dsfield(iph);<br><span class="hljs-number">1975</span>         TCP_SKB_CB(skb)-&gt;sacked  = <span class="hljs-number">0</span>;<br><span class="hljs-number">1976</span><br><span class="hljs-number">1977</span>         sk = __inet_lookup_skb(&amp;tcp_hashinfo, skb, th-&gt;source, th-&gt;dest);<br><span class="hljs-number">1978</span>         <span class="hljs-keyword">if</span> (!sk)<br><span class="hljs-number">1979</span>                 <span class="hljs-keyword">goto</span> no_tcp_socket;<br><span class="hljs-number">1980</span><br><span class="hljs-number">1981</span> process:<br><span class="hljs-number">1982</span>         <span class="hljs-keyword">if</span> (sk-&gt;sk_state == TCP_TIME_WAIT)<br><span class="hljs-number">1983</span>                 <span class="hljs-keyword">goto</span> do_time_wait;<br><span class="hljs-number">1984</span><br><span class="hljs-number">1985</span>         <span class="hljs-keyword">if</span> (unlikely(iph-&gt;ttl &lt; inet_sk(sk)-&gt;min_ttl)) &#123;<br><span class="hljs-number">1986</span>                 NET_INC_STATS_BH(net, LINUX_MIB_TCPMINTTLDROP);<br><span class="hljs-number">1987</span>                 <span class="hljs-keyword">goto</span> discard_and_relse;<br><span class="hljs-number">1988</span>         &#125;<br><span class="hljs-number">1989</span><br><span class="hljs-number">1990</span>         <span class="hljs-keyword">if</span> (!xfrm4_policy_check(sk, XFRM_POLICY_IN, skb))<br><span class="hljs-number">1991</span>                 <span class="hljs-keyword">goto</span> discard_and_relse;<br><span class="hljs-number">1992</span>         nf_reset(skb);<br><span class="hljs-number">1993</span><br><span class="hljs-number">1994</span>         <span class="hljs-keyword">if</span> (sk_filter(sk, skb))<br><span class="hljs-number">1995</span>                 <span class="hljs-keyword">goto</span> discard_and_relse;<br><span class="hljs-number">1996</span><br><span class="hljs-number">1997</span>         sk_mark_napi_id(sk, skb);<br><span class="hljs-number">1998</span>         skb-&gt;dev = <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">1999</span><br><span class="hljs-number">2000</span>         bh_lock_sock_nested(sk);<br><span class="hljs-number">2001</span>         ret = <span class="hljs-number">0</span>;<br><span class="hljs-number">2002</span>         <span class="hljs-keyword">if</span> (!sock_owned_by_user(sk)) &#123;<br><span class="hljs-number">2003</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_NET_DMA</span><br><span class="hljs-number">2004</span>                 <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">tcp_sock</span> *<span class="hljs-title">tp</span> =</span> tcp_sk(sk);<br><span class="hljs-number">2005</span>                 <span class="hljs-keyword">if</span> (!tp-&gt;ucopy.dma_chan &amp;&amp; tp-&gt;ucopy.pinned_list)<br><span class="hljs-number">2006</span>                         tp-&gt;ucopy.dma_chan = net_dma_find_channel();<br><span class="hljs-number">2007</span>                 <span class="hljs-keyword">if</span> (tp-&gt;ucopy.dma_chan)<br><span class="hljs-number">2008</span>                         ret = tcp_v4_do_rcv(sk, skb);<br><span class="hljs-number">2009</span>                 <span class="hljs-keyword">else</span><br><span class="hljs-number">2010</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">2011</span>                 &#123;<br><span class="hljs-number">2012</span>                         <span class="hljs-keyword">if</span> (!tcp_prequeue(sk, skb))<br><span class="hljs-number">2013</span>                                 ret = tcp_v4_do_rcv(sk, skb);<br><span class="hljs-number">2014</span>                 &#125;<br><span class="hljs-number">2015</span>         &#125; <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (unlikely(sk_add_backlog(sk, skb,<br><span class="hljs-number">2016</span>                                            sk-&gt;sk_rcvbuf + sk-&gt;sk_sndbuf))) &#123;<br><span class="hljs-number">2017</span>                 bh_unlock_sock(sk);<br><span class="hljs-number">2018</span>                 NET_INC_STATS_BH(net, LINUX_MIB_TCPBACKLOGDROP);<br><span class="hljs-number">2019</span>                 <span class="hljs-keyword">goto</span> discard_and_relse;<br><span class="hljs-number">2020</span>         &#125;<br><span class="hljs-number">2021</span>         bh_unlock_sock(sk);<br><span class="hljs-number">2022</span><br><span class="hljs-number">2023</span>         sock_put(sk);<br><span class="hljs-number">2024</span><br><span class="hljs-number">2025</span>         <span class="hljs-keyword">return</span> ret;<br><span class="hljs-number">2026</span><br><span class="hljs-number">2027</span> no_tcp_socket:<br><span class="hljs-number">2028</span>         <span class="hljs-keyword">if</span> (!xfrm4_policy_check(<span class="hljs-literal">NULL</span>, XFRM_POLICY_IN, skb))<br><span class="hljs-number">2029</span>                 <span class="hljs-keyword">goto</span> discard_it;<br><span class="hljs-number">2030</span><br><span class="hljs-number">2031</span>         <span class="hljs-keyword">if</span> (skb-&gt;len &lt; (th-&gt;doff &lt;&lt; <span class="hljs-number">2</span>) || tcp_checksum_complete(skb)) &#123;<br><span class="hljs-number">2032</span> csum_error:<br><span class="hljs-number">2033</span>                 TCP_INC_STATS_BH(net, TCP_MIB_CSUMERRORS);<br><span class="hljs-number">2034</span> bad_packet:<br><span class="hljs-number">2035</span>                 TCP_INC_STATS_BH(net, TCP_MIB_INERRS);<br><span class="hljs-number">2036</span>         &#125; <span class="hljs-keyword">else</span> &#123;<br><span class="hljs-number">2037</span>                 tcp_v4_send_reset(<span class="hljs-literal">NULL</span>, skb);<br><span class="hljs-number">2038</span>         &#125;<br><span class="hljs-number">2039</span><br><span class="hljs-number">2040</span> discard_it:<br><span class="hljs-number">2041</span>         <span class="hljs-comment">/* Discard frame. */</span><br><span class="hljs-number">2042</span>         kfree_skb(skb);<br><span class="hljs-number">2043</span>         <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">2044</span><br><span class="hljs-number">2045</span> discard_and_relse:<br><span class="hljs-number">2046</span>         sock_put(sk);<br><span class="hljs-number">2047</span>         <span class="hljs-keyword">goto</span> discard_it;<br><span class="hljs-number">2048</span><br><span class="hljs-number">2049</span> do_time_wait:<br><span class="hljs-number">2050</span>         <span class="hljs-keyword">if</span> (!xfrm4_policy_check(<span class="hljs-literal">NULL</span>, XFRM_POLICY_IN, skb)) &#123;<br><span class="hljs-number">2051</span>                 inet_twsk_put(inet_twsk(sk));<br><span class="hljs-number">2052</span>                 <span class="hljs-keyword">goto</span> discard_it;<br><span class="hljs-number">2053</span>         &#125;<br><span class="hljs-number">2054</span><br><span class="hljs-number">2055</span>         <span class="hljs-keyword">if</span> (skb-&gt;len &lt; (th-&gt;doff &lt;&lt; <span class="hljs-number">2</span>)) &#123;<br><span class="hljs-number">2056</span>                 inet_twsk_put(inet_twsk(sk));<br><span class="hljs-number">2057</span>                 <span class="hljs-keyword">goto</span> bad_packet;<br><span class="hljs-number">2058</span>         &#125;<br><span class="hljs-number">2059</span>         <span class="hljs-keyword">if</span> (tcp_checksum_complete(skb)) &#123;<br><span class="hljs-number">2060</span>                 inet_twsk_put(inet_twsk(sk));<br><span class="hljs-number">2061</span>                 <span class="hljs-keyword">goto</span> csum_error;<br><span class="hljs-number">2062</span>         &#125;<br><span class="hljs-number">2063</span>         <span class="hljs-keyword">switch</span> (tcp_timewait_state_process(inet_twsk(sk), skb, th)) &#123;<br><span class="hljs-number">2064</span>         <span class="hljs-keyword">case</span> TCP_TW_SYN: &#123;<br><span class="hljs-number">2065</span>                 <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sock</span> *<span class="hljs-title">sk2</span> =</span> inet_lookup_listener(dev_net(skb-&gt;dev),<br><span class="hljs-number">2066</span>                                                         &amp;tcp_hashinfo,<br><span class="hljs-number">2067</span>                                                         iph-&gt;saddr, th-&gt;source,<br><span class="hljs-number">2068</span>                                                         iph-&gt;daddr, th-&gt;dest,<br><span class="hljs-number">2069</span>                                                         inet_iif(skb));<br><span class="hljs-number">2070</span>                 <span class="hljs-keyword">if</span> (sk2) &#123;<br><span class="hljs-number">2071</span>                         inet_twsk_deschedule(inet_twsk(sk), &amp;tcp_death_row);<br><span class="hljs-number">2072</span>                         inet_twsk_put(inet_twsk(sk));<br><span class="hljs-number">2073</span>                         sk = sk2;<br><span class="hljs-number">2074</span>                         <span class="hljs-keyword">goto</span> process;<br><span class="hljs-number">2075</span>                 &#125;<br><span class="hljs-number">2076</span>                 <span class="hljs-comment">/* Fall through to ACK */</span><br><span class="hljs-number">2077</span>         &#125;<br><span class="hljs-number">2078</span>         <span class="hljs-keyword">case</span> TCP_TW_ACK:<br><span class="hljs-number">2079</span>                 tcp_v4_timewait_ack(sk, skb);<br><span class="hljs-number">2080</span>                 <span class="hljs-keyword">break</span>;<br><span class="hljs-number">2081</span>         <span class="hljs-keyword">case</span> TCP_TW_RST:<br><span class="hljs-number">2082</span>                 <span class="hljs-keyword">goto</span> no_tcp_socket;<br><span class="hljs-number">2083</span>         <span class="hljs-keyword">case</span> TCP_TW_SUCCESS:;<br><span class="hljs-number">2084</span>         &#125;<br><span class="hljs-number">2085</span>         <span class="hljs-keyword">goto</span> discard_it;<br><span class="hljs-number">2086</span> &#125;<br></code></pre></td></tr></table></figure>
+<h3 id="tcp-v4-do-rcv">0.0.2. tcp_v4_do_rcv</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br><span class="line">42</span><br><span class="line">43</span><br><span class="line">44</span><br><span class="line">45</span><br><span class="line">46</span><br><span class="line">47</span><br><span class="line">48</span><br><span class="line">49</span><br><span class="line">50</span><br><span class="line">51</span><br><span class="line">52</span><br><span class="line">53</span><br><span class="line">54</span><br><span class="line">55</span><br><span class="line">56</span><br><span class="line">57</span><br><span class="line">58</span><br><span class="line">59</span><br><span class="line">60</span><br><span class="line">61</span><br><span class="line">62</span><br><span class="line">63</span><br><span class="line">64</span><br><span class="line">65</span><br><span class="line">66</span><br><span class="line">67</span><br><span class="line">68</span><br><span class="line">69</span><br><span class="line">70</span><br><span class="line">71</span><br><span class="line">72</span><br><span class="line">73</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1778</span> <span class="hljs-type">int</span> <span class="hljs-title function_">tcp_v4_do_rcv</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> sock *sk, <span class="hljs-keyword">struct</span> sk_buff *skb)</span><br>1779 &#123;<br><span class="hljs-number">1780</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sock</span> *<span class="hljs-title">rsk</span>;</span><br><span class="hljs-number">1781</span> <span class="hljs-meta">#<span class="hljs-keyword">ifdef</span> CONFIG_TCP_MD5SIG</span><br><span class="hljs-number">1782</span>         <span class="hljs-comment">/*</span><br><span class="hljs-comment">1783          * We really want to reject the packet as early as possible</span><br><span class="hljs-comment">1784          * if:</span><br><span class="hljs-comment">1785          *  o We&#x27;re expecting an MD5&#x27;d packet and this is no MD5 tcp option</span><br><span class="hljs-comment">1786          *  o There is an MD5 option and we&#x27;re not expecting one</span><br><span class="hljs-comment">1787          */</span><br><span class="hljs-number">1788</span>         <span class="hljs-keyword">if</span> (tcp_v4_inbound_md5_hash(sk, skb))<br><span class="hljs-number">1789</span>                 <span class="hljs-keyword">goto</span> discard;<br><span class="hljs-number">1790</span> <span class="hljs-meta">#<span class="hljs-keyword">endif</span></span><br><span class="hljs-number">1791</span><br><span class="hljs-number">1792</span>         <span class="hljs-keyword">if</span> (sk-&gt;sk_state == TCP_ESTABLISHED) &#123; <span class="hljs-comment">/* Fast path */</span><br><span class="hljs-number">1793</span>                 <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">dst_entry</span> *<span class="hljs-title">dst</span> =</span> sk-&gt;sk_rx_dst;<br><span class="hljs-number">1794</span><br><span class="hljs-number">1795</span>                 sock_rps_save_rxhash(sk, skb);<br><span class="hljs-number">1796</span>                 <span class="hljs-keyword">if</span> (dst) &#123;<br><span class="hljs-number">1797</span>                         <span class="hljs-keyword">if</span> (inet_sk(sk)-&gt;rx_dst_ifindex != skb-&gt;skb_iif ||<br><span class="hljs-number">1798</span>                             dst-&gt;ops-&gt;check(dst, <span class="hljs-number">0</span>) == <span class="hljs-literal">NULL</span>) &#123;<br><span class="hljs-number">1799</span>                                 dst_release(dst);<br><span class="hljs-number">1800</span>                                 sk-&gt;sk_rx_dst = <span class="hljs-literal">NULL</span>;<br><span class="hljs-number">1801</span>                         &#125;<br><span class="hljs-number">1802</span>                 &#125;<br><span class="hljs-number">1803</span>                 tcp_rcv_established(sk, skb, tcp_hdr(skb), skb-&gt;len);<br><span class="hljs-number">1804</span>                 <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">1805</span>         &#125;<br><span class="hljs-number">1806</span><br><span class="hljs-number">1807</span>         <span class="hljs-keyword">if</span> (skb-&gt;len &lt; tcp_hdrlen(skb) || tcp_checksum_complete(skb))<br><span class="hljs-number">1808</span>                 <span class="hljs-keyword">goto</span> csum_err;<br><span class="hljs-number">1809</span><br><span class="hljs-number">1810</span>         <span class="hljs-keyword">if</span> (sk-&gt;sk_state == TCP_LISTEN) &#123;<br><span class="hljs-number">1809</span><br><span class="hljs-number">1810</span>         <span class="hljs-keyword">if</span> (sk-&gt;sk_state == TCP_LISTEN) &#123;<br><span class="hljs-number">1811</span>                 <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sock</span> *<span class="hljs-title">nsk</span> =</span> tcp_v4_hnd_req(sk, skb);<br><span class="hljs-number">1812</span>                 <span class="hljs-keyword">if</span> (!nsk)<br><span class="hljs-number">1813</span>                         <span class="hljs-keyword">goto</span> discard;<br><span class="hljs-number">1814</span><br><span class="hljs-number">1815</span>                 <span class="hljs-keyword">if</span> (nsk != sk) &#123;<br><span class="hljs-number">1816</span>                         sock_rps_save_rxhash(nsk, skb);<br><span class="hljs-number">1817</span>                         <span class="hljs-keyword">if</span> (tcp_child_process(sk, nsk, skb)) &#123;<br><span class="hljs-number">1818</span>                                 rsk = nsk;<br><span class="hljs-number">1819</span>                                 <span class="hljs-keyword">goto</span> reset;<br><span class="hljs-number">1820</span>                         &#125;<br><span class="hljs-number">1821</span>                         <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">1822</span>                 &#125;<br><span class="hljs-number">1823</span>         &#125; <span class="hljs-keyword">else</span><br><span class="hljs-number">1824</span>                 sock_rps_save_rxhash(sk, skb);<br><span class="hljs-number">1825</span><br><span class="hljs-number">1826</span>         <span class="hljs-keyword">if</span> (tcp_rcv_state_process(sk, skb, tcp_hdr(skb), skb-&gt;len)) &#123;<br><span class="hljs-number">1827</span>                 rsk = sk;<br><span class="hljs-number">1828</span>                 <span class="hljs-keyword">goto</span> reset;<br><span class="hljs-number">1829</span>         &#125;<br><span class="hljs-number">1830</span>         <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">1831</span><br><span class="hljs-number">1832</span> reset:<br><span class="hljs-number">1833</span>         tcp_v4_send_reset(rsk, skb);<br><span class="hljs-number">1834</span> discard:<br><span class="hljs-number">1835</span>         kfree_skb(skb);<br><span class="hljs-number">1836</span>         <span class="hljs-comment">/* Be careful here. If this function gets more complicated and</span><br><span class="hljs-comment">1837          * gcc suffers from register pressure on the x86, sk (in %ebx)</span><br><span class="hljs-comment">1838          * might be destroyed here. This current version compiles correctly,</span><br><span class="hljs-comment">1839          * but you have been warned.</span><br><span class="hljs-comment">1840          */</span><br><span class="hljs-number">1841</span>         <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;<br><span class="hljs-number">1842</span><br><span class="hljs-number">1843</span> csum_err:<br><span class="hljs-number">1844</span>         TCP_INC_STATS_BH(sock_net(sk), TCP_MIB_CSUMERRORS);<br><span class="hljs-number">1845</span>         TCP_INC_STATS_BH(sock_net(sk), TCP_MIB_INERRS);<br><span class="hljs-number">1846</span>         <span class="hljs-keyword">goto</span> discard;<br><span class="hljs-number">1847</span> &#125;<br><span class="hljs-number">1848</span> EXPORT_SYMBOL(tcp_v4_do_rcv);<br></code></pre></td></tr></table></figure>
+
+<h4 id="changelog">0.0.2.1. changelog</h4><ul>
+<li>2014 v1.0<br>+2025-03-25: update with v6.14</li>
+</ul>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+    <div class="post-meta mr-3 d-flex align-items-center">
+      <i class="iconfont icon-category"></i>
+      
+
+<span class="category-chains">
+  
+  
+    
+      <span class="category-chain">
+        
+  <a href="/categories/TCP/" class="category-chain-item">TCP</a>
+  
+  
+
+      </span>
+    
+  
+</span>
+
+    </div>
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/IPv4/" class="print-no-link">#IPv4</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>how does tcp server accept a new connection request</div>
+      <div>https://martinbj2008.github.io/2014/01/14/2014-01-14-how-tcp-server-accept-a-new-connection-request/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>January 14, 2014</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                      <a href="/2014/01/27/2014-01-27-how-to-remember-ip-slash-tcp-slash-udp-header/" title="how to remember ip/tcp/udp header">
+                        <i class="iconfont icon-arrowleft"></i>
+                        <span class="hidden-mobile">how to remember ip/tcp/udp header</span>
+                        <span class="visible-mobile">Previous</span>
+                      </a>
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2013/11/25/2013-11-25-net-protocol-handler-for-tcp-udp/" title="How does IPV4/6 process input tcp/udp packet">
+                        <span class="hidden-mobile">How does IPV4/6 process input tcp/udp packet</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>
