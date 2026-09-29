@@ -1,0 +1,999 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="1. 概述GRO（Generic Receive Offload，通用接收卸载）是 Linux 内核网络栈中的一项关键性能优化技术。其核心思想是在数据包进入协议栈入口处，将属于同一条流&#x2F;五元组的多个小包合并为一个大的“超级包”（super-skb），从而显著减少上层协议栈的处理次数，提升网络吞吐量。 GRO 的处理是分层进行的：在网口驱动的napi处理函数里，依次经过链路层 → IP 层">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Linux 6.6 UDP GRO 收包调用链源码分析">
+<meta property="og:url" content="https://martinbj2008.github.io/2026/09/29/udp-GRO-summary/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="1. 概述GRO（Generic Receive Offload，通用接收卸载）是 Linux 内核网络栈中的一项关键性能优化技术。其核心思想是在数据包进入协议栈入口处，将属于同一条流&#x2F;五元组的多个小包合并为一个大的“超级包”（super-skb），从而显著减少上层协议栈的处理次数，提升网络吞吐量。 GRO 的处理是分层进行的：在网口驱动的napi处理函数里，依次经过链路层 → IP 层">
+<meta property="og:locale" content="en_US">
+<meta property="og:image" content="https://martinbj2008.github.io/images/svg/ip4.ip6.offload.svg">
+<meta property="og:image" content="https://martinbj2008.github.io/images/svg/tcp.udp.offload.svg">
+<meta property="article:published_time" content="2026-09-29T06:04:33.000Z">
+<meta property="article:modified_time" content="2026-09-29T08:36:14.319Z">
+<meta property="article:author" content="Martinbj2008">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://martinbj2008.github.io/images/svg/ip4.ip6.offload.svg">
+  
+  
+  
+  <title>Linux 6.6 UDP GRO 收包调用链源码分析 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+  
+<link rel="stylesheet" href="/css/custom.css">
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="Linux 6.6 UDP GRO 收包调用链源码分析"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2026-09-29 14:04" pubdate>
+          September 29, 2026 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          11k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          90 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">Linux 6.6 UDP GRO 收包调用链源码分析</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h1 id="概述">1. 概述</h1><p>GRO（Generic Receive Offload，通用接收卸载）是 Linux 内核网络栈中的一项关键性能优化技术。<br>其核心思想是在数据包进入协议栈入口处，<br>将属于<strong>同一条流&#x2F;五元组</strong>的多个小包合并为一个大的“超级包”（super-skb），<br>从而显著<em><strong>减少上层协议栈的处理次数</strong></em>，提升网络吞吐量。</p>
+<p>GRO 的处理是<strong>分层进行</strong>的：<br>在网口驱动的napi处理函数里，依次经过链路层 → IP 层 → 传输层（TCP&#x2F;UDP）的逐层 GRO 回调，<br>最终决定数据包是合并入已有流、被消费还是作为普通包送往协议栈。</p>
+<p>本文以 Linux 6.6 内核源码为基础，分析 UDP 数据包在 GRO 处理路径上的完整调用链。</p>
+<h2 id="函数调用链">1.1. 函数调用链</h2><p>完整的 UDP GRO 调用链如下：</p>
+<figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br></pre></td><td class="code"><pre><code class="hljs text">napi_gro_receive()<br>├─ dev_gro_receive()<br>│    ├─ 计算 hash bucket，定位 gro_list<br>│    ├─ 遍历 offload_base，匹配 skb-&gt;protocol<br>│    └─ inet_gro_receive()<br>│        ├─ 检查 IP 层信息（源目 IP、TTL、TOS、分片）<br>│        ├─ 查找 inet_offloads[proto]<br>│        └─ udp4_gro_receive()<br>│            ├─ udp4_gro_lookup_skb()  查找 socket<br>│            └─ udp_gro_receive()<br>│                ├─ 端口匹配<br>│                ├─ 长度校验<br>│                └─ skb_gro_receive() / skb_gro_receive_list()<br>└─ napi_skb_finish()<br>     ├─ GRO_MERGED / GRO_MERGED_FREE → 合并完成，释放 skb<br>     ├─ GRO_CONSUMED → 已被消费<br>     └─ GRO_NORMAL → 走普通协议栈路径<br></code></pre></td></tr></table></figure>
+
+<h5 id="分层解析">1.1.0.0.1. 分层解析</h5><p>UDP GRO 的调用链在内核中经历了一条清晰的分层路径</p>
+<ul>
+<li><p><strong>入口</strong>： <code>napi_gro_receive()</code></p>
+<ul>
+<li>由网卡驱动调用，计算数据包哈希值</li>
+<li>通过 <code>skb_get_hash_raw() &amp; (GRO_HASH_BUCKETS - 1)</code> 定位到对应的哈希桶 <code>gro_hash[bucket]</code>下的链表入口，</li>
+<li>然后调用 <code>dev_gro_receive()</code> 进行协议层分发</li>
+</ul>
+</li>
+<li><p><strong>协议分发</strong>：<code>dev_gro_receive()</code>    - </p>
+<ul>
+<li>根据 <code>skb-&gt;protocol</code> 找到匹配的协议。  遍历 <code>offload_base</code> 链表，找到IP协议的注册的回调函数<code>inet_gro_receive</code>，</li>
+<li>通过 <code>INDIRECT_CALL_INET</code> 宏进行间接调用；</li>
+</ul>
+</li>
+<li><p><strong>IP 层</strong>：<code>inet_gro_receive()</code></p>
+<ul>
+<li>检查 IP 头部（源目 IP、TTL、TOS、分片信息等），</li>
+<li>在哈希桶内的 <code>gro_list</code> 中查找可合并的流。</li>
+<li>如果 TTL 或 TOS 不一致、是分片包等场景，则启动 flush 操作；</li>
+</ul>
+</li>
+<li><p><strong>传输层</strong>：<code>udp4_gro_receive()</code></p>
+<ul>
+<li>查找对应的 socket（用于检查 <code>udp_sk(sk)-&gt;gro_enabled</code>），这sk在udp tunnel类的场景（如vxlan）下有用，其他场景可忽略。</li>
+<li>然后由 <code>udp_gro_receive()</code> 执行端口匹配和长度校验，</li>
+<li>最终通过 <code>skb_gro_receive()</code> 完成数据合并；</li>
+</ul>
+</li>
+<li><p><strong>完成层</strong>：<code>napi_skb_finish()</code></p>
+<ul>
+<li>根据 <code>dev_gro_receive()</code> 的返回值决定数据包的最终去向</li>
+<li>——合并：有两种方式，详见后续专门讲述。<ul>
+<li><code>GRO_MERGED</code>：把当前udp报文合并到之前的udp报文里。简单，效率低。</li>
+<li><code>GRO_MERGED_FREE</code>：保留报文大小。复杂，高效。</li>
+</ul>
+</li>
+<li>消费（<code>GRO_CONSUMED</code>）</li>
+<li>或走普通路径（<code>GRO_NORMAL</code>）。</li>
+</ul>
+</li>
+</ul>
+<h1 id="数据结构">2. 数据结构</h1><h2 id="核心：-struct-offload-callbacks">2.1. 核心： struct offload_callbacks</h2><p> 内核里的GRO是分层处理的， 普通报文包含两层</p>
+<ul>
+<li>网络层：IPv4、IPv6。</li>
+<li>传输层：TCP、UDP。<br> 尽管层级不一样，协议不一样，但是他们的GRO处理都有个共同的抽象结构体<code>offload_callbacks</code></li>
+</ul>
+<figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">2704 </span>struct offload_callbacks &#123;<br><span class="hljs-symbol">2705 </span>        struct sk_buff          *(*gso_segment)(struct sk_buff *skb,<br><span class="hljs-symbol">2706 </span>                                                netdev_features_t features);<br><span class="hljs-symbol">2707 </span>        struct sk_buff          *(*gro_receive)(struct list_head *head,<br><span class="hljs-symbol">2708 </span>                                                struct sk_buff *skb);<br><span class="hljs-symbol">2709 </span>        <span class="hljs-keyword">int</span>                     (*gro_complete)(struct sk_buff *skb, <span class="hljs-keyword">int</span> nhoff);<br><span class="hljs-symbol">2710 </span>&#125;;<br></code></pre></td></tr></table></figure>
+<ul>
+<li>gso_segment：GRO报文穿过协议栈，到达socket时候，如何还原切分？</li>
+<li>gro_receive：RX软中断在协议出口，尝试组装GRO报文时，判断报文是否可以GRO。</li>
+<li>gro_complete：如果GRO解释，。。。</li>
+</ul>
+<h2 id="IP层">2.2. IP层</h2><p><img src="/images/svg/ip4.ip6.offload.svg" srcset="/img/loading.gif" lazyload alt="Linux 内核 inet_offloads 数组结构"></p>
+<ul>
+<li>每个IP层的offload&#x2F;GRO操作都汇总到packet_offload结构体中。<ul>
+<li>type: 对应eth头里的proto字段，如IPv4，IPv6.</li>
+<li>struct offload_callbacks callbacks： 协议对应的GRO处理函数集。</li>
+</ul>
+</li>
+<li>所有的结构体通过一个list 挂载到<code>offload_base</code>链表下。</li>
+</ul>
+<h3 id="offload-base">2.2.1. offload_base</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">13 </span>struct list_head offload_base __read_mostly = LIST_HEAD_INIT(offload_base);<br></code></pre></td></tr></table></figure>
+
+<h3 id="packet-offload">2.2.2. packet_offload</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">2712 </span>struct packet_offload &#123;<br><span class="hljs-symbol">2713 </span>        __be16                   type;  /* This is really htons(ether_type). */<br><span class="hljs-symbol">2714 </span>        u16                      priority;<br><span class="hljs-symbol">2715 </span>        struct offload_callbacks callbacks;<br><span class="hljs-symbol">2716 </span>        struct list_head         <span class="hljs-keyword">list</span>;<br><span class="hljs-symbol">2717 </span>&#125;;<br></code></pre></td></tr></table></figure>
+<h4 id="IPv4-ip-packet-offload">2.2.2.1. IPv4: ip_packet_offload</h4><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">1902 </span>static struct packet_offload ip_packet_offload __read_mostly = &#123;<br><span class="hljs-symbol">1903 </span>        .type = cpu_to_be16(ETH_P_IP),<br><span class="hljs-symbol">1904 </span>        .callbacks = &#123;<br><span class="hljs-symbol">1905 </span>                .gso_segment = inet_gso_segment,<br><span class="hljs-symbol">1906 </span>                .gro_receive = inet_gro_receive,<br><span class="hljs-symbol">1907 </span>                .gro_complete = inet_gro_complete,<br><span class="hljs-symbol">1908 </span>        &#125;,<br><span class="hljs-symbol">1909 </span>&#125;;<br><span class="hljs-symbol">1910 </span><br></code></pre></td></tr></table></figure>
+<h4 id="IPv6-ipv6-packet-offload">2.2.2.2. IPv6: ipv6_packet_offload</h4><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">394 </span>static struct packet_offload ipv6_packet_offload __read_mostly = &#123;<br><span class="hljs-symbol">395 </span>        .type = cpu_to_be16(ETH_P_IPV6),<br><span class="hljs-symbol">396 </span>        .callbacks = &#123;<br><span class="hljs-symbol">397 </span>                .gso_segment = ipv6_gso_segment,<br><span class="hljs-symbol">398 </span>                .gro_receive = ipv6_gro_receive,<br><span class="hljs-symbol">399 </span>                .gro_complete = ipv6_gro_complete,<br><span class="hljs-symbol">400 </span>        &#125;,<br><span class="hljs-symbol">401 </span>&#125;;<br></code></pre></td></tr></table></figure>
+
+<h2 id="TCP-UDP层">2.3. TCP&#x2F;UDP层</h2><ul>
+<li>&#96;&#96; 与Ip层处理类似，也有一个传输层的结构体存放TCP&#x2F;UDP的GRO操作。</li>
+<li><code>inet_offloads</code></li>
+</ul>
+<p><img src="/images/svg/tcp.udp.offload.svg" srcset="/img/loading.gif" lazyload alt="Linux 内核 inet_offloads 数组结构"></p>
+<h3 id="inet-offloads">2.3.1. inet_offloads</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">29 </span>const struct net_offload __rcu *inet_offloads[MAX_INET_PROTOS] __read_mostly;<br></code></pre></td></tr></table></figure>
+
+<h3 id="net-offload">2.3.2. net_offload</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">68 </span>struct net_offload &#123;<br><span class="hljs-symbol">69 </span>        struct offload_callbacks callbacks;<br><span class="hljs-symbol">70 </span>        unsigned <span class="hljs-keyword">int</span>             flags; /* Flags used by IPv6 <span class="hljs-keyword">for</span> now */<br><span class="hljs-symbol">71 </span>&#125;;<br></code></pre></td></tr></table></figure>
+
+<h3 id="TCP4-tcpv4-offload">2.3.3. TCP4: tcpv4_offload</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">347 </span>static const struct net_offload tcpv4_offload = &#123;<br><span class="hljs-symbol">348 </span>        .callbacks = &#123;<br><span class="hljs-symbol">349 </span>                .gso_segment    =       tcp4_gso_segment,<br><span class="hljs-symbol">350 </span>                .gro_receive    =       tcp4_gro_receive,<br><span class="hljs-symbol">351 </span>                .gro_complete   =       tcp4_gro_complete,<br><span class="hljs-symbol">352 </span>        &#125;,<br><span class="hljs-symbol">353 </span>&#125;;<br></code></pre></td></tr></table></figure>
+
+<h3 id="UDP4-udpv4-offload">2.3.4. UDP4: udpv4_offload</h3><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">740 </span>static const struct net_offload udpv4_offload = &#123;<br><span class="hljs-symbol">741 </span>        .callbacks = &#123;<br><span class="hljs-symbol">742 </span>                .gso_segment = udp4_ufo_fragment,<br><span class="hljs-symbol">743 </span>                .gro_receive  = udp4_gro_receive,<br><span class="hljs-symbol">744 </span>                .gro_complete = udp4_gro_complete,<br><span class="hljs-symbol">745 </span>        &#125;,<br><span class="hljs-symbol">746 </span>&#125;;<br></code></pre></td></tr></table></figure>
+
+
+<h1 id="内核函数">3. 内核函数</h1><h2 id="入口函数-napi-gro-receive">3.1. 入口函数 napi_gro_receive</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">600</span> <span class="hljs-type">gro_result_t</span> <span class="hljs-title function_">napi_gro_receive</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> napi_struct *napi, <span class="hljs-keyword">struct</span> sk_buff *skb)</span><br>601 &#123;<br>...<br><span class="hljs-number">609</span>         ret = napi_skb_finish(napi, skb, dev_gro_receive(napi, skb));<br><span class="hljs-number">611</span> <br><span class="hljs-number">612</span>         <span class="hljs-keyword">return</span> ret;<br><span class="hljs-number">613</span> &#125;<br><span class="hljs-number">614</span> EXPORT_SYMBOL(napi_gro_receive);<br></code></pre></td></tr></table></figure>
+
+<p><code>napi_gro_receive()</code> 是 GRO 处理的统一入口，由网卡驱动在 NAPI poll 函数中调用（驱动需设置 <code>NETIF_F_GRO</code> 特性）。<br>其核心逻辑在<code>dev_gro_receive()</code>里。<br><code>napi_skb_finish()</code> 根据返回值完成最终处理。</p>
+<h2 id="核心分发函数-dev-gro-receive">3.2. 核心分发函数 dev_gro_receive</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">437</span> <span class="hljs-type">static</span> <span class="hljs-keyword">enum</span> gro_result <span class="hljs-title function_">dev_gro_receive</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> napi_struct *napi, <span class="hljs-keyword">struct</span> sk_buff *skb)</span><br>438 &#123;<br><span class="hljs-number">439</span>         u32 bucket = skb_get_hash_raw(skb) &amp; (GRO_HASH_BUCKETS - <span class="hljs-number">1</span>);<br><span class="hljs-number">440</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">gro_list</span> *<span class="hljs-title">gro_list</span> =</span> &amp;napi-&gt;gro_hash[bucket];<br><span class="hljs-number">441</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span> *<span class="hljs-title">head</span> =</span> &amp;offload_base;<br><span class="hljs-number">442</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">packet_offload</span> *<span class="hljs-title">ptype</span>;</span><br><span class="hljs-number">443</span>         __be16 type = skb-&gt;protocol;<br>...<br><span class="hljs-number">454</span>         list_for_each_entry_rcu(ptype, head, <span class="hljs-built_in">list</span>) &#123;<br><span class="hljs-number">455</span>                 <span class="hljs-keyword">if</span> (ptype-&gt;type == type &amp;&amp; ptype-&gt;callbacks.gro_receive)<br><span class="hljs-number">456</span>                         <span class="hljs-keyword">goto</span> found_ptype;<br><span class="hljs-number">457</span>         &#125;<br>...<br><span class="hljs-number">461</span> found_ptype:<br><span class="hljs-number">462</span>         skb_set_network_header(skb, skb_gro_offset(skb));<br>...<br><span class="hljs-number">490</span>         pp = INDIRECT_CALL_INET(ptype-&gt;callbacks.gro_receive,<br><span class="hljs-number">491</span>                                 ipv6_gro_receive, inet_gro_receive,<br><span class="hljs-number">492</span>                                 &amp;gro_list-&gt;<span class="hljs-built_in">list</span>, skb);<br>...<br><span class="hljs-number">501</span>         same_flow = NAPI_GRO_CB(skb)-&gt;same_flow;<br><span class="hljs-number">502</span>         ret = NAPI_GRO_CB(skb)-&gt;<span class="hljs-built_in">free</span> ? GRO_MERGED_FREE : GRO_MERGED;<br><span class="hljs-number">503</span> <br><span class="hljs-number">504</span>         <span class="hljs-keyword">if</span> (pp) &#123;<br><span class="hljs-number">505</span>                 skb_list_del_init(pp);<br><span class="hljs-number">506</span>                 napi_gro_complete(napi, pp);<br><span class="hljs-number">507</span>                 gro_list-&gt;count--;<br><span class="hljs-number">508</span>         &#125;<br>...<br><span class="hljs-number">537</span>         <span class="hljs-keyword">return</span> ret;<br><span class="hljs-number">543</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<p><code>dev_gro_receive()</code> 是 GRO 处理的核心分发函数，其关键步骤如下：</p>
+<p><strong>计算哈希链入口</strong>：<code>skb_get_hash_raw()</code> 获取数据包的哈希值（由网卡RSS或软件计算），找到hash桶里的链表入口。</p>
+<p><strong>查找网络层处理协议</strong>：遍历全局 <code>offload_base</code> 链表，根据 <code>skb-&gt;protocol</code> 匹配对应的 <code>packet_offload</code> 类型。</p>
+<ul>
+<li>IPv4 对应 <code>inet_gro_receive</code>。</li>
+<li>IPv6 对应 <code>ipv6_gro_receive</code>。</li>
+</ul>
+<p><strong>调用协议处理GRO</strong>：通过 <code>INDIRECT_CALL_INET</code> 宏调用协议层的 GRO 处理函数。<br><strong>处理协议返回结果</strong>：处理协议层返回 <code>pp</code>。</p>
+<ul>
+<li>如果<code>pp</code> 非空：有一个流的GRO缓存内容，需要被flush。调用 <code>napi_gro_complete()</code> 将其送往协议栈，并减少桶计数。</li>
+</ul>
+<h2 id="IP-层处理-inet-gro-receive">3.3. IP 层处理 inet_gro_receive</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">1471</span> <span class="hljs-keyword">struct</span> sk_buff *<span class="hljs-title function_">inet_gro_receive</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> list_head *head, <span class="hljs-keyword">struct</span> sk_buff *skb)</span><br>1472 &#123;<br><span class="hljs-number">1473</span>         <span class="hljs-type">const</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">net_offload</span> *<span class="hljs-title">ops</span>;</span><br>...<br><span class="hljs-number">1489</span>         proto = iph-&gt;protocol;<br><span class="hljs-number">1490</span> <br><span class="hljs-number">1491</span>         ops = rcu_dereference(inet_offloads[proto]);<br><span class="hljs-number">1492</span>         <span class="hljs-keyword">if</span> (!ops || !ops-&gt;callbacks.gro_receive)<br>...<br><span class="hljs-number">1509</span>         list_for_each_entry(p, head, <span class="hljs-built_in">list</span>) &#123;<br>              <span class="hljs-comment">// 检查是否是同一个flow， IP层，源目IP</span><br>              <span class="hljs-comment">// ttl ,tos,不一致，分片等场景下启动flush操作。</span><br><span class="hljs-number">1562</span>         &#125;<br>...<br><span class="hljs-number">1577</span>         pp = indirect_call_gro_receive(tcp4_gro_receive, udp4_gro_receive,<br><span class="hljs-number">1578</span>                                        ops-&gt;callbacks.gro_receive, head, skb);<br><span class="hljs-number">1579</span> <br><span class="hljs-number">1580</span> out:<br><span class="hljs-number">1581</span>         skb_gro_flush_final(skb, pp, flush);<br><span class="hljs-number">1582</span> <br><span class="hljs-number">1583</span>         <span class="hljs-keyword">return</span> pp;<br><span class="hljs-number">1584</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<p><code>inet_gro_receive()</code> 负责 IP 层的流匹配和 flush 判断：</p>
+<ul>
+<li><strong>确定传输层协议的GRO</strong>：根据<code>iph-&gt;protocol</code> 从 <code>inet_offloads[]</code> 数组查找对应的传输层协议回调<ul>
+<li>TCP 对应 <code>tcp4_gro_receive</code>。</li>
+<li>UDP 对应 <code>udp4_gro_receive</code>。</li>
+</ul>
+</li>
+<li><strong>流匹配</strong>：遍历当前哈希桶内的 skb 列表，<ul>
+<li>检查 IP 层信息是否一致——源目 IP 地址、TTL、TOS、是否分片等。</li>
+<li>任何一项不匹配都会触发 <code>flush</code> 标志，停止当前流的GSO缓存并flush。</li>
+</ul>
+</li>
+<li><strong>调用传输层</strong>： 调用具体的传输层 GRO 函数。</li>
+</ul>
+<h2 id="UDP层处理入口：udp4-gro-receive">3.4. UDP层处理入口：udp4_gro_receive</h2><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">621</span> INDIRECT_CALLABLE_SCOPE<br><span class="hljs-number">622</span> <span class="hljs-keyword">struct</span> sk_buff *<span class="hljs-title function_">udp4_gro_receive</span><span class="hljs-params">(<span class="hljs-keyword">struct</span> list_head *head, <span class="hljs-keyword">struct</span> sk_buff *skb)</span><br>623 &#123;<br><span class="hljs-number">624</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">udphdr</span> *<span class="hljs-title">uh</span> =</span> udp_gro_udphdr(skb);<br>...<br><span class="hljs-number">644</span>         <span class="hljs-keyword">if</span> (static_branch_unlikely(&amp;udp_encap_needed_key))<br><span class="hljs-number">645</span>                 sk = udp4_gro_lookup_skb(skb, uh-&gt;source, uh-&gt;dest);<br><span class="hljs-number">646</span> <br><span class="hljs-number">647</span>         pp = udp_gro_receive(head, skb, uh, sk);<br><span class="hljs-number">648</span>         <span class="hljs-keyword">return</span> pp;<br>...<br><span class="hljs-number">653</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<p><code>udp4_gro_receive()</code> 是 UDP 协议的 GRO 入口，无实质意义，核心函数在<code>udp_gro_receive</code>。<br>注：</p>
+<ul>
+<li><strong>Socket 查找</strong>（L644-L645）：在 <code>udp_encap_needed_key</code> 静态分支开启时，调用 <code>udp4_gro_lookup_skb()</code> 根据源&#x2F;目的端口查找对应的 UDP socket。这个 socket 用于检查 <code>udp_sk(sk)-&gt;gro_enabled</code> 是否开启，以决定是否允许 GRO 合并。</li>
+</ul>
+<p><code>udp_gro_receive()</code> 内部执行端口匹配（比较源&#x2F;目的端口是否一致）、长度校验（防止 GRO 合并过大），以及决定使用普通合并（<code>skb_gro_receive</code>）还是 fraglist 合并（<code>skb_gro_receive_list</code>）。</p>
+<h3 id="UDP层处理函数：udp-gro-receive">3.4.1. UDP层处理函数：udp_gro_receive</h3><figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">545</span> struct sk_buff *udp_gro_receive<span class="hljs-punctuation">(</span>struct list_head *head, struct sk_buff *skb,<br><span class="hljs-number">546</span>                                 struct udphdr *uh, struct sock *sk<span class="hljs-punctuation">)</span><br><span class="hljs-number">547</span> &#123;<br>...<br><span class="hljs-number">562</span>                 if <span class="hljs-punctuation">(</span><span class="hljs-punctuation">(</span>!sk &amp;&amp; <span class="hljs-punctuation">(</span>skb-&gt;dev-&gt;features &amp; NETIF_F_GRO_UDP_FWD<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> ||<br><span class="hljs-number">563</span>                     <span class="hljs-punctuation">(</span>sk &amp;&amp; udp_sk<span class="hljs-punctuation">(</span>sk<span class="hljs-punctuation">)</span>-&gt;gro_enabled<span class="hljs-punctuation">)</span> || NAPI_GRO_CB<span class="hljs-punctuation">(</span>skb<span class="hljs-punctuation">)</span>-&gt;is_flist<span class="hljs-punctuation">)</span><br><span class="hljs-number">564</span>                         return call_gro_receive<span class="hljs-punctuation">(</span>udp_gro_receive_segment, head, skb<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br>...<br><span class="hljs-number">604</span> &#125;<br><span class="hljs-number">605</span> EXPORT_SYMBOL<span class="hljs-punctuation">(</span>udp_gro_receive<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br></code></pre></td></tr></table></figure>
+
+<h3 id="UDP层核心处理函数：udp-gro-receive-segment">3.4.2. UDP层核心处理函数：udp_gro_receive_segment</h3><ul>
+<li>比对源目port，确保在一个五元组后缓存。 continue是考虑有多个流的场景。<ul>
+<li>TODO：支持多流会不会引入乱序等问题。</li>
+</ul>
+</li>
+<li>list 和非list模式不混用。</li>
+<li>报文大小要一致， 方便以后切割。 list模式可以接受报文不一样大小。</li>
+<li>checksum不一致，也会触发flush。</li>
+</ul>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br><span class="line">34</span><br><span class="line">35</span><br><span class="line">36</span><br><span class="line">37</span><br><span class="line">38</span><br><span class="line">39</span><br><span class="line">40</span><br><span class="line">41</span><br></pre></td><td class="code"><pre><code class="hljs dns"><span class="hljs-number">464</span> static struct sk_buff *udp_gro_receive_segment<span class="hljs-punctuation">(</span>struct list_head *head,<br><span class="hljs-number">465</span>                                                struct sk_buff *skb<span class="hljs-punctuation">)</span><br><span class="hljs-number">466</span> &#123;<br><span class="hljs-number">467</span>         struct udphdr *uh = udp_gro_udphdr<span class="hljs-punctuation">(</span>skb<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">468</span>         struct sk_buff *pp = NULL<span class="hljs-comment">;</span><br>...<br><span class="hljs-number">489</span>         list_for_each_entry<span class="hljs-punctuation">(</span>p, head, list<span class="hljs-punctuation">)</span> &#123;<br>...                 // 确保是同一个udp流，这里用u32检查源目端口。<br><span class="hljs-number">495</span>                 /* Match ports only, as csum is always non zero */<br><span class="hljs-number">496</span>                 if <span class="hljs-punctuation">(</span><span class="hljs-punctuation">(</span>*<span class="hljs-punctuation">(</span>u32 *<span class="hljs-punctuation">)</span>&amp;uh-&gt;source != *<span class="hljs-punctuation">(</span>u32 *<span class="hljs-punctuation">)</span>&amp;uh2-&gt;source<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> &#123;<br><span class="hljs-number">497</span>                         NAPI_GRO_CB<span class="hljs-punctuation">(</span>p<span class="hljs-punctuation">)</span>-&gt;same_flow = <span class="hljs-number">0</span><span class="hljs-comment">;</span><br><span class="hljs-number">498</span>                         continue<span class="hljs-comment">;</span><br><span class="hljs-number">499</span>                 &#125;<br>...                  //下面是核心代码。<br><span class="hljs-number">506</span>                 /* Terminate the flow on len mismatch or if it grow <span class="hljs-string">&quot;too much&quot;</span>.<br><span class="hljs-number">507</span>                  * Under small packet flood GRO count could elsewhere grow <span class="hljs-keyword">a</span> lot<br><span class="hljs-number">508</span>                  * leading to excessive truesize values.<br><span class="hljs-number">509</span>                  * On len mismatch merge the first packet shorter than gso_size,<br><span class="hljs-number">510</span>                  * otherwise complete the GRO packet.<br><span class="hljs-number">511</span>                  */<br><span class="hljs-number">512</span>                 if <span class="hljs-punctuation">(</span>ulen &gt; ntohs<span class="hljs-punctuation">(</span>uh2-&gt;len<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> &#123;   // 如果当前报文比以前的大， 不缓存并启动flush。<br><span class="hljs-number">513</span>                         pp = p<span class="hljs-comment">;</span><br><span class="hljs-number">514</span>                 &#125; else &#123;                        // list模式和非list模式后面专题解释。<br><span class="hljs-number">515</span>                         if <span class="hljs-punctuation">(</span>NAPI_GRO_CB<span class="hljs-punctuation">(</span>skb<span class="hljs-punctuation">)</span>-&gt;is_flist<span class="hljs-punctuation">)</span> &#123;<br><span class="hljs-number">516</span>                                 if <span class="hljs-punctuation">(</span>!pskb_may_pull<span class="hljs-punctuation">(</span>skb, skb_gro_offset<span class="hljs-punctuation">(</span>skb<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> &#123;<br><span class="hljs-number">517</span>                                         NAPI_GRO_CB<span class="hljs-punctuation">(</span>skb<span class="hljs-punctuation">)</span>-&gt;flush = <span class="hljs-number">1</span><span class="hljs-comment">;</span><br><span class="hljs-number">518</span>                                         return NULL<span class="hljs-comment">;</span><br><span class="hljs-number">519</span>                                 &#125;<br><span class="hljs-number">520</span>                                 if <span class="hljs-punctuation">(</span><span class="hljs-punctuation">(</span>skb-&gt;ip_summed != p-&gt;ip_summed<span class="hljs-punctuation">)</span> ||<br><span class="hljs-number">521</span>                                     <span class="hljs-punctuation">(</span>skb-&gt;csum_level != p-&gt;csum_level<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span> &#123;<br><span class="hljs-number">522</span>                                         NAPI_GRO_CB<span class="hljs-punctuation">(</span>skb<span class="hljs-punctuation">)</span>-&gt;flush = <span class="hljs-number">1</span><span class="hljs-comment">;</span><br><span class="hljs-number">523</span>                                         return NULL<span class="hljs-comment">;</span><br><span class="hljs-number">524</span>                                 &#125;<br><span class="hljs-number">525</span>                                 ret = skb_gro_receive_list<span class="hljs-punctuation">(</span>p, skb<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">526</span>                         &#125; else &#123;<br><span class="hljs-number">527</span>                                 skb_gro_postpull_rcsum<span class="hljs-punctuation">(</span>skb, uh,<br><span class="hljs-number">528</span>                                                        sizeof<span class="hljs-punctuation">(</span>struct udphdr<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">529</span> <br><span class="hljs-number">530</span>                                 ret = skb_gro_receive<span class="hljs-punctuation">(</span>p, skb<span class="hljs-punctuation">)</span><span class="hljs-comment">;</span><br><span class="hljs-number">531</span>                         &#125;<br><span class="hljs-number">532</span>                 &#125;<br></code></pre></td></tr></table></figure>
+
+
+<h1 id="NAPI相关部分">4. NAPI相关部分</h1><h2 id="数据结构-1">4.1. 数据结构</h2><h3 id="napi-struct里GRO相关字段）">4.1.1. napi_struct里GRO相关字段）</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">352</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">napi_struct</span> &#123;</span><br>...<br><span class="hljs-number">373</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">gro_list</span>         <span class="hljs-title">gro_hash</span>[<span class="hljs-title">GRO_HASH_BUCKETS</span>];</span><br><span class="hljs-number">374</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">sk_buff</span>          *<span class="hljs-title">skb</span>;</span><br>...<br><span class="hljs-number">383</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<h3 id="GRO-HASH-BUCKETS">4.1.2. GRO_HASH_BUCKETS</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">347</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> GRO_HASH_BUCKETS        8</span><br></code></pre></td></tr></table></figure>
+
+<h3 id="gro-list">4.1.3. gro_list</h3><figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">338</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">gro_list</span> &#123;</span><br><span class="hljs-number">339</span>     <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">list_head</span>        <span class="hljs-title">list</span>;</span><br><span class="hljs-number">340</span>     <span class="hljs-type">int</span>                     count;<br><span class="hljs-number">341</span> &#125;;<br></code></pre></td></tr></table></figure>
+
+<ul>
+<li><code>list</code>：<code>list_head</code> 链表头，用于挂载属于同一哈希桶的所有流（每个流对应一个正在 GRO 合并的 skb）。</li>
+<li><code>count</code>：当前桶内挂载的 skb 数量，用于控制流数量上限（<code>MAX_GRO_SKBS</code>）。</li>
+<li><code>gro_hash[8]</code>：8 个 GRO 哈希桶组成的数组。<ul>
+<li>每个桶独立维护自己的流列表。</li>
+</ul>
+</li>
+<li><code>skb</code>：当前正在处理的 skb 指针，用于 NAPI poll 上下文。</li>
+</ul>
+<p>在 Linux 5.x 之后的内核中，<code>gro_hash</code> 数组的引入使得 GRO 在多个并行流同时活跃时，每个数据包只需在其哈希值对应的桶中查找，而无需遍历整个 per-NAPI 流列表，显著提升了多流场景的性能。</p>
+<h1 id="skb-gro-receive与skb-gro-receive-list的区别">5. skb_gro_receive与skb_gro_receive_list的区别</h1><h2 id="核心区别：融合-Frags-vs-串联-Fraglist">5.1. 核心区别：融合 (Frags) vs. 串联 (Fraglist)</h2><table>
+<thead>
+<tr>
+<th align="left">特性</th>
+<th align="left"><code>skb_gro_receive()</code></th>
+<th align="left"><code>skb_gro_receive_list()</code></th>
+</tr>
+</thead>
+<tbody><tr>
+<td align="left">合并方式</td>
+<td align="left">数据融合（拷贝进 <code>frags[]</code>）</td>
+<td align="left">数据包串联（挂到 <code>frag_list</code>）</td>
+</tr>
+<tr>
+<td align="left">数据拷贝</td>
+<td align="left">需要（或内存重映射）</td>
+<td align="left">无需</td>
+</tr>
+<tr>
+<td align="left">大小限制</td>
+<td align="left">受 <code>MAX_SKB_FRAGS</code> 限制</td>
+<td align="left">受 64KB 总长度限制</td>
+</tr>
+<tr>
+<td align="left">主要场景</td>
+<td align="left">普通接收路径</td>
+<td align="left">转发、支持 <code>GRO_FRAGLIST</code> 的设备</td>
+</tr>
+<tr>
+<td align="left">性能开销</td>
+<td align="left">较高</td>
+<td align="left">较低（尤其对转发）</td>
+</tr>
+</tbody></table>
+<p>因此，代码中根据 <code>is_flist</code> 标志来选择调用哪个函数，本质上是在数据拷贝开销、内存布局限制和后续处理效率之间做出的权衡。</p>
+<h2 id="skb-gro-receive">5.2. skb_gro_receive()</h2><p><code>skb_gro_receive()</code> 试图将新 skb 的载荷数据真正“融合”进主 skb <code>p</code> 的存储空间中。它会尝试将数据追加到 <code>p</code> 已有的线性数据区或者其 <code>frags[]</code> 数组里。</p>
+<p>这种方式需要处理内存分配、拷贝和 <code>frags[]</code> 数组的管理，开销相对较大，并且受限于 <code>MAX_SKB_FRAGS</code>（通常为 17 个），单个 GRO 包的大小有限。</p>
+<h2 id="skb-gro-receive-list">5.3. skb_gro_receive_list()</h2><p><code>skb_gro_receive_list()</code> 不融合载荷数据，而是通过 <code>frag_list</code> 指针，将整个 skb 以链表的形式串联起来。它做的事情非常轻量：</p>
+<ul>
+<li>将新 skb 挂到主 skb <code>p</code> 的 <code>skb_shinfo(p)-&gt;frag_list</code> 链表尾部。</li>
+<li>更新链表指针 <code>NAPI_GRO_CB(p)-&gt;last</code> 指向新的尾部。</li>
+<li>直接累加 <code>p-&gt;len</code>、<code>p-&gt;data_len</code> 和 <code>p-&gt;truesize</code> 等元数据。</li>
+</ul>
+<h1 id="is-flist-标志与设计动机">6. is_flist 标志与设计动机</h1><p>代码中通过 <code>NAPI_GRO_CB(skb)-&gt;is_flist</code> 来区分这两种模式。这个标志通常由网络设备驱动或上层配置决定，例如当设备支持 <code>NETIF_F_GRO_FRAGLIST</code> 特性时，<code>is_flist</code> 会被设置为 1。</p>
+<p>区分这两种方式的核心动机是性能和场景适配：</p>
+<ol>
+<li><p><strong>性能优化（尤其转发场景）</strong><br><code>fraglist</code> 方式避免了数据拷贝，在大包转发场景下优势明显。当 GRO 聚合后的数据需要再次以 GSO 形式发送时，<code>fraglist</code> 结构可以直接被 <code>skb_segment_list()</code> 高效处理，无需重新拆分和拷贝，大幅降低了 CPU 开销。</p>
+</li>
+<li><p><strong>突破 <code>frags[]</code> 数量限制</strong><br>传统 <code>skb_gro_receive()</code> 受 <code>MAX_SKB_FRAGS</code>（约 17 个）限制，构建的 GRO 包大小有限。<code>fraglist</code> 方式通过串联 skb，可以构建更大的 GRO 包（上限由 65536 字节限制），支持更高效的聚合。</p>
+</li>
+<li><p><strong>适配硬件&#x2F;驱动卸载</strong><br>某些网卡或驱动可能已经将数据组织成 <code>frag_list</code> 形式，GRO 层直接沿用这种结构可以避免不必要的重构。</p>
+</li>
+</ol>
+<h1 id="注意事项">7. 注意事项</h1><p><code>fraglist</code> 方式虽然高效，但有其复杂性。例如，它需要防止 GSO skb 被再次嵌套聚合，否则可能导致后续分段路径处理异常。因此，代码中在进入 <code>skb_gro_receive_list()</code> 前会检查 <code>flush</code> 标志等条件。</p>
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>Linux 6.6 UDP GRO 收包调用链源码分析</div>
+      <div>https://martinbj2008.github.io/2026/09/29/udp-GRO-summary/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>September 29, 2026</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2026/09/29/html-pic-md/" title="deepseek 总结的html绘图规范">
+                        <span class="hidden-mobile">deepseek 总结的html绘图规范</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>
