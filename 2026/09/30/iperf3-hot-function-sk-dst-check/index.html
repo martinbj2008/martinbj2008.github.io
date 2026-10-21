@@ -1,0 +1,847 @@
+
+
+<!DOCTYPE html>
+<html lang="en" data-default-color-scheme=auto>
+
+
+
+<head>
+  <meta charset="UTF-8">
+
+  <link rel="apple-touch-icon" sizes="76x76" href="/img/fluid.png">
+  <link rel="icon" href="/img/fluid.png">
+  
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, shrink-to-fit=no">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  
+  <meta name="theme-color" content="#2f4154">
+  <meta name="author" content="Martinbj2008">
+  <meta name="keywords" content="">
+  
+    <meta name="description" content="1. 问题场景使用iperf3 做udp性能压测时候，   单核cpu可以发送出大约2.7GB的udp报文 使用-P4后，单核性能不足2.4G， 整体只有9.44GB。有约10%的衰退。 使用-P16后，单核性能不足1.3G， 整体只有19.8GB。有约50%的衰退，问题严重。  2. 问题结论2.1. 结论多核性能瓶颈：dst路由锁， 限制了线性增长。4核以上，线性增长明显下跌。 2.1.1.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="iperf3性能热点函数sk_dst_check问题分析">
+<meta property="og:url" content="https://martinbj2008.github.io/2026/09/30/iperf3-hot-function-sk-dst-check/index.html">
+<meta property="og:site_name" content="Kernel Study Notes">
+<meta property="og:description" content="1. 问题场景使用iperf3 做udp性能压测时候，   单核cpu可以发送出大约2.7GB的udp报文 使用-P4后，单核性能不足2.4G， 整体只有9.44GB。有约10%的衰退。 使用-P16后，单核性能不足1.3G， 整体只有19.8GB。有约50%的衰退，问题严重。  2. 问题结论2.1. 结论多核性能瓶颈：dst路由锁， 限制了线性增长。4核以上，线性增长明显下跌。 2.1.1.">
+<meta property="og:locale" content="en_US">
+<meta property="article:published_time" content="2026-09-30T07:51:16.000Z">
+<meta property="article:modified_time" content="2026-09-30T09:20:15.274Z">
+<meta property="article:author" content="Martinbj2008">
+<meta property="article:tag" content="socket">
+<meta name="twitter:card" content="summary_large_image">
+  
+  
+  
+  <title>iperf3性能热点函数sk_dst_check问题分析 - Kernel Study Notes</title>
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/twitter-bootstrap/4.6.1/css/bootstrap.min.css" />
+
+
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/github-markdown-css/4.0.0/github-markdown.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/hint.css/2.7.0/hint.min.css" />
+
+  <link  rel="stylesheet" href="https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.css" />
+
+
+
+<!-- 主题依赖的图标库，不要自行修改 -->
+<!-- Do not modify the link that theme dependent icons -->
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1749284_5i9bdhy70f8.css">
+
+
+
+<link rel="stylesheet" href="//at.alicdn.com/t/c/font_1736178_k526ubmyhba.css">
+
+
+<link  rel="stylesheet" href="/css/main.css" />
+
+
+  <link id="highlight-css" rel="stylesheet" href="/css/highlight.css" />
+  
+    <link id="highlight-css-dark" rel="stylesheet" href="/css/highlight-dark.css" />
+  
+
+
+
+
+  <script id="fluid-configs">
+    var Fluid = window.Fluid || {};
+    Fluid.ctx = Object.assign({}, Fluid.ctx)
+    var CONFIG = {"hostname":"martinbj2008.github.io","root":"/","version":"1.9.9","typing":{"enable":true,"typeSpeed":70,"cursorChar":"_","loop":false,"scope":[]},"anchorjs":{"enable":true,"element":"h1,h2,h3,h4,h5,h6","placement":"left","visible":"hover","icon":""},"progressbar":{"enable":true,"height_px":3,"color":"#29d","options":{"showSpinner":false,"trickleSpeed":100}},"code_language":{"enable":true,"default":"TEXT"},"copy_btn":true,"image_caption":{"enable":true},"image_zoom":{"enable":true,"img_url_replace":["",""]},"toc":{"enable":true,"expand_all":true,"placement":"right","headingSelector":"h1,h2,h3,h4,h5,h6","collapseDepth":0},"lazyload":{"enable":true,"loading_img":"/img/loading.gif","onlypost":false,"offset_factor":2},"web_analytics":{"enable":false,"follow_dnt":true,"baidu":null,"google":{"measurement_id":null},"tencent":{"sid":null,"cid":null},"leancloud":{"app_id":null,"app_key":null,"server_url":null,"path":"window.location.pathname","ignore_local":false},"openkounter":{"server_url":"https://open-kounter.mintimate.cn","path":"window.location.pathname","ignore_local":false},"umami":{"src":null,"website_id":null,"domains":null,"start_time":"2024-01-01T00:00:00.000Z","token":null,"api_server":null}},"search_path":"/local-search.xml","include_content_in_search":true};
+
+    if (CONFIG.web_analytics.follow_dnt) {
+      var dntVal = navigator.doNotTrack || window.doNotTrack || navigator.msDoNotTrack;
+      Fluid.ctx.dnt = dntVal && (dntVal.startsWith('1') || dntVal.startsWith('yes') || dntVal.startsWith('on'));
+    }
+  </script>
+  <script  src="/js/utils.js" ></script>
+  <script  src="/js/color-schema.js" ></script>
+  
+
+
+  
+<meta name="generator" content="Hexo 8.1.2"></head>
+
+
+<body>
+  
+
+  <header>
+    
+
+<div class="header-inner" style="height: 25vh;">
+  <nav id="navbar" class="navbar fixed-top  navbar-expand-lg navbar-dark scrolling-navbar">
+  <div class="container">
+    <a class="navbar-brand" href="/">
+      <strong>Fluid</strong>
+    </a>
+
+    <button id="navbar-toggler-btn" class="navbar-toggler" type="button" data-toggle="collapse"
+            data-target="#navbarSupportedContent"
+            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+      <div class="animated-icon"><span></span><span></span><span></span></div>
+    </button>
+
+    <!-- Collapsible content (desktop) -->
+    <div class="collapse navbar-collapse" id="navbarSupportedContent">
+      <ul class="navbar-nav ml-auto text-center">
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/" target="_self">
+                <i class="iconfont icon-home-fill"></i>
+                <span>Home</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/archives/" target="_self">
+                <i class="iconfont icon-archive-fill"></i>
+                <span>Archives</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/categories/" target="_self">
+                <i class="iconfont icon-category-fill"></i>
+                <span>Categories</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/tags/" target="_self">
+                <i class="iconfont icon-tags-fill"></i>
+                <span>Tags</span>
+              </a>
+            </li>
+          
+        
+          
+          
+          
+          
+            <li class="nav-item">
+              <a class="nav-link" href="/about/" target="_self">
+                <i class="iconfont icon-user-fill"></i>
+                <span>About</span>
+              </a>
+            </li>
+          
+        
+        
+          <li class="nav-item" id="search-btn">
+            <a class="nav-link" target="_self" href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <i class="iconfont icon-search"></i>
+            </a>
+          </li>
+          
+        
+        
+          <li class="nav-item" id="color-toggle-btn">
+            <a class="nav-link" target="_self" href="javascript:;" aria-label="Color Toggle">
+              <i class="iconfont icon-dark" id="color-toggle-icon"></i>
+            </a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+</nav>
+
+<!-- Mobile grid menu overlay -->
+<div id="mobile-grid-menu" class="d-lg-none">
+  <div class="mobile-grid-menu-inner">
+    <div class="container">
+      <div class="row">
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-home-fill"></i>
+                  <span>Home</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/archives/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-archive-fill"></i>
+                  <span>Archives</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/categories/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-category-fill"></i>
+                  <span>Categories</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/tags/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-tags-fill"></i>
+                  <span>Tags</span>
+                </div>
+              </a>
+            </div>
+          
+        
+          
+          
+          
+          
+            <div class="col-4 mobile-grid-cell">
+              <a href="/about/" target="_self">
+                <div class="mobile-grid-item">
+                  <i class="iconfont icon-user-fill"></i>
+                  <span>About</span>
+                </div>
+              </a>
+            </div>
+          
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-search-btn">
+            <a href="javascript:;" data-toggle="modal" data-target="#modalSearch" aria-label="Search">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-search"></i>
+                <span>Search</span>
+              </div>
+            </a>
+          </div>
+        
+        
+          <div class="col-4 mobile-grid-cell" id="mobile-color-toggle-btn"
+               data-label-light="Light"
+               data-label-dark="Dark">
+            <a href="javascript:;" aria-label="Color Toggle">
+              <div class="mobile-grid-item">
+                <i class="iconfont icon-dark" id="mobile-color-toggle-icon"></i>
+                <span id="mobile-color-toggle-label">Dark</span>
+              </div>
+            </a>
+          </div>
+        
+      </div>
+    </div>
+  </div>
+</div>
+
+  
+
+<div id="banner" class="banner" parallax=true
+     style="background: url('/img/default.png') no-repeat center center; background-size: cover;">
+  <div class="full-bg-img">
+    <div class="mask flex-center" style="background-color: rgba(0, 0, 0, 0.3)">
+      <div class="banner-text text-center fade-in-up">
+        <div class="h2">
+          
+            <span id="subtitle" data-typed-text="iperf3性能热点函数sk_dst_check问题分析"></span>
+          
+        </div>
+
+        
+          
+  <div class="mt-3">
+    
+    
+      <span class="post-meta">
+        <i class="iconfont icon-date-fill" aria-hidden="true"></i>
+        <time datetime="2026-09-30 15:51" pubdate>
+          September 30, 2026 pm
+        </time>
+      </span>
+    
+  </div>
+
+  <div class="mt-1">
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-chart"></i>
+        
+          3.9k words
+        
+      </span>
+    
+
+    
+      <span class="post-meta mr-2">
+        <i class="iconfont icon-clock-fill"></i>
+        
+        
+        
+          33 mins
+        
+      </span>
+    
+
+    
+    
+  </div>
+
+
+        
+      </div>
+
+      
+    </div>
+  </div>
+</div>
+
+
+
+</div>
+
+  </header>
+
+  <main>
+    
+      
+
+<div class="container-fluid nopadding-x">
+  <div class="row nomargin-x">
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+
+    </div>
+
+    <div class="col-lg-8 nopadding-x-md">
+      <div class="container nopadding-x-md" id="board-ctn">
+        <div id="board">
+          <article class="post-content mx-auto">
+            <h1 id="seo-header">iperf3性能热点函数sk_dst_check问题分析</h1>
+            
+            
+              <div class="markdown-body">
+                
+                <h1 id="问题场景">1. 问题场景</h1><p>使用iperf3 做udp性能压测时候， </p>
+<ul>
+<li>单核cpu可以发送出大约2.7GB的udp报文</li>
+<li>使用-P4后，单核性能不足2.4G， 整体只有9.44GB。有约10%的衰退。</li>
+<li>使用-P16后，单核性能不足1.3G， 整体只有19.8GB。有约50%的衰退，问题严重。</li>
+</ul>
+<h1 id="问题结论">2. 问题结论</h1><h2 id="结论">2.1. 结论</h2><p><strong>多核性能瓶颈：dst路由锁， 限制了线性增长。4核以上，线性增长明显下跌。</strong></p>
+<h3 id="触发条件">2.1.1. 触发条件</h3><ul>
+<li>参数-P会创建多个udp socket，</li>
+<li>这些socket都在iperf3运行的cpu上，执行了udp connet</li>
+<li>之后创建多个线程，每个线程使用一个udp socket发包</li>
+</ul>
+<h3 id="简要分析">2.1.2. 简要分析</h3><ol>
+<li>udp connect后， 内核会根据路由表查找结果，缓存路由结果nhc</li>
+<li>这个路由结果是per cpu的，因此执行了iperf所在cpu A上。</li>
+<li>多线程创建完成后，内核后自动调度，把线程放到CPU B上运行，B上使用的udp socket的缓存还是执行CPU A下缓存的结果。</li>
+<li>结果：这样多个线程使用多个udp socet， 都使用了CPU A下缓存的结果。</li>
+<li>因此每个报文发送时候， 内核调用sk_dst_check， 造成多cpu间争抢路由的atomic操作。</li>
+</ol>
+<p><strong>sk_dst_check</strong>及配套函数:</p>
+<ol>
+<li>udp发包时候，发送前atk_dst_check检查缓存的之前查询路由nhc</li>
+<li>udp发包时候，每包查询路由，并把缓存的路由atomic，</li>
+<li>多进程发atomic+， 发送后atomic-，触发性能瓶颈。</li>
+<li>6.4版本已经做过了优化，使用rcuref_get降低ref的代价，性能仍然有待提高。</li>
+</ol>
+<h3 id="临时规避">2.1.3. 临时规避</h3><p>使用 ip 命令清理掉cache的路由结果， 强制socket重新查找下路由。</p>
+<figure class="highlight pf"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><code class="hljs pf">ip <span class="hljs-keyword">route</span> <span class="hljs-keyword">flush</span> cache<br></code></pre></td></tr></table></figure>
+<p>可以避免16个cpu争抢一个的问题， 但是因为各个线程是会被cpu在多个核直接来回调度的，<br>因此会造成， 当前CPU上，重新查找完，使用本cpu的cache。<br>线程会被调度到其他cpu上， 仍然使用上一轮cpu的cache。<br>不是非常完美， 但是可以规避这个危害。 </p>
+<h1 id="详细测试">3. 详细测试</h1><h2 id="测试环境：">3.1. 测试环境：</h2><ul>
+<li>内核：<br>Linux 6.6 (No multipath routing, no policy routing&#x2F;rules, no netfilter&#x2F;conntrack involved)</li>
+<li>iperf3:<br> iperf 3.21 (cJSON 1.7.15, compiled with pthreads support)</li>
+</ul>
+<h2 id="对比测试">3.2. 对比测试</h2><h3 id="单线程发送UDP：">3.2.1. 单线程发送UDP：</h3><pre><code class="hljs">  1. 测试命令：iperf3 -u -c 1.1.1.37 -b 4G -t 120
+  2. 性能：2.7G 稳定，RX侧0丢包
+  3. client端：SI消耗单核cpu的35%， **iperf3****消耗100%。**
+  4. server端：SI 消耗单核cpu的17%，iperfi消耗35%。未到瓶颈 
+</code></pre>
+<h3 id="16线程发送-P16">3.2.2. 16线程发送: -P16</h3><ol>
+<li>性能在20G左右， 有抖动。</li>
+<li>client侧发送cpu 100%， SI有冲突，最高接近50%，不是瓶颈。<br>1. sk_dst_check: 9.29%,  占比继续上升。<br>2. dst_release占比 5.68%</li>
+<li>Server侧：si最高70+%，分散比TX侧队列稍好。9个队列。</li>
+<li></li>
+</ol>
+<h3 id="热点函数：sk-dst-check">3.2.3. 热点函数：sk_dst_check</h3>  <figure class="highlight css"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><code class="hljs css">+    <span class="hljs-number">9.84%</span>     <span class="hljs-number">1.00%</span>  <span class="hljs-selector-attr">[kernel]</span>                 <span class="hljs-selector-attr">[k]</span> __ip_append_data<br>+    <span class="hljs-number">7.83%</span>     <span class="hljs-number">7.83%</span>  <span class="hljs-selector-attr">[kernel]</span>                 <span class="hljs-selector-attr">[k]</span> sk_dst_check<br>+    <span class="hljs-number">7.45%</span>     <span class="hljs-number">0.15%</span>  <span class="hljs-selector-attr">[kernel]</span>                 <span class="hljs-selector-attr">[k]</span> handle_softirqs<br>+    <span class="hljs-number">7.26%</span>     <span class="hljs-number">0.01%</span>  <span class="hljs-selector-attr">[kernel]</span>                 <span class="hljs-selector-attr">[k]</span> net_rx_action<br>+    <span class="hljs-number">7.25%</span>     <span class="hljs-number">0.00%</span>  <span class="hljs-selector-attr">[kernel]</span>                 <span class="hljs-selector-attr">[k]</span> napi_poll<br></code></pre></td></tr></table></figure>
+<h1 id="问题分析">4. 问题分析</h1><h2 id="udp-connect">4.1. udp connect</h2><p>udp connect单独放到X里讲述。</p>
+<h2 id="函数：sk-dst-check">4.2. 函数：sk_dst_check</h2><p>核心问题不在sk_dst_check，而在于check时，会通过get获取一下dst&#x2F;rtable这个结构体的引用。</p>
+<figure class="highlight gauss"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs gauss"> <span class="hljs-number">613</span> <span class="hljs-keyword">struct</span> <span class="hljs-type">dst_entry</span> *<span class="hljs-built_in">sk_dst_check</span>(struct sock *sk, u32 cookie)<br> <span class="hljs-number">614</span> &#123;<br> <span class="hljs-number">615</span>         <span class="hljs-keyword">struct</span> <span class="hljs-type">dst_entry</span> *dst = <span class="hljs-built_in">sk_dst_get</span>(sk);<br>...<br> <span class="hljs-number">625</span>         <span class="hljs-keyword">return</span> dst;<br> <span class="hljs-number">626</span> &#125;<br></code></pre></td></tr></table></figure>
+
+<h2 id="函数：-sk-dst-get">4.3. 函数： sk_dst_get</h2><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">2149 </span>static inline struct dst_entry *<br><span class="hljs-symbol">2150 </span>sk_dst_get(struct sock *sk)<br><span class="hljs-symbol">2151 </span>&#123;<br><span class="hljs-symbol">2152 </span>        struct dst_entry *dst;<br><span class="hljs-symbol">2153 </span><br><span class="hljs-symbol">2154 </span>        rcu_read_lock();<br><span class="hljs-symbol">2155 </span>        dst = rcu_dereference(sk-&gt;sk_dst_cache);<br><span class="hljs-symbol">2156 </span>        <span class="hljs-keyword">if</span> (dst &amp;&amp; !rcuref_get(&amp;dst-&gt;__rcuref))<br><span class="hljs-symbol">2157 </span>                dst = NULL;<br><span class="hljs-symbol">2158 </span>        rcu_read_unlock();<br><span class="hljs-symbol">2159 </span>        <span class="hljs-keyword">return</span> dst;<br><span class="hljs-symbol">2160 </span>&#125;<br></code></pre></td></tr></table></figure>
+
+<h2 id="函数：-dst-release">4.4. 函数： dst_release</h2><figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">164 </span>void dst_release(struct dst_entry *dst)<br><span class="hljs-symbol">165 </span>&#123;<br><span class="hljs-symbol">166 </span>        <span class="hljs-keyword">if</span> (dst &amp;&amp; rcuref_put(&amp;dst-&gt;__rcuref))<br><span class="hljs-symbol">167 </span>                call_rcu_hurry(&amp;dst-&gt;rcu_head, dst_destroy_rcu);<br><span class="hljs-symbol">168 </span>&#125;<br><span class="hljs-symbol">169 </span>EXPORT_SYMBOL(dst_release);<br></code></pre></td></tr></table></figure>
+<h2 id="内核优化">4.5. 内核优化</h2><p>   内核在6.4版本里已经包含了一个优化， 把atomic操作替换成了rcuf操作。<br>   但是在这个测试场景下， 使用10G以上带宽的流量，cpu争抢rcf，依然会占用10%的消耗。<br>   rcuf为什么还这么大消耗，TODO。</p>
+<h3 id="patch-bc9d3a9f2afca">4.5.1. patch: bc9d3a9f2afca</h3><p><a target="_blank" rel="noopener" href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=bc9d3a9f2afca189a6ae40225b6985e3c775375e">https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=bc9d3a9f2afca189a6ae40225b6985e3c775375e</a></p>
+<h3 id="patch核心改动">4.5.2. patch核心改动</h3><figure class="highlight diff"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><code class="hljs diff"><span class="hljs-meta">@@ -75,16 +76,16 @@</span> struct dst_entry &#123;<br> 	__u32			tclassid;<br> #ifndef CONFIG_64BIT<br> 	struct lwtunnel_state   *lwtstate;<br><span class="hljs-deletion">-	atomic_t		__refcnt;	/* 32-bit offset 64 */</span><br><span class="hljs-addition">+	rcuref_t		__rcuref;	/* 32-bit offset 64 */</span><br> #endif<br> 	netdevice_tracker	dev_tracker;<br></code></pre></td></tr></table></figure>
+<h3 id="patch描述">4.5.3. patch描述</h3><figure class="highlight pgsql"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><code class="hljs pgsql">net: dst: Switch <span class="hljs-keyword">to</span> rcuref_t reference counting<br>Under high contention dst_entry::__refcnt becomes a significant bottleneck.<br><br>atomic_inc_not_zero() <span class="hljs-keyword">is</span> implemented <span class="hljs-keyword">with</span> a cmpxchg() <span class="hljs-keyword">loop</span>, which goes <span class="hljs-keyword">into</span><br>high retry rates <span class="hljs-keyword">on</span> contention.<br><br>Switch the reference count <span class="hljs-keyword">to</span> rcuref_t which results <span class="hljs-keyword">in</span> a significant<br>performance gain. <span class="hljs-keyword">Rename</span> the reference count member <span class="hljs-keyword">to</span> __rcuref <span class="hljs-keyword">to</span> reflect<br>the change.<br><br>The gain <span class="hljs-keyword">depends</span> <span class="hljs-keyword">on</span> the micro-architecture <span class="hljs-keyword">and</span> the number <span class="hljs-keyword">of</span> concurrent<br>operations <span class="hljs-keyword">and</span> has been measured <span class="hljs-keyword">in</span> the range <span class="hljs-keyword">of</span> +<span class="hljs-number">25</span>% <span class="hljs-keyword">to</span> +<span class="hljs-number">130</span>% <span class="hljs-keyword">with</span> a<br>localhost memtier/memcached benchmark which amplifies the problem<br>massively.<br><br>Running the memtier/memcached benchmark <span class="hljs-keyword">over</span> a <span class="hljs-type">real</span> (<span class="hljs-number">1</span>Gb) network<br><span class="hljs-keyword">connection</span> the <span class="hljs-keyword">conversion</span> <span class="hljs-keyword">on</span> top <span class="hljs-keyword">of</span> the <span class="hljs-keyword">false</span> sharing fix <span class="hljs-keyword">for</span> struct<br>dst_entry::__refcnt results <span class="hljs-keyword">in</span> a total gain <span class="hljs-keyword">in</span> the <span class="hljs-number">2</span>%<span class="hljs-number">-5</span>% range <span class="hljs-keyword">over</span> the<br>upstream baseline.<br><br>Reported-<span class="hljs-keyword">by</span>: Wangyang Guo &lt;wangyang.guo@intel.com&gt;<br>Reported-<span class="hljs-keyword">by</span>: Arjan Van De Ven &lt;arjan.van.de.ven@intel.com&gt;<br>Signed-<span class="hljs-keyword">off</span>-<span class="hljs-keyword">by</span>: Thomas Gleixner &lt;tglx@linutronix.de&gt;<br>Link: https://lore.kernel.org/r/<span class="hljs-number">20230307125538.989175656</span>@linutronix.de<br>Link: https://lore.kernel.org/r/<span class="hljs-number">20230323102800.215027837</span>@linutronix.de<br>Signed-<span class="hljs-keyword">off</span>-<span class="hljs-keyword">by</span>: Jakub Kicinski &lt;kuba@kernel.org&gt;<br></code></pre></td></tr></table></figure>
+
+
+
+                
+              </div>
+            
+            <hr/>
+            <div>
+              <div class="post-metas my-3">
+  
+  
+    <div class="post-meta">
+      <i class="iconfont icon-tags"></i>
+      
+        <a href="/tags/socket/" class="print-no-link">#socket</a>
+      
+    </div>
+  
+</div>
+
+
+              
+  
+
+  <div class="license-box my-3">
+    <div class="license-title">
+      <div>iperf3性能热点函数sk_dst_check问题分析</div>
+      <div>https://martinbj2008.github.io/2026/09/30/iperf3-hot-function-sk-dst-check/</div>
+    </div>
+    <div class="license-meta">
+      
+        <div class="license-meta-item">
+          <div>Author</div>
+          <div>Martinbj2008</div>
+        </div>
+      
+      
+        <div class="license-meta-item license-meta-date">
+          <div>Posted on</div>
+          <div>September 30, 2026</div>
+        </div>
+      
+      
+      
+        <div class="license-meta-item">
+          <div>Licensed under</div>
+          <div>
+            
+              
+              
+                <a class="print-no-link" target="_blank" href="https://creativecommons.org/licenses/by/4.0/">
+                  <span class="hint--top hint--rounded" aria-label="BY - Attribution">
+                    <i class="iconfont icon-cc-by"></i>
+                  </span>
+                </a>
+              
+            
+          </div>
+        </div>
+      
+    </div>
+    <div class="license-icon iconfont"></div>
+  </div>
+
+
+
+              
+                <div class="post-prevnext my-3">
+                  <article class="post-prev col-6">
+                    
+                    
+                  </article>
+                  <article class="post-next col-6">
+                    
+                    
+                      <a href="/2026/09/29/udp-connect/" title="Linux 6.6 UDP Socket connect 调用链源码分析">
+                        <span class="hidden-mobile">Linux 6.6 UDP Socket connect 调用链源码分析</span>
+                        <span class="visible-mobile">Next</span>
+                        <i class="iconfont icon-arrowright"></i>
+                      </a>
+                    
+                  </article>
+                </div>
+              
+            </div>
+
+            
+          </article>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-col d-none d-lg-block col-lg-2">
+      
+  <aside class="sidebar" style="margin-left: -1rem">
+    <div id="toc">
+  <p class="toc-header">
+    <i class="iconfont icon-list"></i>
+    <span>Table of Contents</span>
+  </p>
+  <div class="toc-body" id="toc-body"></div>
+</div>
+
+
+
+  </aside>
+
+
+    </div>
+  </div>
+</div>
+
+
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+  
+
+
+
+
+
+
+
+    
+
+    
+      <a id="scroll-top-button" aria-label="TOP" href="#" role="button">
+        <i class="iconfont icon-arrowup" aria-hidden="true"></i>
+      </a>
+    
+
+    
+      <div class="modal fade" id="modalSearch" tabindex="-1" role="dialog" aria-labelledby="ModalLabel"
+     aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable modal-lg" role="document">
+    <div class="modal-content">
+      <div class="modal-header text-center">
+        <h4 class="modal-title w-100 font-weight-bold">Search</h4>
+        <button type="button" id="local-search-close" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body mx-3">
+        <div class="md-form mb-5">
+          <input type="text" id="local-search-input" class="form-control validate">
+          <label data-error="x" data-success="v" for="local-search-input">Keyword</label>
+        </div>
+        <div class="list-group" id="local-search-result"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+    
+
+    
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+  
+    <div class="footer-content">
+       <a href="https://hexo.io" target="_blank" rel="nofollow noopener"><span>Hexo</span></a> <i class="iconfont icon-love"></i> <a href="https://github.com/fluid-dev/hexo-theme-fluid" target="_blank" rel="nofollow noopener"><span>Fluid</span></a> 
+    </div>
+  
+  
+  
+</div>
+
+  </footer>
+
+  <!-- Scripts -->
+  
+  <script  src="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.js" ></script>
+  <link  rel="stylesheet" href="https://lib.baomitu.com/nprogress/0.2.0/nprogress.min.css" />
+
+  <script>
+    NProgress.configure({"showSpinner":false,"trickleSpeed":100})
+    NProgress.start()
+    window.addEventListener('load', function() {
+      NProgress.done();
+    })
+  </script>
+
+
+<script  src="https://lib.baomitu.com/jquery/3.6.4/jquery.min.js" ></script>
+<script  src="https://lib.baomitu.com/twitter-bootstrap/4.6.1/js/bootstrap.min.js" ></script>
+<script  src="/js/events.js" ></script>
+<script  src="/js/plugins.js" ></script>
+
+
+  <script  src="https://lib.baomitu.com/typed.js/2.0.12/typed.min.js" ></script>
+  <script>
+    (function (window, document) {
+      var typing = Fluid.plugins.typing;
+      var subtitle = document.getElementById('subtitle');
+      if (!subtitle || !typing) {
+        return;
+      }
+      var text = subtitle.getAttribute('data-typed-text');
+      
+        typing(text);
+      
+    })(window, document);
+  </script>
+
+
+
+
+  
+    <script  src="/js/img-lazyload.js" ></script>
+  
+
+
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/tocbot/4.20.1/tocbot.min.js', function() {
+    var toc = jQuery('#toc');
+    if (toc.length === 0 || !window.tocbot) { return; }
+    var boardCtn = jQuery('#board-ctn');
+    var boardTop = boardCtn.offset().top;
+
+    function isExpandAllEnabled() {
+      return CONFIG.toc && CONFIG.toc.expand_all === true;
+    }
+    function expandAllToc() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .tocbot-is-collapsed').removeClass('tocbot-is-collapsed');
+    }
+    function updateTocToggle($li, $childList) {
+      var $toggle = $li.children('.toc-toggle');
+      if ($toggle.length === 0) { return; }
+      var collapsed = $childList.hasClass('tocbot-is-collapsed');
+      $toggle
+        .toggleClass('toc-toggle-collapsed', collapsed)
+        .toggleClass('toc-toggle-expanded', !collapsed);
+    }
+    function bindTocToggle() {
+      if (!isExpandAllEnabled()) { return; }
+      jQuery('#toc-body .toc-list-item').each(function() {
+        var $li = jQuery(this);
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) {
+          if ($li.children('.toc-toggle').length === 0) {
+            $li.prepend('<span class="toc-toggle toc-toggle-placeholder" aria-hidden="true">›</span>');
+          }
+          return;
+        }
+
+        if ($li.children('.toc-toggle').length === 0) {
+          $li.prepend('<span class="toc-toggle toc-toggle-expanded" aria-hidden="true">›</span>');
+        }
+        updateTocToggle($li, $childList);
+      });
+      jQuery('#toc-body').off('click.tocToggle').on('click.tocToggle', '.toc-toggle', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $li = jQuery(this).parent('.toc-list-item');
+        var $childList = $li.children('ol');
+        if ($childList.length === 0) { return; }
+        $childList.toggleClass('tocbot-is-collapsed');
+        updateTocToggle($li, $childList);
+      });
+      if (!window.__tocToggleObserver) {
+        window.__tocToggleObserver = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type !== 'attributes' || mutation.attributeName !== 'class') { return; }
+            var $list = jQuery(mutation.target);
+            var $li = $list.parent('.toc-list-item');
+            if ($li.length === 0) { return; }
+            updateTocToggle($li, $list);
+          });
+        });
+        jQuery('#toc-body ol').each(function() {
+          window.__tocToggleObserver.observe(this, { attributes: true });
+        });
+      }
+    }
+    var tocConfig = Object.assign({
+      tocSelector     : '#toc-body',
+      contentSelector : '.markdown-body',
+      linkClass       : 'tocbot-link',
+      activeLinkClass : 'tocbot-active-link',
+      listClass       : 'tocbot-list',
+      isCollapsedClass: 'tocbot-is-collapsed',
+      collapsibleClass: 'tocbot-is-collapsible',
+      scrollSmooth    : true,
+      includeTitleTags: true,
+      headingsOffset  : -boardTop,
+    }, CONFIG.toc);
+    if (isExpandAllEnabled()) {
+      tocConfig.collapseDepth = 6;
+    }
+    window.tocbot.init(tocConfig);
+    if (toc.find('.toc-list-item').length > 0) {
+      toc.css('visibility', 'visible');
+    }
+    expandAllToc();
+    bindTocToggle();
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('tocbot' in window) {
+        tocbot.refresh();
+        var toc = jQuery('#toc');
+        if (toc.length === 0 || !tocbot) {
+          return;
+        }
+        if (toc.find('.toc-list-item').length > 0) {
+          toc.css('visibility', 'visible');
+        }
+        expandAllToc();
+        bindTocToggle();
+      }
+    });
+  });
+</script>
+
+
+  <script src=https://lib.baomitu.com/clipboard.js/2.0.11/clipboard.min.js></script>
+
+  <script>Fluid.plugins.codeWidget();</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/anchor-js/5.0.0/anchor.min.js', function() {
+    window.anchors.options = {
+      placement: CONFIG.anchorjs.placement,
+      visible  : CONFIG.anchorjs.visible
+    };
+    if (CONFIG.anchorjs.icon) {
+      window.anchors.options.icon = CONFIG.anchorjs.icon;
+    }
+    var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+    var res = [];
+    for (var item of el) {
+      res.push('.markdown-body > ' + item.trim());
+    }
+    if (CONFIG.anchorjs.placement === 'left') {
+      window.anchors.options.class = 'anchorjs-link-left';
+    }
+    window.anchors.add(res.join(', '));
+
+    Fluid.events.registerRefreshCallback(function() {
+      if ('anchors' in window) {
+        anchors.removeAll();
+        var el = (CONFIG.anchorjs.element || 'h1,h2,h3,h4,h5,h6').split(',');
+        var res = [];
+        for (var item of el) {
+          res.push('.markdown-body > ' + item.trim());
+        }
+        if (CONFIG.anchorjs.placement === 'left') {
+          anchors.options.class = 'anchorjs-link-left';
+        }
+        anchors.add(res.join(', '));
+      }
+    });
+  });
+</script>
+
+
+  
+<script>
+  Fluid.utils.createScript('https://lib.baomitu.com/fancybox/3.5.7/jquery.fancybox.min.js', function() {
+    Fluid.plugins.fancyBox();
+  });
+</script>
+
+
+  <script>Fluid.plugins.imageCaption();</script>
+
+  <script  src="/js/local-search.js" ></script>
+
+
+
+
+
+<!-- 主题的启动项，将它保持在最底部 -->
+<!-- the boot of the theme, keep it at the bottom -->
+<script  src="/js/boot.js" ></script>
+
+
+  
+
+  <noscript>
+    <div class="noscript-warning">Blog works best with JavaScript enabled</div>
+  </noscript>
+</body>
+</html>

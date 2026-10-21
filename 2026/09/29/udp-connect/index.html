@@ -22,12 +22,12 @@
     <meta name="description" content="1. 概述UDP 是无连接协议，但应用程序仍可调用 connect() 将 socket 与远端地址绑定。对于 UDP 而言，connect() 并不进行三次握手，而是完成路由查找及 socket 状态和路由缓存的更新。 1.1. 小结UDP socket 的 connect() 调用在内核中经历了一条清晰的路径：  系统调用层  系统调用通过 ops 找到 ip4_datagram_connec">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Linux 6.6 UDP Socket connect 调用链源码分析">
-<meta property="og:url" content="https://martinbj2008.github.io/2026/09/24/udp-connect/index.html">
+<meta property="og:url" content="https://martinbj2008.github.io/2026/09/29/udp-connect/index.html">
 <meta property="og:site_name" content="Kernel Study Notes">
 <meta property="og:description" content="1. 概述UDP 是无连接协议，但应用程序仍可调用 connect() 将 socket 与远端地址绑定。对于 UDP 而言，connect() 并不进行三次握手，而是完成路由查找及 socket 状态和路由缓存的更新。 1.1. 小结UDP socket 的 connect() 调用在内核中经历了一条清晰的路径：  系统调用层  系统调用通过 ops 找到 ip4_datagram_connec">
 <meta property="og:locale" content="en_US">
-<meta property="article:published_time" content="2026-09-24T08:35:23.567Z">
-<meta property="article:modified_time" content="2026-09-24T08:35:23.570Z">
+<meta property="article:published_time" content="2026-09-29T11:13:16.495Z">
+<meta property="article:modified_time" content="2026-09-29T11:13:16.495Z">
 <meta property="article:author" content="Martinbj2008">
 <meta name="twitter:card" content="summary_large_image">
   
@@ -313,8 +313,8 @@
     
       <span class="post-meta">
         <i class="iconfont icon-date-fill" aria-hidden="true"></i>
-        <time datetime="2026-09-24 16:35" pubdate>
-          September 24, 2026 pm
+        <time datetime="2026-09-29 19:13" pubdate>
+          September 29, 2026 pm
         </time>
       </span>
     
@@ -325,7 +325,7 @@
       <span class="post-meta mr-2">
         <i class="iconfont icon-chart"></i>
         
-          13k words
+          14k words
         
       </span>
     
@@ -336,7 +336,7 @@
         
         
         
-          111 mins
+          121 mins
         
       </span>
     
@@ -423,6 +423,8 @@
 <li><p>核心入口：<code>ip4_datagram_connect()</code></p>
 </li>
 </ul>
+<figure class="highlight dns"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br></pre></td><td class="code"><pre><code class="hljs dns">sys_connect<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span><br>└─ ip4_datagram_connect<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span><br>   └─ __ip4_datagram_connect<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span><br>      ├─ ip_route_connect<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span><br>      │  ├─ if <span class="hljs-punctuation">(</span>!dst || !src<span class="hljs-punctuation">)</span> &#123;  // udp socket 源端口为 <span class="hljs-number">0</span><br>      │  │  ├─ __ip_route_output_key<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span>  // 暂不展开，后续还会进入<br>      │  │  └─ flowi4_update_output<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span>  // 拿首次路由结果回填 fl 的出口和源目 IP<br>      │  └─ return ip_route_output_flow<span class="hljs-punctuation">(</span>net, fl4, sk<span class="hljs-punctuation">)</span>  // 使用更新后的 fl 再次查询路由<br>      │     ├─ rt = __ip_route_output_key<span class="hljs-punctuation">(</span>net, flp4<span class="hljs-punctuation">)</span><br>      │     │  └─ return ip_route_output_key_hash<span class="hljs-punctuation">(</span>net, flp4, NULL<span class="hljs-punctuation">)</span><br>      │     │     └─ rth = ip_route_output_key_hash_rcu<span class="hljs-punctuation">(</span>...<span class="hljs-punctuation">)</span><br>      │     │        ├─ fib_lookup<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span>  // FIB 路由查找，&lt;核心入口&gt;<br>      │     │        ├─ fib_select_path<span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span>  // 从多个 nexthop 中选取一个<br>      │     │        ├─ reth = __mkroute_output<span class="hljs-punctuation">(</span>...<span class="hljs-punctuation">)</span><br>      │     │        │  ├─ if <span class="hljs-punctuation">(</span>fi<span class="hljs-punctuation">)</span> &#123;<br>      │     │        │  │  ├─ prth = raw_cpu_ptr<span class="hljs-punctuation">(</span>nhc-&gt;nhc_pcpu_rth_output<span class="hljs-punctuation">)</span><br>      │     │        │  │  └─ if <span class="hljs-punctuation">(</span>rt_cache_valid<span class="hljs-punctuation">(</span>rth<span class="hljs-punctuation">)</span> &amp;&amp; dst_hold_safe<span class="hljs-punctuation">(</span>&amp;rth-&gt;dst<span class="hljs-punctuation">)</span><span class="hljs-punctuation">)</span><br>      │     │        │  │     └─ return rth  // 本 CPU 上后续路由查找在这里返回<br>      │     │        │  ├─ rth = rt_dst_alloc<span class="hljs-punctuation">(</span>...<span class="hljs-punctuation">)</span><br>      │     │        │  ├─ rt_set_nexthop<span class="hljs-punctuation">(</span>rth, fl4-&gt;daddr, res, fnhe, fi, type, <span class="hljs-number">0</span>, do_cache<span class="hljs-punctuation">)</span><br>      │     │        │  │  ├─ nhc = FIB_RES_NHC<span class="hljs-punctuation">(</span>*res<span class="hljs-punctuation">)</span><br>      │     │        │  │  └─ rt_cache_route<span class="hljs-punctuation">(</span>nhc, rt<span class="hljs-punctuation">)</span>  // 把 rtable 设置到当前 CPU 的 nhc-&gt;nhc_pcpu_rth_output 上<br>      │     │        │  │     ├─ p = <span class="hljs-punctuation">(</span>struct rtable **<span class="hljs-punctuation">)</span>raw_cpu_ptr<span class="hljs-punctuation">(</span>nhc-&gt;nhc_pcpu_rth_output<span class="hljs-punctuation">)</span><br>      │     │        │  │     └─ cmpxchg<span class="hljs-punctuation">(</span>p, orig, rt<span class="hljs-punctuation">)</span><br>      │     │        │  └─ return rth<br>      │     │        └─ return rth<br>      │     ├─ // XFRM 部分不影响结果，可忽略<br>      │     └─ return rt<br>      ├─ sk-&gt;sk_state = TCP_ESTABLISHED<span class="hljs-comment">;</span><br>      └─ sk_dst_set<span class="hljs-punctuation">(</span>sk, &amp;rt-&gt;dst<span class="hljs-punctuation">)</span>  // rt 是个 percpu 的 rtable<br></code></pre></td></tr></table></figure>
+
 <h2 id="系统调用入口函数-sys-connect">2.1. 系统调用入口函数 sys_connect</h2><figure class="highlight text"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><code class="hljs text">1 --&gt; sys_connect<br>2 --&gt; --&gt; ip4_datagram_connect<br>3 --&gt; --&gt; --&gt; __ip4_datagram_connect<br>4 --&gt; --&gt; --&gt; --&gt; ip_route_connect<br>5 --&gt; --&gt; --&gt; --&gt; --&gt; if (!dst || !src) &#123;  // udp socket 源端口为 0<br>6 --&gt; --&gt; --&gt; --&gt; --&gt; --&gt; __ip_route_output_key  // 暂不展开，后续还会进入<br>6 --&gt; --&gt; --&gt; --&gt; --&gt; --&gt; flowi4_update_output  // 拿首次路由结果回填 fl 的出口和源目 IP<br>5 --&gt; --&gt; --&gt; --&gt; --&gt; &#125;<br>5 --&gt; --&gt; --&gt; --&gt; --&gt; return ip_route_output_flow(net, fl4, sk);  // 使用更新后的 fl 再次查询路由<br>4 --&gt; --&gt; --&gt; --&gt; sk-&gt;sk_state = TCP_ESTABLISHED;<br>4 --&gt; --&gt; --&gt; --&gt; sk_dst_set(sk, &amp;rt-&gt;dst);  // rt 是个 percpu 的 rtable<br></code></pre></td></tr></table></figure>
 
 <span id="more"></span>
@@ -643,7 +645,7 @@
   <div class="license-box my-3">
     <div class="license-title">
       <div>Linux 6.6 UDP Socket connect 调用链源码分析</div>
-      <div>https://martinbj2008.github.io/2026/09/24/udp-connect/</div>
+      <div>https://martinbj2008.github.io/2026/09/29/udp-connect/</div>
     </div>
     <div class="license-meta">
       
@@ -655,7 +657,7 @@
       
         <div class="license-meta-item license-meta-date">
           <div>Posted on</div>
-          <div>September 24, 2026</div>
+          <div>September 29, 2026</div>
         </div>
       
       
@@ -687,9 +689,9 @@
                   <article class="post-prev col-6">
                     
                     
-                      <a href="/2026/09/29/html-pic-md/" title="deepseek 总结的html绘图规范">
+                      <a href="/2026/09/30/iperf3-hot-function-sk-dst-check/" title="iperf3性能热点函数sk_dst_check问题分析">
                         <i class="iconfont icon-arrowleft"></i>
-                        <span class="hidden-mobile">deepseek 总结的html绘图规范</span>
+                        <span class="hidden-mobile">iperf3性能热点函数sk_dst_check问题分析</span>
                         <span class="visible-mobile">Previous</span>
                       </a>
                     
@@ -697,8 +699,8 @@
                   <article class="post-next col-6">
                     
                     
-                      <a href="/2026/07/16/2026-07-16-acpi-to-device-add.ai/" title="内核启动：从 ACPI 到 device_add 的 PCI 枚举调用链">
-                        <span class="hidden-mobile">内核启动：从 ACPI 到 device_add 的 PCI 枚举调用链</span>
+                      <a href="/2026/09/29/udp-GRO-summary/" title="Linux 6.6 UDP GRO 收包调用链源码分析">
+                        <span class="hidden-mobile">Linux 6.6 UDP GRO 收包调用链源码分析</span>
                         <span class="visible-mobile">Next</span>
                         <i class="iconfont icon-arrowright"></i>
                       </a>
