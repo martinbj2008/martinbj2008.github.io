@@ -19,15 +19,15 @@
   <meta name="author" content="Martinbj2008">
   <meta name="keywords" content="">
   
-    <meta name="description" content="0.1. netlink介绍  netlink是一种用于内核和用户空间进行数据交互的socket。 关于netlink的具体介绍，google给出更好的解释。  netlink是socket的一种，其的family号是PF_NETLINK, netlink包括很多种proto，并且用户可以根据自己的需要进行扩展。每个netlinksocket都有一个pid，该pid在所属proto下是唯一的。 在">
+    <meta name="description" content="0.1. netlink介绍netlink是一种用于内核和用户空间进行数据交互的socket。关于netlink的具体介绍，google给出更好的解释。 1234netlink是socket的一种，其的family号是PF_NETLINK.netlink包括很多种proto，并且用户可以根据自己的需要进行扩展。每个netlinksocket都有一个pid，该pid在所属proto下是唯一的。在ne">
 <meta property="og:type" content="article">
 <meta property="og:title" content="Netlink in kernel(continue)">
 <meta property="og:url" content="https://martinbj2008.github.io/2013/03/15/2013-03-15-netlink-in-kernel/index.html">
 <meta property="og:site_name" content="Kernel Study Notes">
-<meta property="og:description" content="0.1. netlink介绍  netlink是一种用于内核和用户空间进行数据交互的socket。 关于netlink的具体介绍，google给出更好的解释。  netlink是socket的一种，其的family号是PF_NETLINK, netlink包括很多种proto，并且用户可以根据自己的需要进行扩展。每个netlinksocket都有一个pid，该pid在所属proto下是唯一的。 在">
+<meta property="og:description" content="0.1. netlink介绍netlink是一种用于内核和用户空间进行数据交互的socket。关于netlink的具体介绍，google给出更好的解释。 1234netlink是socket的一种，其的family号是PF_NETLINK.netlink包括很多种proto，并且用户可以根据自己的需要进行扩展。每个netlinksocket都有一个pid，该pid在所属proto下是唯一的。在ne">
 <meta property="og:locale" content="en_US">
 <meta property="article:published_time" content="2013-03-14T16:00:00.000Z">
-<meta property="article:modified_time" content="2026-09-23T04:14:04.747Z">
+<meta property="article:modified_time" content="2026-10-22T12:31:32.747Z">
 <meta property="article:author" content="Martinbj2008">
 <meta property="article:tag" content="netlink">
 <meta name="twitter:card" content="summary_large_image">
@@ -85,7 +85,8 @@
 
 
   
-<meta name="generator" content="Hexo 8.1.2"></head>
+<meta name="generator" content="Hexo 8.1.2"><link rel="alternate" href="/atom.xml" title="Kernel Study Notes" type="application/atom+xml">
+</head>
 
 
 <body>
@@ -337,7 +338,7 @@
         
         
         
-          117 mins
+          121 mins
         
       </span>
     
@@ -381,25 +382,105 @@
             
               <div class="markdown-body">
                 
-                <h2 id="netlink介绍">0.1. netlink介绍</h2><p>  netlink是一种用于内核和用户空间进行数据交互的socket。 关于netlink的具体介绍，google给出更好的解释。<br>  netlink是socket的一种，其的family号是PF_NETLINK, netlink包括很多种proto，并且用户可以根据自己的需要进行扩展。<br>每个netlinksocket都有一个pid，该pid在所属proto下是唯一的。 在netlink消息<br>传递是，pid常被用来标识目的地socket。 </p>
-<p>Every netlink socket is indicated by (net, proto, pid). </p>
+                <h2 id="netlink介绍">0.1. netlink介绍</h2><p>netlink是一种用于内核和用户空间进行数据交互的socket。<br>关于netlink的具体介绍，google给出更好的解释。</p>
+<figure class="highlight tcl"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><code class="hljs tcl">netlink是<span class="hljs-keyword">socket</span>的一种，其的family号是PF_NETLINK.<br>netlink包括很多种proto，并且用户可以根据自己的需要进行扩展。<br>每个netlinksocket都有一个<span class="hljs-keyword">pid</span>，该<span class="hljs-keyword">pid</span>在所属proto下是唯一的。<br>在netlink消息传递是，<span class="hljs-keyword">pid</span>常被用来标识目的地<span class="hljs-keyword">socket</span>。<br></code></pre></td></tr></table></figure>
+
+<p>Every netlink socket is indicated by (net, proto, pid).</p>
 <ol>
-<li>net: the net namespace. </li>
-<li>proto: netlink proto. </li>
+<li>net: the net namespace.</li>
+<li>proto: netlink proto.</li>
 <li>pid:</li>
 </ol>
 <span id="more"></span>
 
-<p>netlink的消息可以分为两种类型： 单播(unicast)和组播(broadcast). </p>
+<p>netlink的消息可以分为两种类型：</p>
 <ol>
-<li>单播：目的socket是固定的。 </li>
-<li>组播：目的socket可以是一个，或者多个，甚至还可能是没有。 组播消息为被发送到每一个监听对应group的socket的接受队列上。</li>
+<li>单播(unicast)：目的socket是固定的。</li>
+<li>组播(broadcast)：目的socket可以是一个，或者多个，甚至还可能是没有。<ul>
+<li>组播发送时，会指定group作为目的地参数。</li>
+<li>每一个监听对应group的socket，都会收到组播消息，并把消息挂载socket自己的接收队列上。</li>
+</ul>
+</li>
 </ol>
-<p>netlink的使用跟普通socket基本相同。 “create&#x2F;bind send&#x2F;recv”</p>
-<p>每个netlink socket在创建时候必须指明 family 和proto。 family当然是netlink， proto可以个netlink支持的任意一个。</p>
-<p>每个proto下都可以有包含很多个组播组（group）。 如xfrm proto下面包含</p>
-<p>每个socket的创建是都可以指定对一个或者几个group感兴趣， 那么内核就自动将相关的group上的组播消息组播到该socket上。 该socket通过recv函数接受这些组播消息。</p>
-<p>注：每个netlinksocket在创建的时候必须指明所属的proto。 因此每个netlink socket只能监听其所在proto下的group组播消息。</p>
+<p>netlink的使用跟普通socket基本相同, 有</p>
+<ul>
+<li>create</li>
+<li>bind</li>
+<li>send</li>
+<li>recv<br>等系统调用。</li>
+</ul>
+<p>每个netlink socket在创建时候必须指明 family 和proto。<br>family当然是PF_NETLINK， proto可以个netlink支持的任意一个。</p>
+<table>
+<thead>
+<tr>
+<th>Proto</th>
+<th>典型用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>NETLINK_ROUTE</code></td>
+<td>网络配置与状态：link、地址、路由、邻居、流量控制；<code>ip</code> 命令主要使用它</td>
+</tr>
+<tr>
+<td><code>NETLINK_GENERIC</code></td>
+<td>通用 Netlink，承载许多内核子系统接口，如 <code>nl80211</code>（Wi-Fi）和 <code>devlink</code></td>
+</tr>
+<tr>
+<td><code>NETLINK_NETFILTER</code></td>
+<td>Netfilter 配置与事件，nftables 等使用</td>
+</tr>
+<tr>
+<td><code>NETLINK_XFRM</code></td>
+<td>IPsec&#x2F;XFRM 状态与策略配置</td>
+</tr>
+</tbody></table>
+<p>每个proto下都可以有包含很多个组播组（group）。 如ROUTE proto下的多播组：</p>
+<table>
+<thead>
+<tr>
+<th>多播组</th>
+<th>通知内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>RTNLGRP_LINK</code></td>
+<td>网络接口创建、删除、状态或属性变化</td>
+</tr>
+<tr>
+<td><code>RTNLGRP_NOTIFY</code></td>
+<td>路由子系统通用通知</td>
+</tr>
+<tr>
+<td><code>RTNLGRP_NEIGH</code></td>
+<td>ARP&#x2F;邻居表变化</td>
+</tr>
+<tr>
+<td><code>RTNLGRP_IPV4_IFADDR</code></td>
+<td>IPv4 地址变化</td>
+</tr>
+<tr>
+<td><code>RTNLGRP_IPV6_IFADDR</code></td>
+<td>IPv6 地址变化</td>
+</tr>
+<tr>
+<td><code>RTNLGRP_IPV4_ROUTE</code></td>
+<td>IPv4 路由变化</td>
+</tr>
+<tr>
+<td><code>RTNLGRP_IPV6_ROUTE</code></td>
+<td>IPv6 路由变化</td>
+</tr>
+<tr>
+<td>等等。。。。</td>
+<td></td>
+</tr>
+</tbody></table>
+<p>每个socket的创建是都可以订阅一个或者几个感兴趣的group，<br>后续有组播消息时，内核会自动将消息发送给socket，并挂载在接受队列上， 并等待socket通过recv函数接受这些组播消息。</p>
+<p>注：</p>
+<ul>
+<li>创建netlink socket的时候必须指明所属的proto。</li>
+<li>每个netlink socket只能监听其所在proto下的group组播消息。</li>
+</ul>
 <p>example： dump出内核里所有的interface， 那么我创建一个netlink socket， 然后调用send&#x2F;rcv让内核吧所有的interface信息输出。</p>
 <p>如果我们还要求： 监控interface状态改变， 比如 当”interface down&#x2F;up” 我们第一时间知道interface的新状态。 那么我们在创建sock的时候需指明要监听groupXX. group可以在创建socket时候指明， 也可以在socket创建后，通过set sockopt来更改。 当然也可在程序运行过程中通过sockopt更改。 这个group信息会保存在netlink sock的group里， 同时也会更新对应proto下的group信息。</p>
 <p>见示例代码。xxx todo.</p>
@@ -410,15 +491,15 @@
 <p>也就是每个proto都对应一个<code>struct netlink_table</code>.</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><code class="hljs c"><span class="hljs-number">119</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">netlink_table</span> &#123;</span><br><span class="hljs-number">120</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">nl_pid_hash</span> <span class="hljs-title">hash</span>;</span>          <span class="hljs-comment">/* store all the netlink socket with hash list */</span><br><span class="hljs-number">121</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">hlist_head</span> <span class="hljs-title">mc_list</span>;</span>            <span class="hljs-comment">/* store all the netlink socket listen broadcast netlink message */</span><br><span class="hljs-number">122</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">listeners</span> __<span class="hljs-title">rcu</span> *<span class="hljs-title">listeners</span>;</span>      <span class="hljs-comment">/* store with a bit(1) for each netlink broadcast type, which is listened by one or more netlink sockets in mc_list(line 121) */</span><br><span class="hljs-number">123</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> nl_nonroot;<br><span class="hljs-number">124</span>         <span class="hljs-type">unsigned</span> <span class="hljs-type">int</span> groups;            <span class="hljs-comment">/* the counts of bits in listeners(line 122)*/</span><br><span class="hljs-number">125</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">mutex</span> *<span class="hljs-title">cb_mutex</span>;</span><br><span class="hljs-number">126</span>         <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">module</span> *<span class="hljs-title">module</span>;</span><br><span class="hljs-number">127</span>         <span class="hljs-type">int</span> registered;             <span class="hljs-comment">/* avoid repeated register. */</span><br><span class="hljs-number">128</span> &#125;;<br></code></pre></td></tr></table></figure>
 
-<p>针对特定的一个proto: </p>
+<p>针对特定的一个proto:</p>
 <ol>
-<li>hash: 所有的proto类型的netlink socket 都放到这个hash链表里。 </li>
+<li>hash: 所有的proto类型的netlink socket 都放到这个hash链表里。</li>
 <li>mc_list: hash链表。记录希望监听组播消息的netlink socket.</li>
 <li>listeners: 记录哪些group被监听, 一个group占1位.</li>
-<li>nl_noroot: todo! </li>
-<li>groups: 被监听的group的总个数 </li>
-<li>cb_mutex: callback 函数用到的锁 </li>
-<li>module: 在lsm模式下使用（不严格）。 </li>
+<li>nl_noroot: todo!</li>
+<li>groups: 被监听的group的总个数</li>
+<li>cb_mutex: callback 函数用到的锁</li>
+<li>module: 在lsm模式下使用（不严格）。</li>
 <li>register: 是否被注册（占用）。</li>
 </ol>
 <p>同一个proto下的所有netlink socket都会挂载到 hash链上， 这些socket中凡是对希望监听group组播消息的， 都还会被挂载到mc_list上。 不论是要监听多少个group，每个sock都只作为mc_list一个节点，不会重复。</p>
@@ -433,6 +514,7 @@
 <p>netlink socket proto</p>
 <p>neilink支持的proto类型非常多。且可以自定义扩展(不建议), 建议使用generic进行扩展。</p>
 <figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br></pre></td><td class="code"><pre><code class="hljs c"> <span class="hljs-number">7</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_ROUTE           0       <span class="hljs-comment">/* Routing/device hook                          */</span></span><br> <span class="hljs-number">8</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_UNUSED          1       <span class="hljs-comment">/* Unused number                                */</span></span><br> <span class="hljs-number">9</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_USERSOCK        2       <span class="hljs-comment">/* Reserved for user mode socket protocols      */</span></span><br><span class="hljs-number">10</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_FIREWALL        3       <span class="hljs-comment">/* Firewalling hook                             */</span></span><br><span class="hljs-number">11</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_SOCK_DIAG       4       <span class="hljs-comment">/* socket monitoring                            */</span></span><br><span class="hljs-number">12</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_NFLOG           5       <span class="hljs-comment">/* netfilter/iptables ULOG */</span></span><br><span class="hljs-number">13</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_XFRM            6       <span class="hljs-comment">/* ipsec */</span></span><br><span class="hljs-number">14</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_SELINUX         7       <span class="hljs-comment">/* SELinux event notifications */</span></span><br><span class="hljs-number">15</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_ISCSI           8       <span class="hljs-comment">/* Open-iSCSI */</span></span><br><span class="hljs-number">16</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_AUDIT           9       <span class="hljs-comment">/* auditing */</span></span><br><span class="hljs-number">17</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_FIB_LOOKUP      10</span><br><span class="hljs-number">18</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_CONNECTOR       11</span><br><span class="hljs-number">19</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_NETFILTER       12      <span class="hljs-comment">/* netfilter subsystem */</span></span><br><span class="hljs-number">20</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_IP6_FW          13</span><br><span class="hljs-number">21</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_DNRTMSG         14      <span class="hljs-comment">/* DECnet routing messages */</span></span><br><span class="hljs-number">22</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_KOBJECT_UEVENT  15      <span class="hljs-comment">/* Kernel messages to userspace */</span></span><br><span class="hljs-number">23</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_GENERIC         16</span><br><span class="hljs-number">24</span> <span class="hljs-comment">/* leave room for NETLINK_DM (DM Events) */</span><br><span class="hljs-number">25</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_SCSITRANSPORT   18      <span class="hljs-comment">/* SCSI Transports */</span></span><br><span class="hljs-number">26</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_ECRYPTFS        19</span><br><span class="hljs-number">27</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_RDMA            20</span><br><span class="hljs-number">28</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_CRYPTO          21      <span class="hljs-comment">/* Crypto layer */</span></span><br><span class="hljs-number">29</span><br><span class="hljs-number">30</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> NETLINK_INET_DIAG       NETLINK_SOCK_DIAG</span><br><span class="hljs-number">31</span><br><span class="hljs-number">32</span> <span class="hljs-meta">#<span class="hljs-keyword">define</span> MAX_LINKS 32</span><br></code></pre></td></tr></table></figure>
+
 <p>以下xfrm netlink为例，进行描述。</p>
 <p>Each proto of netlink has many groups, for example xfrm netlink:</p>
 <figure class="highlight basic"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br></pre></td><td class="code"><pre><code class="hljs basic"><span class="hljs-symbol">462 </span>enum xfrm_nlgroups &#123;<br><span class="hljs-symbol">463 </span>        XFRMNLGRP_NONE,<br><span class="hljs-symbol">464 </span>#define XFRMNLGRP_NONE          XFRMNLGRP_NONE<br><span class="hljs-symbol">465 </span>        XFRMNLGRP_ACQUIRE,<br><span class="hljs-symbol">466 </span>#define XFRMNLGRP_ACQUIRE       XFRMNLGRP_ACQUIRE<br><span class="hljs-symbol">467 </span>        XFRMNLGRP_EXPIRE,<br><span class="hljs-symbol">468 </span>#define XFRMNLGRP_EXPIRE        XFRMNLGRP_EXPIRE<br><span class="hljs-symbol">469 </span>        XFRMNLGRP_SA,<br><span class="hljs-symbol">470 </span>#define XFRMNLGRP_SA            XFRMNLGRP_SA<br><span class="hljs-symbol">471 </span>        XFRMNLGRP_POLICY,<br><span class="hljs-symbol">472 </span>#define XFRMNLGRP_POLICY        XFRMNLGRP_POLICY<br><span class="hljs-symbol">473 </span>        XFRMNLGRP_AEVENTS,<br><span class="hljs-symbol">474 </span>#define XFRMNLGRP_AEVENTS       XFRMNLGRP_AEVENTS<br><span class="hljs-symbol">475 </span>        XFRMNLGRP_REPORT,<br><span class="hljs-symbol">476 </span>#define XFRMNLGRP_REPORT        XFRMNLGRP_REPORT<br><span class="hljs-symbol">477 </span>        XFRMNLGRP_MIGRATE,<br><span class="hljs-symbol">478 </span>#define XFRMNLGRP_MIGRATE       XFRMNLGRP_MIGRATE<br><span class="hljs-symbol">479 </span>        XFRMNLGRP_MAPPING,<br><span class="hljs-symbol">480 </span>#define XFRMNLGRP_MAPPING       XFRMNLGRP_MAPPING<br><span class="hljs-symbol">481 </span>        __XFRMNLGRP_MAX<br><span class="hljs-symbol">482 </span>&#125;;<br><span class="hljs-symbol">483 </span>#define XFRMNLGRP_MAX   (__XFRMNLGRP_MAX - <span class="hljs-number">1</span>)<br></code></pre></td></tr></table></figure>
@@ -443,12 +525,12 @@
 <h3 id="xx">0.2.3. xx?</h3><ol>
 <li>xfrm_user_net_init</li>
 </ol>
-<p>  1.1 call netlink_kernel_create </p>
+<p>  1.1 call netlink_kernel_create</p>
 <p>  1.2 init the xfrm netlink part of corresponding net namespace.</p>
 <ol start="2">
 <li>netlink_kernel_create(__netlink_kernel_create)</li>
 </ol>
-<pre><code class="hljs">2.1 create a netlink xfrm socket(kernel), which will be used a netlink kernel socket to rcv(queue) all the message send to “kernel/xfrm” 
+<pre><code class="hljs">2.1 create a netlink xfrm socket(kernel), which will be used a netlink kernel socket to rcv(queue) all the message send to “kernel/xfrm”
 
 2.2 regiser the xfrm proto in the netlink_table.
 </code></pre>
